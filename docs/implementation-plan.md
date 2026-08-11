@@ -713,9 +713,9 @@ UI end-to-end
 
 本仓库已先行实现一个最小可运行切片，用于验证 Pi SDK 嵌入方式和文档假设：
 
-- `src/index.ts`：Hono daemon、浏览器 UI、health、diagnostics、session、prompt、abort、compact API。
+- `src/index.ts`：Hono daemon、浏览器 UI、health、diagnostics、session、run、prompt、abort、compact API。
 - `src/agent-daemon.ts`：封装 `ModelRuntime`、`DefaultResourceLoader`、`SettingsManager`、`SessionManager`、`createAgentSession`、自定义工具和 SSE 事件映射。
-- `src/client.ts`：轻量 Zuu client，封装 health、diagnostics、sessions、prompt SSE、abort 和 compact。
+- `src/client.ts`：轻量 Zuu client，封装 health、diagnostics、sessions、runs、prompt SSE、abort 和 compact。
 - `src/protocol.ts`：当前单包内的临时 DTO，后续应拆入 `@zuu/protocol`。
 - `/client.js`：由 `src/client.ts` 转译生成的浏览器端 client module，当前 WebUI 通过它调用 daemon。
 - `.zuu/pi-agent`：默认 Pi app state 目录，可通过 `ZUU_AGENT_DIR` 覆盖，避免嵌入式运行时写入 `~/.pi/agent`。
@@ -723,20 +723,21 @@ UI end-to-end
 
 已验证：
 
-- `npm run check` 可以加载应用入口。
+- `pnpm run check` 可以加载应用入口并验证 health/runs client 合同。
+- `pnpm run typecheck` 可以完成 TypeScript `noEmit` 校验。
 - `GET /api/health` 正常。
 - `GET /api/diagnostics` 正常返回 SDK 版本、模型数量、skills、extensions、packages 和能力缺口。
 - `POST /api/prompt` 可以返回 SSE `session`、`error`、`agent_event` 和 `done` 事件。
 - `src/client.ts` 可从 Node.js 侧调用 health、diagnostics 和 prompt stream。
-- prompt stream 已携带稳定 `runId`。
+- prompt stream 已携带稳定 `runId`，并可通过 `GET /api/runs` 和 `GET /api/runs/:runId` 查询最近运行状态。
 
 当前限制：
 
 - `src/client.ts` 还没有拆成真正的 workspace 包 `@zuu/client`。
-- 当前只有 `runId` 事件标识，还没有持久化 run registry、重连 replay 或历史查询 API。
+- 当前 run registry 仍是内存实现，还没有持久化、重连 replay 或跨进程历史查询。
 - 默认工具集偏只读，`bash`、`edit`、`write` 需要 UI 显式启用。
 - 当前环境下真实模型 stream 可能因为网络返回 `Connection error`；daemon 已将 SDK assistant error 映射为 SSE error。
 - Workflow/subagent/scheduler 尚未安装 packages，diagnostics 会明确报告缺口。
 
-后续计划应从此切片继续收敛，而不是另起炉灶：先把 `src/protocol.ts` 和 `src/client.ts` 拆成 workspace 包，再接 run registry、审批、package 管理、workflow adapter 和 scheduler backend。
+后续计划应从此切片继续收敛，而不是另起炉灶：先把 `src/protocol.ts` 和 `src/client.ts` 拆成 workspace 包，再把 run registry 持久化，然后接审批、package 管理、workflow adapter 和 scheduler backend。
 

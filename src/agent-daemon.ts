@@ -118,6 +118,7 @@ function compactAgentEvent(event: AgentSessionEvent, runId: string): PromptStrea
 
 export class ZuuDaemon {
   private readonly sessions = new Map<string, ManagedSession>();
+  private readonly runs = new Map<string, RunSummary>();
   private readonly modelRuntimePromise = createModelRuntime();
   private readonly startedAt = new Date().toISOString();
   private sdkInfoPromise: ReturnType<typeof sdkVersion> | undefined;
@@ -212,6 +213,18 @@ export class ZuuDaemon {
     return [...this.sessions.values()].map((item) => this.summarizeSession(item.session));
   }
 
+  listRuns(sessionId?: string) {
+    return [...this.runs.values()]
+      .filter((run) => !sessionId || run.sessionId === sessionId)
+      .sort((a, b) => b.startedAt.localeCompare(a.startedAt));
+  }
+
+  getRun(runId: string) {
+    const run = this.runs.get(runId);
+    if (!run) throw new Error(`Unknown run: ${runId}`);
+    return run;
+  }
+
   summarizeSession(session: AgentSession): SessionSummary {
     const managed = this.sessions.get(session.sessionId);
     return {
@@ -246,6 +259,7 @@ export class ZuuDaemon {
       prompt: request.prompt,
       startedAt: new Date().toISOString(),
     };
+    this.runs.set(runId, run);
 
     yield { runId, type: "session", session: this.summarizeSession(session), run };
 
@@ -294,14 +308,14 @@ export class ZuuDaemon {
 
       if (promptError) {
         const message = promptError instanceof Error ? promptError.message : String(promptError);
-        run.status = "error";
+        run.status = run.status === "aborted" ? "aborted" : "error";
         run.endedAt = new Date().toISOString();
         yield { runId, type: "error", message, run };
         return;
       }
 
       if (managed) managed.updatedAt = new Date().toISOString();
-      run.status = sawError ? "error" : "done";
+      run.status = run.status === "aborted" ? "aborted" : sawError ? "error" : "done";
       run.endedAt = new Date().toISOString();
       yield { runId, type: "done", session: this.summarizeSession(session), run };
     } finally {
@@ -314,6 +328,13 @@ export class ZuuDaemon {
     if (!managed) throw new Error(`Unknown session: ${sessionId}`);
     await managed.session.abort();
     managed.updatedAt = new Date().toISOString();
+    const endedAt = new Date().toISOString();
+    for (const run of this.runs.values()) {
+      if (run.sessionId === sessionId && run.status === "running") {
+        run.status = "aborted";
+        run.endedAt = endedAt;
+      }
+    }
     return this.summarizeSession(managed.session);
   }
 
@@ -387,6 +408,7 @@ export class ZuuDaemon {
       managed.session.dispose();
     }
     this.sessions.clear();
+    this.runs.clear();
   }
 }
 

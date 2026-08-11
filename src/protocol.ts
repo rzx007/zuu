@@ -74,6 +74,14 @@ export interface SessionResponse {
   session: SessionSummary;
 }
 
+export interface RunsResponse {
+  runs: RunSummary[];
+}
+
+export interface RunResponse {
+  run: RunSummary;
+}
+
 export interface Diagnostics {
   ok: boolean;
   cwd: string;

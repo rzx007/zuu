@@ -5,7 +5,8 @@
   "scripts": {
     "dev": "node --env-file-if-exists=.env --watch --import tsx src/index.ts",
     "start": "node --env-file-if-exists=.env --import tsx src/index.ts",
-    "check": "node --env-file-if-exists=.env --import tsx scripts/check.ts"
+    "check": "node --env-file-if-exists=.env --import tsx scripts/check.ts",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@earendil-works/pi-ai": "^0.84.1",

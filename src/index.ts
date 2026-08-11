@@ -284,6 +284,31 @@ const page = String.raw`<!doctype html>
       padding: 0;
     }
 
+    .run-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      max-height: 190px;
+      overflow: auto;
+    }
+
+    .run-item {
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 8px;
+      background: color-mix(in srgb, var(--panel) 82%, var(--panel-2));
+      font-size: 12px;
+      line-height: 1.4;
+      overflow-wrap: anywhere;
+    }
+
+    .run-item strong {
+      display: block;
+      color: var(--text);
+      font-size: 12px;
+      margin-bottom: 3px;
+    }
+
     @media (max-width: 780px) {
       .app { grid-template-columns: 1fr; }
       aside { border-right: 0; border-bottom: 1px solid var(--line); }
@@ -330,6 +355,11 @@ const page = String.raw`<!doctype html>
           <label class="check"><input type="checkbox" value="write" />write</label>
           <label class="check"><input type="checkbox" value="zuu_status" checked />status</label>
         </div>
+      </section>
+
+      <section class="panel stack">
+        <h2>Recent runs</h2>
+        <div id="runs" class="run-list"><p class="meta">No runs yet.</p></div>
       </section>
     </aside>
 
@@ -394,6 +424,31 @@ const page = String.raw`<!doctype html>
         gaps;
     }
 
+    async function loadRuns() {
+      const { runs } = await client.listRuns(state.sessionId);
+      const root = el("runs");
+      root.replaceChildren();
+
+      if (!runs.length) {
+        const empty = document.createElement("p");
+        empty.className = "meta";
+        empty.textContent = "No runs yet.";
+        root.appendChild(empty);
+        return;
+      }
+
+      for (const run of runs.slice(0, 8)) {
+        const item = document.createElement("div");
+        item.className = "run-item";
+        const title = document.createElement("strong");
+        title.textContent = run.id.slice(0, 8) + " - " + run.status;
+        const meta = document.createElement("span");
+        meta.textContent = run.startedAt + " - " + run.prompt;
+        item.append(title, meta);
+        root.appendChild(item);
+      }
+    }
+
     async function sendPrompt() {
       const prompt = el("prompt").value.trim();
       if (!prompt) return;
@@ -421,6 +476,7 @@ const page = String.raw`<!doctype html>
             el("title").textContent = event.session.name || event.session.id;
             el("subtitle").textContent = event.session.model || "No model selected";
             addMessage("event", "run start: " + event.runId);
+            await loadRuns().catch(() => {});
           } else if (event.type === "text_delta") {
             agentNode.textContent += event.delta || "";
             messages.scrollTop = messages.scrollHeight;
@@ -430,8 +486,10 @@ const page = String.raw`<!doctype html>
             addMessage("event", "tool end: " + event.tool.name + (event.tool.isError ? " (error)" : ""));
           } else if (event.type === "error") {
             addMessage("event", "error: " + event.message);
+            await loadRuns().catch(() => {});
           } else if (event.type === "done" && event.session) {
             el("subtitle").textContent = (event.session.model || "No model selected") + " · " + (event.run?.status || "done");
+            await loadRuns().catch(() => {});
           }
         }
       } catch (error) {
@@ -446,6 +504,7 @@ const page = String.raw`<!doctype html>
       state.controller?.abort();
       if (state.sessionId) {
         await client.abort(state.sessionId).catch(() => {});
+        await loadRuns().catch(() => {});
       }
       setBusy(false);
     }
@@ -459,6 +518,7 @@ const page = String.raw`<!doctype html>
     loadDiagnostics().catch((error) => {
       el("diag").textContent = String(error.message || error);
     });
+    loadRuns().catch(() => {});
   </script>
 </body>
 </html>`;
@@ -482,6 +542,19 @@ app.get("/api/diagnostics", async (c) => {
 });
 
 app.get("/api/sessions", (c) => c.json({ sessions: daemon.listSessions() }));
+
+app.get("/api/runs", (c) => {
+  const sessionId = c.req.query("sessionId");
+  return c.json({ runs: daemon.listRuns(sessionId) });
+});
+
+app.get("/api/runs/:runId", (c) => {
+  try {
+    return c.json({ run: daemon.getRun(c.req.param("runId")) });
+  } catch (error) {
+    return c.json(jsonError(error, 404), 404);
+  }
+});
 
 app.post("/api/sessions", async (c) => {
   try {

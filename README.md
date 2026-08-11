@@ -1,6 +1,6 @@
 # Zuu Agent
 
-一个基于 Pi SDK 的最小完整 Agent 应用，包含 Hono daemon、浏览器 UI、轻量 Client SDK、SSE 流式输出、会话持久化、运行诊断，以及一个只读的自定义状态工具。
+一个基于 Pi SDK 的最小完整 Agent 应用，包含 Hono daemon、浏览器 UI、轻量 Client SDK、SSE 流式输出、会话持久化、最近运行记录、运行诊断，以及一个只读的自定义状态工具。
 
 ## 运行
 
@@ -17,11 +17,20 @@ pnpm dev
 
 如果 Windows PowerShell 拦截 `pnpm.ps1`，可以使用 `pnpm.cmd dev`。
 
+## 校验
+
+```sh
+pnpm check
+pnpm typecheck
+```
+
 ## API
 
 - `GET /api/health`
 - `GET /api/diagnostics`
 - `GET /api/sessions`
+- `GET /api/runs`
+- `GET /api/runs/:runId`
 - `POST /api/sessions`
 - `POST /api/prompt`：以 SSE 方式流式返回事件
 - `POST /api/sessions/:sessionId/abort`

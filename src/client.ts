@@ -3,6 +3,8 @@ import type {
   HealthResponse,
   PromptRequest,
   PromptStreamEvent,
+  RunResponse,
+  RunsResponse,
   SessionResponse,
   SessionsResponse,
 } from "./protocol";
@@ -20,6 +22,8 @@ export interface ZuuClient {
   health(): Promise<HealthResponse>;
   diagnostics(): Promise<Diagnostics>;
   listSessions(): Promise<SessionsResponse>;
+  listRuns(sessionId?: string): Promise<RunsResponse>;
+  getRun(runId: string): Promise<RunResponse>;
   createSession(input?: Record<string, unknown>): Promise<SessionResponse>;
   prompt(input: PromptRequest, options?: PromptStreamOptions): AsyncGenerator<PromptStreamEvent>;
   abort(sessionId: string): Promise<SessionResponse>;
@@ -89,6 +93,13 @@ export function createZuuClient(options: ZuuClientOptions = {}): ZuuClient {
     health: () => requestJson<HealthResponse>(fetchImpl, baseUrl, "/api/health"),
     diagnostics: () => requestJson<Diagnostics>(fetchImpl, baseUrl, "/api/diagnostics"),
     listSessions: () => requestJson<SessionsResponse>(fetchImpl, baseUrl, "/api/sessions"),
+    listRuns: (sessionId) =>
+      requestJson<RunsResponse>(
+        fetchImpl,
+        baseUrl,
+        sessionId ? `/api/runs?sessionId=${encodeURIComponent(sessionId)}` : "/api/runs",
+      ),
+    getRun: (runId) => requestJson<RunResponse>(fetchImpl, baseUrl, `/api/runs/${encodeURIComponent(runId)}`),
     createSession: (input = {}) =>
       requestJson<SessionResponse>(fetchImpl, baseUrl, "/api/sessions", {
         method: "POST",
