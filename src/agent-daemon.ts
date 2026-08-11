@@ -25,6 +25,7 @@ import type {
   ImportSessionRequest,
   NewSessionRequest,
   OpenSessionRequest,
+  PackageMutationRequest,
   PromptRequest,
   PromptStreamEvent,
   RunSummary,
@@ -109,6 +110,12 @@ function packageSourceToString(source: unknown): string {
     return String((source as { source: unknown }).source);
   }
   return String(source);
+}
+
+function normalizePackageSource(source: string) {
+  const trimmed = source.trim();
+  if (!trimmed) throw new Error("source is required");
+  return trimmed;
 }
 
 function compactAgentEvent(event: AgentSessionEvent, runId: string): PromptStreamEvent | undefined {
@@ -656,6 +663,34 @@ export class ZuuDaemon {
       },
       gaps,
     };
+  }
+
+  private createSettingsManager(cwd = process.cwd()) {
+    return SettingsManager.create(cwd, getZuuAgentDir(), { projectTrusted: true });
+  }
+
+  listPackages() {
+    return this.createSettingsManager().getPackages().map(packageSourceToString);
+  }
+
+  async addPackage(request: PackageMutationRequest) {
+    const source = normalizePackageSource(request.source);
+    const settingsManager = this.createSettingsManager();
+    const packages = settingsManager.getPackages().map(packageSourceToString);
+    if (!packages.includes(source)) {
+      settingsManager.setPackages([...packages, source]);
+      await settingsManager.flush();
+    }
+    return settingsManager.getPackages().map(packageSourceToString);
+  }
+
+  async removePackage(request: PackageMutationRequest) {
+    const source = normalizePackageSource(request.source);
+    const settingsManager = this.createSettingsManager();
+    const packages = settingsManager.getPackages().map(packageSourceToString);
+    settingsManager.setPackages(packages.filter((item) => item !== source));
+    await settingsManager.flush();
+    return settingsManager.getPackages().map(packageSourceToString);
   }
 
   async dispose() {

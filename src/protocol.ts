@@ -179,6 +179,14 @@ export interface Diagnostics {
   gaps: string[];
 }
 
+export interface PackagesResponse {
+  packages: string[];
+}
+
+export interface PackageMutationRequest {
+  source: string;
+}
+
 export interface ApiErrorResponse {
   error: {
     message: string;

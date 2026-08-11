@@ -713,9 +713,9 @@ UI end-to-end
 
 本仓库已先行实现一个最小可运行切片，用于验证 Pi SDK 嵌入方式和文档假设：
 
-- `src/index.ts`：Hono daemon、浏览器 UI、health、diagnostics、active session、stored session、session tree、run、prompt、abort、compact、new、switch、fork、import API。
+- `src/index.ts`：Hono daemon、浏览器 UI、health、diagnostics、package、active session、stored session、session tree、run、prompt、abort、compact、new、switch、fork、import API。
 - `src/agent-daemon.ts`：封装 `ModelRuntime`、`DefaultResourceLoader`、`SettingsManager`、`SessionManager`、`createAgentSessionServices`、`createAgentSessionFromServices`、`createAgentSessionRuntime`、自定义工具和 SSE 事件映射。
-- `src/client.ts`：轻量 Zuu client，封装 health、diagnostics、active sessions、stored sessions、session tree、runs、prompt SSE、abort、compact 和 runtime lifecycle 操作。
+- `src/client.ts`：轻量 Zuu client，封装 health、diagnostics、packages、active sessions、stored sessions、session tree、runs、prompt SSE、abort、compact 和 runtime lifecycle 操作。
 - `src/protocol.ts`：当前单包内的临时 DTO，后续应拆入 `@zuu/protocol`。
 - `/client.js`：由 `src/client.ts` 转译生成的浏览器端 client module，当前 WebUI 通过它调用 daemon。
 - `.zuu/pi-agent`：默认 Pi app state 目录，可通过 `ZUU_AGENT_DIR` 覆盖，避免嵌入式运行时写入 `~/.pi/agent`。
@@ -723,7 +723,7 @@ UI end-to-end
 
 已验证：
 
-- `pnpm run check` 可以加载应用入口并验证 health/runs/stored sessions/session tree/runtime lifecycle client 合同。
+- `pnpm run check` 可以加载应用入口并验证 health/packages/runs/stored sessions/session tree/runtime lifecycle client 合同。
 - `pnpm run typecheck` 可以完成 TypeScript `noEmit` 校验。
 - `GET /api/health` 正常。
 - `GET /api/diagnostics` 正常返回 SDK 版本、模型数量、skills、extensions、packages 和能力缺口。
@@ -734,12 +734,14 @@ UI end-to-end
 - `AgentSessionRuntime` 的 `newSession`、`switchSession`、`fork` 和 `importFromJsonl` 已通过 daemon API 与 client 暴露。
 - `GET /api/session-files` 和 `POST /api/sessions/open` 已支持列出和打开 Pi 持久化 session 文件。
 - `GET /api/sessions/:sessionId/tree` 已支持读取当前 active session 的树形 entry 摘要，为 fork 选择器提供基础。
+- `GET/POST/DELETE /api/packages` 已支持查看和维护 Pi package source 列表。
 
 当前限制：
 
 - `src/client.ts` 还没有拆成真正的 workspace 包 `@zuu/client`。
 - run registry 已有文件持久化，但还没有 SSE 重连 replay、事件明细存档或跨进程写入协调。
 - WebUI 已支持打开持久化 session，但还没有 tree entry 选择器和 JSONL import 表单；fork/import 能力目前优先面向 client/API。
+- Package API 只维护 source 列表，尚未接入 package 安装进度、信任确认和资源冲突 UI。
 - 默认工具集偏只读，`bash`、`edit`、`write` 需要 UI 显式启用。
 - 当前环境下真实模型 stream 可能因为网络返回 `Connection error`；daemon 已将 SDK assistant error 映射为 SSE error。
 - Workflow/subagent/scheduler 尚未安装 packages，diagnostics 会明确报告缺口。

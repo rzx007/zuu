@@ -14,6 +14,16 @@ async function main() {
   const { runs } = await client.listRuns();
   if (!Array.isArray(runs)) throw new Error("runs response is invalid");
 
+  const packages = await client.listPackages();
+  if (!Array.isArray(packages.packages)) throw new Error("packages response is invalid");
+  let emptyPackageFailed = false;
+  try {
+    await client.addPackage({ source: " " });
+  } catch {
+    emptyPackageFailed = true;
+  }
+  if (!emptyPackageFailed) throw new Error("empty package source should fail");
+
   const storedBefore = await client.listStoredSessions();
   if (!Array.isArray(storedBefore.sessions)) throw new Error("stored sessions response is invalid");
 

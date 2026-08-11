@@ -28,6 +28,9 @@ pnpm typecheck
 
 - `GET /api/health`
 - `GET /api/diagnostics`
+- `GET /api/packages`
+- `POST /api/packages`
+- `DELETE /api/packages`
 - `GET /api/sessions`
 - `GET /api/session-files`
 - `GET /api/sessions/:sessionId/tree`

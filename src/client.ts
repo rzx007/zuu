@@ -5,6 +5,8 @@ import type {
   ImportSessionRequest,
   NewSessionRequest,
   OpenSessionRequest,
+  PackageMutationRequest,
+  PackagesResponse,
   PromptRequest,
   PromptStreamEvent,
   RunResponse,
@@ -29,6 +31,9 @@ export interface PromptStreamOptions {
 export interface ZuuClient {
   health(): Promise<HealthResponse>;
   diagnostics(): Promise<Diagnostics>;
+  listPackages(): Promise<PackagesResponse>;
+  addPackage(input: PackageMutationRequest): Promise<PackagesResponse>;
+  removePackage(input: PackageMutationRequest): Promise<PackagesResponse>;
   listSessions(): Promise<SessionsResponse>;
   listStoredSessions(cwd?: string): Promise<StoredSessionsResponse>;
   getSessionTree(sessionId: string): Promise<SessionTreeResponse>;
@@ -107,6 +112,17 @@ export function createZuuClient(options: ZuuClientOptions = {}): ZuuClient {
   return {
     health: () => requestJson<HealthResponse>(fetchImpl, baseUrl, "/api/health"),
     diagnostics: () => requestJson<Diagnostics>(fetchImpl, baseUrl, "/api/diagnostics"),
+    listPackages: () => requestJson<PackagesResponse>(fetchImpl, baseUrl, "/api/packages"),
+    addPackage: (input) =>
+      requestJson<PackagesResponse>(fetchImpl, baseUrl, "/api/packages", {
+        method: "POST",
+        body: JSON.stringify(input),
+      }),
+    removePackage: (input) =>
+      requestJson<PackagesResponse>(fetchImpl, baseUrl, "/api/packages", {
+        method: "DELETE",
+        body: JSON.stringify(input),
+      }),
     listSessions: () => requestJson<SessionsResponse>(fetchImpl, baseUrl, "/api/sessions"),
     listStoredSessions: (cwd) =>
       requestJson<StoredSessionsResponse>(

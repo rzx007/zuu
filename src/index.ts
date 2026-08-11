@@ -10,6 +10,7 @@ import type {
   ImportSessionRequest,
   NewSessionRequest,
   OpenSessionRequest,
+  PackageMutationRequest,
   PromptRequest,
   SwitchSessionRequest,
 } from "./protocol";
@@ -367,6 +368,15 @@ const page = String.raw`<!doctype html>
       </section>
 
       <section class="panel stack">
+        <h2>Packages</h2>
+        <div id="packages" class="run-list"><p class="meta">No packages configured.</p></div>
+        <label>Source <input id="package-source" placeholder="npm:@agwab/pi-workflow" /></label>
+        <div class="actions">
+          <button id="add-package">Add</button>
+        </div>
+      </section>
+
+      <section class="panel stack">
         <h2>Session</h2>
         <label>Session name <input id="name" value="Zuu demo" /></label>
         <label>Provider <input id="provider" placeholder="anthropic" /></label>
@@ -461,6 +471,48 @@ const page = String.raw`<!doctype html>
         "\nSkills: " + diagnostics.resources.skills +
         "\nPackages: " + (diagnostics.resources.packages.join(", ") || "none") +
         gaps;
+    }
+
+    async function loadPackages() {
+      const { packages } = await client.listPackages();
+      const root = el("packages");
+      root.replaceChildren();
+
+      if (!packages.length) {
+        const empty = document.createElement("p");
+        empty.className = "meta";
+        empty.textContent = "No packages configured.";
+        root.appendChild(empty);
+        return;
+      }
+
+      for (const source of packages) {
+        const item = document.createElement("div");
+        item.className = "session-file";
+        const text = document.createElement("div");
+        const title = document.createElement("strong");
+        title.textContent = source;
+        const meta = document.createElement("span");
+        meta.textContent = "Pi package source";
+        const button = document.createElement("button");
+        button.type = "button";
+        button.textContent = "Remove";
+        button.addEventListener("click", async () => {
+          await client.removePackage({ source });
+          await Promise.all([loadPackages(), loadDiagnostics()]).catch(() => {});
+        });
+        text.append(title, meta);
+        item.append(text, button);
+        root.appendChild(item);
+      }
+    }
+
+    async function addPackage() {
+      const source = el("package-source").value.trim();
+      if (!source) return;
+      await client.addPackage({ source });
+      el("package-source").value = "";
+      await Promise.all([loadPackages(), loadDiagnostics()]).catch(() => {});
     }
 
     async function loadRuns() {
@@ -595,6 +647,9 @@ const page = String.raw`<!doctype html>
 
     el("send").addEventListener("click", sendPrompt);
     el("abort").addEventListener("click", abortPrompt);
+    el("add-package").addEventListener("click", () => {
+      addPackage().catch((error) => addMessage("event", String(error.message || error)));
+    });
     el("prompt").addEventListener("keydown", (event) => {
       if ((event.metaKey || event.ctrlKey) && event.key === "Enter") sendPrompt();
     });
@@ -602,6 +657,7 @@ const page = String.raw`<!doctype html>
     loadDiagnostics().catch((error) => {
       el("diag").textContent = String(error.message || error);
     });
+    loadPackages().catch(() => {});
     loadRuns().catch(() => {});
     loadStoredSessions().catch(() => {});
   </script>
@@ -623,6 +679,26 @@ app.get("/api/diagnostics", async (c) => {
     return c.json(await daemon.diagnostics());
   } catch (error) {
     return c.json(jsonError(error, 500), 500);
+  }
+});
+
+app.get("/api/packages", (c) => c.json({ packages: daemon.listPackages() }));
+
+app.post("/api/packages", async (c) => {
+  try {
+    const body = (await c.req.json()) as PackageMutationRequest;
+    return c.json({ packages: await daemon.addPackage(body) });
+  } catch (error) {
+    return c.json(jsonError(error, 400), 400);
+  }
+});
+
+app.delete("/api/packages", async (c) => {
+  try {
+    const body = (await c.req.json()) as PackageMutationRequest;
+    return c.json({ packages: await daemon.removePackage(body) });
+  } catch (error) {
+    return c.json(jsonError(error, 400), 400);
   }
 });
 
