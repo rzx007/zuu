@@ -29,9 +29,12 @@ pnpm typecheck
 - `GET /api/health`
 - `GET /api/diagnostics`
 - `GET /api/sessions`
+- `GET /api/session-files`
+- `GET /api/sessions/:sessionId/tree`
 - `GET /api/runs`
 - `GET /api/runs/:runId`
 - `POST /api/sessions`
+- `POST /api/sessions/open`
 - `POST /api/prompt`：以 SSE 方式流式返回事件
 - `POST /api/sessions/:sessionId/abort`
 - `POST /api/sessions/:sessionId/compact`

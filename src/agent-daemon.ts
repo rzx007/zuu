@@ -15,17 +15,23 @@ import {
   type AgentSessionEvent,
   type AgentSessionRuntime,
   type CreateAgentSessionRuntimeFactory,
+  type SessionEntry,
+  type SessionInfo,
+  type SessionTreeNode,
 } from "@earendil-works/pi-coding-agent";
 import type {
   Diagnostics,
   ForkSessionRequest,
   ImportSessionRequest,
   NewSessionRequest,
+  OpenSessionRequest,
   PromptRequest,
   PromptStreamEvent,
   RunSummary,
   SessionActionResponse,
   SessionSummary,
+  SessionTreeEntry,
+  StoredSessionSummary,
   SwitchSessionRequest,
   ThinkingLevel,
 } from "./protocol";
@@ -43,6 +49,8 @@ interface ManagedRuntime {
 interface CreateSessionOptions {
   cwd?: string;
   name?: string;
+  sessionFile?: string;
+  continueRecent?: boolean;
   model?: PromptRequest["model"];
   thinkingLevel?: ThinkingLevel;
   tools?: string[];
@@ -58,6 +66,12 @@ function getZuuAgentDir() {
   const agentDir = process.env.ZUU_AGENT_DIR || DEFAULT_AGENT_DIR;
   mkdirSync(agentDir, { recursive: true });
   return agentDir;
+}
+
+function getSessionDir(agentDir: string) {
+  const sessionDir = join(agentDir, "sessions");
+  mkdirSync(sessionDir, { recursive: true });
+  return sessionDir;
 }
 
 async function createModelRuntime() {
@@ -130,6 +144,34 @@ function compactAgentEvent(event: AgentSessionEvent, runId: string): PromptStrea
   }
 
   return undefined;
+}
+
+function isTextPart(part: unknown): part is { type: "text"; text: string } {
+  return Boolean(
+    part &&
+      typeof part === "object" &&
+      "type" in part &&
+      part.type === "text" &&
+      "text" in part &&
+      typeof part.text === "string",
+  );
+}
+
+function entryText(entry: SessionEntry) {
+  if (entry.type !== "message") return undefined;
+  if (!("content" in entry.message)) return undefined;
+  const content = entry.message.content;
+  if (typeof content === "string") return content;
+  if (!Array.isArray(content)) return undefined;
+  return content
+    .filter(isTextPart)
+    .map((part) => part.text)
+    .join("");
+}
+
+function entryRole(entry: SessionEntry) {
+  if (entry.type !== "message" || !("role" in entry.message)) return undefined;
+  return entry.message.role;
 }
 
 export class ZuuDaemon {
@@ -227,15 +269,36 @@ export class ZuuDaemon {
     });
   }
 
+  private createSessionManager(options: CreateSessionOptions, cwd: string, sessionDir: string) {
+    if (options.sessionFile) {
+      return SessionManager.open(options.sessionFile, sessionDir, options.cwd);
+    }
+
+    if (options.continueRecent) {
+      return SessionManager.continueRecent(cwd, sessionDir);
+    }
+
+    return options.persist === false ? SessionManager.inMemory(cwd) : SessionManager.create(cwd, sessionDir);
+  }
+
+  private findRuntimeBySessionFile(sessionFile: string) {
+    return [...this.runtimes.values()].find((managed) => managed.runtime.session.sessionFile === sessionFile);
+  }
+
   async createSession(options: CreateSessionOptions = {}) {
+    if (options.sessionFile) {
+      const existing = this.findRuntimeBySessionFile(options.sessionFile);
+      if (existing) return existing.runtime.session;
+    }
+
     const cwd = options.cwd ?? process.cwd();
     const agentDir = getZuuAgentDir();
-    const sessionDir = join(agentDir, "sessions");
-    mkdirSync(sessionDir, { recursive: true });
-    const sessionManager = options.persist === false ? SessionManager.inMemory(cwd) : SessionManager.create(cwd, sessionDir);
+    const sessionDir = getSessionDir(agentDir);
+    const sessionManager = this.createSessionManager(options, cwd, sessionDir);
+    const runtimeCwd = sessionManager.getCwd();
 
     const runtime = await createAgentSessionRuntime(this.createRuntimeFactory(options), {
-      cwd,
+      cwd: runtimeCwd,
       agentDir,
       sessionManager,
     });
@@ -250,6 +313,18 @@ export class ZuuDaemon {
     return session;
   }
 
+  async openSession(options: OpenSessionRequest) {
+    if (!options.sessionFile || typeof options.sessionFile !== "string") {
+      throw new Error("sessionFile is required");
+    }
+
+    return this.createSession({
+      ...options,
+      cwd: options.cwdOverride,
+      sessionFile: options.sessionFile,
+    });
+  }
+
   async getOrCreateSession(options: CreateSessionOptions & { sessionId?: string }) {
     if (options.sessionId) {
       const existing = this.runtimes.get(options.sessionId);
@@ -262,6 +337,15 @@ export class ZuuDaemon {
 
   listSessions() {
     return [...this.runtimes.values()].map((item) => this.summarizeSession(item.runtime.session));
+  }
+
+  async listStoredSessions(cwd?: string) {
+    const agentDir = getZuuAgentDir();
+    const sessionDir = getSessionDir(agentDir);
+    const sessions = cwd ? await SessionManager.list(cwd, sessionDir) : await SessionManager.listAll(sessionDir);
+    return sessions
+      .map((session) => this.summarizeStoredSession(session))
+      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
   }
 
   listRuns(sessionId?: string) {
@@ -307,6 +391,37 @@ export class ZuuDaemon {
       createdAt: managed?.createdAt ?? new Date().toISOString(),
       updatedAt: managed?.updatedAt ?? new Date().toISOString(),
     };
+  }
+
+  summarizeStoredSession(session: SessionInfo): StoredSessionSummary {
+    return {
+      id: session.id,
+      path: session.path,
+      cwd: session.cwd,
+      name: session.name,
+      parentSessionPath: session.parentSessionPath,
+      createdAt: session.created.toISOString(),
+      updatedAt: session.modified.toISOString(),
+      messageCount: session.messageCount,
+      firstMessage: session.firstMessage,
+      isActive: [...this.runtimes.values()].some((runtime) => runtime.runtime.session.sessionFile === session.path),
+    };
+  }
+
+  summarizeSessionTree(sessionId: string) {
+    const managed = this.getManagedRuntime(sessionId);
+    const visit = (node: SessionTreeNode): SessionTreeEntry => ({
+      id: node.entry.id,
+      parentId: node.entry.parentId,
+      type: node.entry.type,
+      timestamp: node.entry.timestamp,
+      label: node.label,
+      role: entryRole(node.entry),
+      text: entryText(node.entry),
+      children: node.children.map(visit),
+    });
+
+    return managed.runtime.session.sessionManager.getTree().map(visit);
   }
 
   async *prompt(request: PromptRequest): AsyncGenerator<PromptStreamEvent> {

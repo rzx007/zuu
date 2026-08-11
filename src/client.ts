@@ -4,6 +4,7 @@ import type {
   HealthResponse,
   ImportSessionRequest,
   NewSessionRequest,
+  OpenSessionRequest,
   PromptRequest,
   PromptStreamEvent,
   RunResponse,
@@ -11,6 +12,8 @@ import type {
   SessionActionResponse,
   SessionResponse,
   SessionsResponse,
+  SessionTreeResponse,
+  StoredSessionsResponse,
   SwitchSessionRequest,
 } from "./protocol";
 
@@ -27,9 +30,12 @@ export interface ZuuClient {
   health(): Promise<HealthResponse>;
   diagnostics(): Promise<Diagnostics>;
   listSessions(): Promise<SessionsResponse>;
+  listStoredSessions(cwd?: string): Promise<StoredSessionsResponse>;
+  getSessionTree(sessionId: string): Promise<SessionTreeResponse>;
   listRuns(sessionId?: string): Promise<RunsResponse>;
   getRun(runId: string): Promise<RunResponse>;
   createSession(input?: Record<string, unknown>): Promise<SessionResponse>;
+  openSession(input: OpenSessionRequest): Promise<SessionResponse>;
   prompt(input: PromptRequest, options?: PromptStreamOptions): AsyncGenerator<PromptStreamEvent>;
   abort(sessionId: string): Promise<SessionResponse>;
   compact(sessionId: string, instructions?: string): Promise<SessionResponse>;
@@ -102,6 +108,14 @@ export function createZuuClient(options: ZuuClientOptions = {}): ZuuClient {
     health: () => requestJson<HealthResponse>(fetchImpl, baseUrl, "/api/health"),
     diagnostics: () => requestJson<Diagnostics>(fetchImpl, baseUrl, "/api/diagnostics"),
     listSessions: () => requestJson<SessionsResponse>(fetchImpl, baseUrl, "/api/sessions"),
+    listStoredSessions: (cwd) =>
+      requestJson<StoredSessionsResponse>(
+        fetchImpl,
+        baseUrl,
+        cwd ? `/api/session-files?cwd=${encodeURIComponent(cwd)}` : "/api/session-files",
+      ),
+    getSessionTree: (sessionId) =>
+      requestJson<SessionTreeResponse>(fetchImpl, baseUrl, `/api/sessions/${encodeURIComponent(sessionId)}/tree`),
     listRuns: (sessionId) =>
       requestJson<RunsResponse>(
         fetchImpl,
@@ -111,6 +125,11 @@ export function createZuuClient(options: ZuuClientOptions = {}): ZuuClient {
     getRun: (runId) => requestJson<RunResponse>(fetchImpl, baseUrl, `/api/runs/${encodeURIComponent(runId)}`),
     createSession: (input = {}) =>
       requestJson<SessionResponse>(fetchImpl, baseUrl, "/api/sessions", {
+        method: "POST",
+        body: JSON.stringify(input),
+      }),
+    openSession: (input) =>
+      requestJson<SessionResponse>(fetchImpl, baseUrl, "/api/sessions/open", {
         method: "POST",
         body: JSON.stringify(input),
       }),

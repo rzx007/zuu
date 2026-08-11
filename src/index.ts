@@ -5,7 +5,14 @@ import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
 import ts from "typescript";
 import { ZuuDaemon } from "./agent-daemon";
-import type { ForkSessionRequest, ImportSessionRequest, NewSessionRequest, PromptRequest, SwitchSessionRequest } from "./protocol";
+import type {
+  ForkSessionRequest,
+  ImportSessionRequest,
+  NewSessionRequest,
+  OpenSessionRequest,
+  PromptRequest,
+  SwitchSessionRequest,
+} from "./protocol";
 
 const app = new Hono();
 const daemon = new ZuuDaemon();
@@ -309,6 +316,33 @@ const page = String.raw`<!doctype html>
       margin-bottom: 3px;
     }
 
+    .session-file {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 8px;
+      align-items: center;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 8px;
+      background: color-mix(in srgb, var(--panel) 82%, var(--panel-2));
+      font-size: 12px;
+      line-height: 1.4;
+      overflow-wrap: anywhere;
+    }
+
+    .session-file strong {
+      display: block;
+      color: var(--text);
+      font-size: 12px;
+      margin-bottom: 3px;
+    }
+
+    .session-file button {
+      min-height: 30px;
+      padding: 0 9px;
+      font-size: 12px;
+    }
+
     @media (max-width: 780px) {
       .app { grid-template-columns: 1fr; }
       aside { border-right: 0; border-bottom: 1px solid var(--line); }
@@ -360,6 +394,11 @@ const page = String.raw`<!doctype html>
       <section class="panel stack">
         <h2>Recent runs</h2>
         <div id="runs" class="run-list"><p class="meta">No runs yet.</p></div>
+      </section>
+
+      <section class="panel stack">
+        <h2>Stored sessions</h2>
+        <div id="stored-sessions" class="run-list"><p class="meta">No stored sessions yet.</p></div>
       </section>
     </aside>
 
@@ -449,6 +488,53 @@ const page = String.raw`<!doctype html>
       }
     }
 
+    function setActiveSession(session) {
+      state.sessionId = session.id;
+      el("title").textContent = session.name || session.id;
+      el("subtitle").textContent = session.model || session.sessionFile || "No model selected";
+    }
+
+    async function openStoredSession(sessionFile) {
+      const { session } = await client.openSession({ sessionFile });
+      setActiveSession(session);
+      addMessage("event", "opened session: " + session.id);
+      await Promise.all([loadRuns(), loadStoredSessions()]).catch(() => {});
+    }
+
+    async function loadStoredSessions() {
+      const { sessions } = await client.listStoredSessions();
+      const root = el("stored-sessions");
+      root.replaceChildren();
+
+      if (!sessions.length) {
+        const empty = document.createElement("p");
+        empty.className = "meta";
+        empty.textContent = "No stored sessions yet.";
+        root.appendChild(empty);
+        return;
+      }
+
+      for (const session of sessions.slice(0, 8)) {
+        const item = document.createElement("div");
+        item.className = "session-file";
+        const text = document.createElement("div");
+        const title = document.createElement("strong");
+        title.textContent = (session.name || session.id.slice(0, 8)) + (session.isActive ? " - active" : "");
+        const meta = document.createElement("span");
+        meta.textContent = session.messageCount + " messages - " + session.updatedAt;
+        const button = document.createElement("button");
+        button.type = "button";
+        button.textContent = "Open";
+        button.disabled = session.isActive;
+        button.addEventListener("click", () => {
+          openStoredSession(session.path).catch((error) => addMessage("event", String(error.message || error)));
+        });
+        text.append(title, meta);
+        item.append(text, button);
+        root.appendChild(item);
+      }
+    }
+
     async function sendPrompt() {
       const prompt = el("prompt").value.trim();
       if (!prompt) return;
@@ -472,11 +558,9 @@ const page = String.raw`<!doctype html>
       try {
         for await (const event of client.prompt(body, { signal: state.controller.signal })) {
           if (event.type === "session" && event.session) {
-            state.sessionId = event.session.id;
-            el("title").textContent = event.session.name || event.session.id;
-            el("subtitle").textContent = event.session.model || "No model selected";
+            setActiveSession(event.session);
             addMessage("event", "run start: " + event.runId);
-            await loadRuns().catch(() => {});
+            await Promise.all([loadRuns(), loadStoredSessions()]).catch(() => {});
           } else if (event.type === "text_delta") {
             agentNode.textContent += event.delta || "";
             messages.scrollTop = messages.scrollHeight;
@@ -489,7 +573,7 @@ const page = String.raw`<!doctype html>
             await loadRuns().catch(() => {});
           } else if (event.type === "done" && event.session) {
             el("subtitle").textContent = (event.session.model || "No model selected") + " · " + (event.run?.status || "done");
-            await loadRuns().catch(() => {});
+            await Promise.all([loadRuns(), loadStoredSessions()]).catch(() => {});
           }
         }
       } catch (error) {
@@ -504,7 +588,7 @@ const page = String.raw`<!doctype html>
       state.controller?.abort();
       if (state.sessionId) {
         await client.abort(state.sessionId).catch(() => {});
-        await loadRuns().catch(() => {});
+        await Promise.all([loadRuns(), loadStoredSessions()]).catch(() => {});
       }
       setBusy(false);
     }
@@ -519,6 +603,7 @@ const page = String.raw`<!doctype html>
       el("diag").textContent = String(error.message || error);
     });
     loadRuns().catch(() => {});
+    loadStoredSessions().catch(() => {});
   </script>
 </body>
 </html>`;
@@ -543,6 +628,22 @@ app.get("/api/diagnostics", async (c) => {
 
 app.get("/api/sessions", (c) => c.json({ sessions: daemon.listSessions() }));
 
+app.get("/api/session-files", async (c) => {
+  try {
+    return c.json({ sessions: await daemon.listStoredSessions(c.req.query("cwd")) });
+  } catch (error) {
+    return c.json(jsonError(error, 500), 500);
+  }
+});
+
+app.get("/api/sessions/:sessionId/tree", (c) => {
+  try {
+    return c.json({ tree: daemon.summarizeSessionTree(c.req.param("sessionId")) });
+  } catch (error) {
+    return c.json(jsonError(error, 404), 404);
+  }
+});
+
 app.get("/api/runs", (c) => {
   const sessionId = c.req.query("sessionId");
   return c.json({ runs: daemon.listRuns(sessionId) });
@@ -560,6 +661,16 @@ app.post("/api/sessions", async (c) => {
   try {
     const body = await c.req.json().catch(() => ({}));
     const session = await daemon.createSession(body);
+    return c.json({ session: daemon.summarizeSession(session) }, 201);
+  } catch (error) {
+    return c.json(jsonError(error, 400), 400);
+  }
+});
+
+app.post("/api/sessions/open", async (c) => {
+  try {
+    const body = (await c.req.json()) as OpenSessionRequest;
+    const session = await daemon.openSession(body);
     return c.json({ session: daemon.summarizeSession(session) }, 201);
   } catch (error) {
     return c.json(jsonError(error, 400), 400);

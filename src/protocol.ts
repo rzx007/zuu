@@ -28,6 +28,8 @@ export interface PromptRequest {
   sessionId?: string;
   name?: string;
   cwd?: string;
+  sessionFile?: string;
+  continueRecent?: boolean;
   model?: {
     provider: string;
     id: string;
@@ -72,6 +74,47 @@ export interface SessionsResponse {
 
 export interface SessionResponse {
   session: SessionSummary;
+}
+
+export interface SessionTreeEntry {
+  id: string;
+  parentId: string | null;
+  type: string;
+  timestamp: string;
+  label?: string;
+  role?: string;
+  text?: string;
+  children: SessionTreeEntry[];
+}
+
+export interface SessionTreeResponse {
+  tree: SessionTreeEntry[];
+}
+
+export interface StoredSessionSummary {
+  id: string;
+  path: string;
+  cwd: string;
+  name?: string;
+  parentSessionPath?: string;
+  createdAt: string;
+  updatedAt: string;
+  messageCount: number;
+  firstMessage: string;
+  isActive: boolean;
+}
+
+export interface StoredSessionsResponse {
+  sessions: StoredSessionSummary[];
+}
+
+export interface OpenSessionRequest {
+  sessionFile: string;
+  cwdOverride?: string;
+  name?: string;
+  model?: PromptRequest["model"];
+  thinkingLevel?: ThinkingLevel;
+  tools?: string[];
 }
 
 export interface SessionActionResponse {
