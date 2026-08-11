@@ -714,7 +714,7 @@ UI end-to-end
 本仓库已先行实现一个最小可运行切片，用于验证 Pi SDK 嵌入方式和文档假设：
 
 - `src/index.ts`：Hono daemon、浏览器 UI、health、diagnostics、session、run、prompt、abort、compact API。
-- `src/agent-daemon.ts`：封装 `ModelRuntime`、`DefaultResourceLoader`、`SettingsManager`、`SessionManager`、`createAgentSession`、自定义工具和 SSE 事件映射。
+- `src/agent-daemon.ts`：封装 `ModelRuntime`、`DefaultResourceLoader`、`SettingsManager`、`SessionManager`、`createAgentSessionServices`、`createAgentSessionFromServices`、`createAgentSessionRuntime`、自定义工具和 SSE 事件映射。
 - `src/client.ts`：轻量 Zuu client，封装 health、diagnostics、sessions、runs、prompt SSE、abort 和 compact。
 - `src/protocol.ts`：当前单包内的临时 DTO，后续应拆入 `@zuu/protocol`。
 - `/client.js`：由 `src/client.ts` 转译生成的浏览器端 client module，当前 WebUI 通过它调用 daemon。

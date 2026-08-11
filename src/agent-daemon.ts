@@ -3,7 +3,9 @@ import { fileURLToPath } from "node:url";
 import { mkdirSync, readFileSync } from "node:fs";
 import { Type } from "typebox";
 import {
-  createAgentSession,
+  createAgentSessionFromServices,
+  createAgentSessionRuntime,
+  createAgentSessionServices,
   DefaultResourceLoader,
   defineTool,
   ModelRuntime,
@@ -11,14 +13,16 @@ import {
   SettingsManager,
   type AgentSession,
   type AgentSessionEvent,
+  type AgentSessionRuntime,
+  type CreateAgentSessionRuntimeFactory,
 } from "@earendil-works/pi-coding-agent";
 import type { Diagnostics, PromptRequest, PromptStreamEvent, RunSummary, SessionSummary, ThinkingLevel } from "./protocol";
 
 const DEFAULT_READ_ONLY_TOOLS = ["read", "grep", "find", "ls", "zuu_status"];
 const DEFAULT_AGENT_DIR = join(process.cwd(), ".zuu", "pi-agent");
 
-interface ManagedSession {
-  session: AgentSession;
+interface ManagedRuntime {
+  runtime: AgentSessionRuntime;
   cwd: string;
   createdAt: string;
   updatedAt: string;
@@ -117,7 +121,7 @@ function compactAgentEvent(event: AgentSessionEvent, runId: string): PromptStrea
 }
 
 export class ZuuDaemon {
-  private readonly sessions = new Map<string, ManagedSession>();
+  private readonly runtimes = new Map<string, ManagedRuntime>();
   private readonly runs = new Map<string, RunSummary>();
   private readonly modelRuntimePromise = createModelRuntime();
   private readonly startedAt = new Date().toISOString();
@@ -128,27 +132,7 @@ export class ZuuDaemon {
     return this.sdkInfoPromise;
   }
 
-  async createSession(options: CreateSessionOptions = {}) {
-    const cwd = options.cwd ?? process.cwd();
-    const agentDir = getZuuAgentDir();
-    const settingsManager = SettingsManager.create(cwd, agentDir, { projectTrusted: true });
-    const resourceLoader = new DefaultResourceLoader({
-      cwd,
-      agentDir,
-      settingsManager,
-      appendSystemPrompt: [
-        "You are running inside Zuu, a small daemon-hosted Pi SDK agent app.",
-        "Be explicit about files changed, commands run, and assumptions.",
-      ],
-    });
-    await resourceLoader.reload();
-
-    const modelRuntime = await this.modelRuntimePromise;
-    const model = options.model ? modelRuntime.getModel(options.model.provider, options.model.id) : undefined;
-    const sessionDir = join(agentDir, "sessions");
-    mkdirSync(sessionDir, { recursive: true });
-    const sessionManager = options.persist === false ? SessionManager.inMemory(cwd) : SessionManager.create(cwd, sessionDir);
-
+  private createStatusTool(cwd: string, settingsManager: SettingsManager, resourceLoader: DefaultResourceLoader) {
     const statusTool = defineTool({
       name: "zuu_status",
       label: "Zuu Status",
@@ -162,7 +146,7 @@ export class ZuuDaemon {
               {
                 daemonStartedAt: this.startedAt,
                 cwd,
-                sessions: this.sessions.size,
+                sessions: this.runtimes.size,
                 packages: settingsManager.getPackages().map(packageSourceToString),
                 resources: {
                   skills: resourceLoader.getSkills().skills.length,
@@ -179,30 +163,85 @@ export class ZuuDaemon {
       }),
     });
 
-    const { session } = await createAgentSession({
+    return statusTool;
+  }
+
+  private createRuntimeFactory(options: CreateSessionOptions): CreateAgentSessionRuntimeFactory {
+    return async ({ cwd, agentDir, sessionManager, sessionStartEvent }) => {
+      const settingsManager = SettingsManager.create(cwd, agentDir, { projectTrusted: true });
+      const modelRuntime = await this.modelRuntimePromise;
+      const services = await createAgentSessionServices({
+        cwd,
+        agentDir,
+        modelRuntime,
+        settingsManager,
+        resourceLoaderOptions: {
+          appendSystemPrompt: [
+            "You are running inside Zuu, a small daemon-hosted Pi SDK agent app.",
+            "Be explicit about files changed, commands run, and assumptions.",
+          ],
+        },
+      });
+      const model = options.model ? modelRuntime.getModel(options.model.provider, options.model.id) : undefined;
+      const statusTool = this.createStatusTool(cwd, settingsManager, services.resourceLoader as DefaultResourceLoader);
+      const result = await createAgentSessionFromServices({
+        services,
+        sessionManager,
+        sessionStartEvent,
+        model,
+        thinkingLevel: options.thinkingLevel,
+        customTools: [statusTool],
+        tools: options.tools ?? DEFAULT_READ_ONLY_TOOLS,
+      });
+
+      return {
+        ...result,
+        services,
+        diagnostics: services.diagnostics,
+      };
+    };
+  }
+
+  private bindRuntime(managed: ManagedRuntime) {
+    managed.runtime.setRebindSession(async (session) => {
+      for (const [sessionId, item] of this.runtimes) {
+        if (item === managed && sessionId !== session.sessionId) {
+          this.runtimes.delete(sessionId);
+        }
+      }
+      managed.cwd = managed.runtime.cwd;
+      managed.updatedAt = new Date().toISOString();
+      this.runtimes.set(session.sessionId, managed);
+    });
+  }
+
+  async createSession(options: CreateSessionOptions = {}) {
+    const cwd = options.cwd ?? process.cwd();
+    const agentDir = getZuuAgentDir();
+    const sessionDir = join(agentDir, "sessions");
+    mkdirSync(sessionDir, { recursive: true });
+    const sessionManager = options.persist === false ? SessionManager.inMemory(cwd) : SessionManager.create(cwd, sessionDir);
+
+    const runtime = await createAgentSessionRuntime(this.createRuntimeFactory(options), {
       cwd,
       agentDir,
-      model,
-      thinkingLevel: options.thinkingLevel,
-      modelRuntime,
-      resourceLoader,
-      settingsManager,
       sessionManager,
-      customTools: [statusTool],
-      tools: options.tools ?? DEFAULT_READ_ONLY_TOOLS,
     });
+    const session = runtime.session;
 
     if (options.name) session.setSessionName(options.name);
 
     const now = new Date().toISOString();
-    this.sessions.set(session.sessionId, { session, cwd, createdAt: now, updatedAt: now });
+    const managed: ManagedRuntime = { runtime, cwd: runtime.cwd, createdAt: now, updatedAt: now };
+    this.bindRuntime(managed);
+    this.runtimes.set(session.sessionId, managed);
     return session;
   }
 
   async getOrCreateSession(options: CreateSessionOptions & { sessionId?: string }) {
     if (options.sessionId) {
-      const existing = this.sessions.get(options.sessionId);
-      if (existing) return existing.session;
+      const existing = this.runtimes.get(options.sessionId);
+      if (existing) return existing.runtime.session;
       throw new Error(`Unknown session: ${options.sessionId}`);
     }
 
@@ -210,7 +249,7 @@ export class ZuuDaemon {
   }
 
   listSessions() {
-    return [...this.sessions.values()].map((item) => this.summarizeSession(item.session));
+    return [...this.runtimes.values()].map((item) => this.summarizeSession(item.runtime.session));
   }
 
   listRuns(sessionId?: string) {
@@ -225,8 +264,14 @@ export class ZuuDaemon {
     return run;
   }
 
+  private getManagedRuntime(sessionId: string) {
+    const managed = this.runtimes.get(sessionId);
+    if (!managed) throw new Error(`Unknown session: ${sessionId}`);
+    return managed;
+  }
+
   summarizeSession(session: AgentSession): SessionSummary {
-    const managed = this.sessions.get(session.sessionId);
+    const managed = this.runtimes.get(session.sessionId);
     return {
       id: session.sessionId,
       name: session.sessionName,
@@ -245,7 +290,7 @@ export class ZuuDaemon {
   async *prompt(request: PromptRequest): AsyncGenerator<PromptStreamEvent> {
     const runId = crypto.randomUUID();
     const session = await this.getOrCreateSession(request);
-    const managed = this.sessions.get(session.sessionId);
+    const managed = this.runtimes.get(session.sessionId);
     if (managed) managed.updatedAt = new Date().toISOString();
 
     if (request.tools) {
@@ -324,9 +369,8 @@ export class ZuuDaemon {
   }
 
   async abort(sessionId: string) {
-    const managed = this.sessions.get(sessionId);
-    if (!managed) throw new Error(`Unknown session: ${sessionId}`);
-    await managed.session.abort();
+    const managed = this.getManagedRuntime(sessionId);
+    await managed.runtime.session.abort();
     managed.updatedAt = new Date().toISOString();
     const endedAt = new Date().toISOString();
     for (const run of this.runs.values()) {
@@ -335,15 +379,14 @@ export class ZuuDaemon {
         run.endedAt = endedAt;
       }
     }
-    return this.summarizeSession(managed.session);
+    return this.summarizeSession(managed.runtime.session);
   }
 
   async compact(sessionId: string, instructions?: string) {
-    const managed = this.sessions.get(sessionId);
-    if (!managed) throw new Error(`Unknown session: ${sessionId}`);
-    await managed.session.compact(instructions);
+    const managed = this.getManagedRuntime(sessionId);
+    await managed.runtime.session.compact(instructions);
     managed.updatedAt = new Date().toISOString();
-    return this.summarizeSession(managed.session);
+    return this.summarizeSession(managed.runtime.session);
   }
 
   async diagnostics(): Promise<Diagnostics> {
@@ -403,11 +446,11 @@ export class ZuuDaemon {
     };
   }
 
-  dispose() {
-    for (const managed of this.sessions.values()) {
-      managed.session.dispose();
+  async dispose() {
+    for (const managed of this.runtimes.values()) {
+      await managed.runtime.dispose();
     }
-    this.sessions.clear();
+    this.runtimes.clear();
     this.runs.clear();
   }
 }
