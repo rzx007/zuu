@@ -14,6 +14,12 @@ async function main() {
   const { runs } = await client.listRuns();
   if (!Array.isArray(runs)) throw new Error("runs response is invalid");
 
+  const { session } = await client.createSession({ persist: false, name: "check" });
+  const replaced = await client.newSession(session.id, { name: "check next" });
+  if (replaced.cancelled || replaced.session.id === session.id) {
+    throw new Error("newSession did not replace the active session");
+  }
+
   let missingRunFailed = false;
   try {
     await client.getRun("missing");

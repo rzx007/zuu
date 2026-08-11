@@ -35,6 +35,10 @@ pnpm typecheck
 - `POST /api/prompt`：以 SSE 方式流式返回事件
 - `POST /api/sessions/:sessionId/abort`
 - `POST /api/sessions/:sessionId/compact`
+- `POST /api/sessions/:sessionId/new`
+- `POST /api/sessions/:sessionId/switch`
+- `POST /api/sessions/:sessionId/fork`
+- `POST /api/sessions/:sessionId/import`
 
 浏览器 UI 通过 `/client.js` 加载 `src/client.ts` 转译出的同一套 client 实现；业务请求不再散落手写 `fetch` 和 SSE 解析逻辑。
 

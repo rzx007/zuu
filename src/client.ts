@@ -1,12 +1,17 @@
 import type {
   Diagnostics,
+  ForkSessionRequest,
   HealthResponse,
+  ImportSessionRequest,
+  NewSessionRequest,
   PromptRequest,
   PromptStreamEvent,
   RunResponse,
   RunsResponse,
+  SessionActionResponse,
   SessionResponse,
   SessionsResponse,
+  SwitchSessionRequest,
 } from "./protocol";
 
 export interface ZuuClientOptions {
@@ -28,6 +33,10 @@ export interface ZuuClient {
   prompt(input: PromptRequest, options?: PromptStreamOptions): AsyncGenerator<PromptStreamEvent>;
   abort(sessionId: string): Promise<SessionResponse>;
   compact(sessionId: string, instructions?: string): Promise<SessionResponse>;
+  newSession(sessionId: string, input?: NewSessionRequest): Promise<SessionActionResponse>;
+  switchSession(sessionId: string, input: SwitchSessionRequest): Promise<SessionActionResponse>;
+  forkSession(sessionId: string, input: ForkSessionRequest): Promise<SessionActionResponse>;
+  importSession(sessionId: string, input: ImportSessionRequest): Promise<SessionActionResponse>;
 }
 
 function joinUrl(baseUrl: string, path: string) {
@@ -113,6 +122,26 @@ export function createZuuClient(options: ZuuClientOptions = {}): ZuuClient {
       requestJson<SessionResponse>(fetchImpl, baseUrl, `/api/sessions/${encodeURIComponent(sessionId)}/compact`, {
         method: "POST",
         body: JSON.stringify({ instructions }),
+      }),
+    newSession: (sessionId, input = {}) =>
+      requestJson<SessionActionResponse>(fetchImpl, baseUrl, `/api/sessions/${encodeURIComponent(sessionId)}/new`, {
+        method: "POST",
+        body: JSON.stringify(input),
+      }),
+    switchSession: (sessionId, input) =>
+      requestJson<SessionActionResponse>(fetchImpl, baseUrl, `/api/sessions/${encodeURIComponent(sessionId)}/switch`, {
+        method: "POST",
+        body: JSON.stringify(input),
+      }),
+    forkSession: (sessionId, input) =>
+      requestJson<SessionActionResponse>(fetchImpl, baseUrl, `/api/sessions/${encodeURIComponent(sessionId)}/fork`, {
+        method: "POST",
+        body: JSON.stringify(input),
+      }),
+    importSession: (sessionId, input) =>
+      requestJson<SessionActionResponse>(fetchImpl, baseUrl, `/api/sessions/${encodeURIComponent(sessionId)}/import`, {
+        method: "POST",
+        body: JSON.stringify(input),
       }),
     async *prompt(input, options = {}) {
       const response = await fetchImpl(joinUrl(baseUrl, "/api/prompt"), {

@@ -16,7 +16,19 @@ import {
   type AgentSessionRuntime,
   type CreateAgentSessionRuntimeFactory,
 } from "@earendil-works/pi-coding-agent";
-import type { Diagnostics, PromptRequest, PromptStreamEvent, RunSummary, SessionSummary, ThinkingLevel } from "./protocol";
+import type {
+  Diagnostics,
+  ForkSessionRequest,
+  ImportSessionRequest,
+  NewSessionRequest,
+  PromptRequest,
+  PromptStreamEvent,
+  RunSummary,
+  SessionActionResponse,
+  SessionSummary,
+  SwitchSessionRequest,
+  ThinkingLevel,
+} from "./protocol";
 
 const DEFAULT_READ_ONLY_TOOLS = ["read", "grep", "find", "ls", "zuu_status"];
 const DEFAULT_AGENT_DIR = join(process.cwd(), ".zuu", "pi-agent");
@@ -270,6 +282,16 @@ export class ZuuDaemon {
     return managed;
   }
 
+  private summarizeRuntimeAction(managed: ManagedRuntime, result: { cancelled: boolean; selectedText?: string }): SessionActionResponse {
+    managed.cwd = managed.runtime.cwd;
+    managed.updatedAt = new Date().toISOString();
+    return {
+      session: this.summarizeSession(managed.runtime.session),
+      cancelled: result.cancelled,
+      selectedText: result.selectedText,
+    };
+  }
+
   summarizeSession(session: AgentSession): SessionSummary {
     const managed = this.runtimes.get(session.sessionId);
     return {
@@ -387,6 +409,45 @@ export class ZuuDaemon {
     await managed.runtime.session.compact(instructions);
     managed.updatedAt = new Date().toISOString();
     return this.summarizeSession(managed.runtime.session);
+  }
+
+  async newSession(sessionId: string, options: NewSessionRequest = {}) {
+    const managed = this.getManagedRuntime(sessionId);
+    const result = await managed.runtime.newSession({ parentSession: options.parentSession });
+    if (!result.cancelled && options.name) {
+      managed.runtime.session.setSessionName(options.name);
+    }
+    return this.summarizeRuntimeAction(managed, result);
+  }
+
+  async switchSession(sessionId: string, options: SwitchSessionRequest) {
+    if (!options.sessionFile || typeof options.sessionFile !== "string") {
+      throw new Error("sessionFile is required");
+    }
+
+    const managed = this.getManagedRuntime(sessionId);
+    const result = await managed.runtime.switchSession(options.sessionFile, { cwdOverride: options.cwdOverride });
+    return this.summarizeRuntimeAction(managed, result);
+  }
+
+  async forkSession(sessionId: string, options: ForkSessionRequest) {
+    if (!options.entryId || typeof options.entryId !== "string") {
+      throw new Error("entryId is required");
+    }
+
+    const managed = this.getManagedRuntime(sessionId);
+    const result = await managed.runtime.fork(options.entryId, { position: options.position });
+    return this.summarizeRuntimeAction(managed, result);
+  }
+
+  async importSession(sessionId: string, options: ImportSessionRequest) {
+    if (!options.path || typeof options.path !== "string") {
+      throw new Error("path is required");
+    }
+
+    const managed = this.getManagedRuntime(sessionId);
+    const result = await managed.runtime.importFromJsonl(options.path, options.cwdOverride);
+    return this.summarizeRuntimeAction(managed, result);
   }
 
   async diagnostics(): Promise<Diagnostics> {

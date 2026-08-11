@@ -5,7 +5,7 @@ import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
 import ts from "typescript";
 import { ZuuDaemon } from "./agent-daemon";
-import type { PromptRequest } from "./protocol";
+import type { ForkSessionRequest, ImportSessionRequest, NewSessionRequest, PromptRequest, SwitchSessionRequest } from "./protocol";
 
 const app = new Hono();
 const daemon = new ZuuDaemon();
@@ -612,6 +612,42 @@ app.post("/api/sessions/:sessionId/compact", async (c) => {
     return c.json({ session });
   } catch (error) {
     return c.json(jsonError(error, 404), 404);
+  }
+});
+
+app.post("/api/sessions/:sessionId/new", async (c) => {
+  try {
+    const body = (await c.req.json().catch(() => ({}))) as NewSessionRequest;
+    return c.json(await daemon.newSession(c.req.param("sessionId"), body));
+  } catch (error) {
+    return c.json(jsonError(error, 400), 400);
+  }
+});
+
+app.post("/api/sessions/:sessionId/switch", async (c) => {
+  try {
+    const body = (await c.req.json()) as SwitchSessionRequest;
+    return c.json(await daemon.switchSession(c.req.param("sessionId"), body));
+  } catch (error) {
+    return c.json(jsonError(error, 400), 400);
+  }
+});
+
+app.post("/api/sessions/:sessionId/fork", async (c) => {
+  try {
+    const body = (await c.req.json()) as ForkSessionRequest;
+    return c.json(await daemon.forkSession(c.req.param("sessionId"), body));
+  } catch (error) {
+    return c.json(jsonError(error, 400), 400);
+  }
+});
+
+app.post("/api/sessions/:sessionId/import", async (c) => {
+  try {
+    const body = (await c.req.json()) as ImportSessionRequest;
+    return c.json(await daemon.importSession(c.req.param("sessionId"), body));
+  } catch (error) {
+    return c.json(jsonError(error, 400), 400);
   }
 });
 

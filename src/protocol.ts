@@ -74,6 +74,32 @@ export interface SessionResponse {
   session: SessionSummary;
 }
 
+export interface SessionActionResponse {
+  session: SessionSummary;
+  cancelled: boolean;
+  selectedText?: string;
+}
+
+export interface NewSessionRequest {
+  name?: string;
+  parentSession?: string;
+}
+
+export interface SwitchSessionRequest {
+  sessionFile: string;
+  cwdOverride?: string;
+}
+
+export interface ForkSessionRequest {
+  entryId: string;
+  position?: "before" | "at";
+}
+
+export interface ImportSessionRequest {
+  path: string;
+  cwdOverride?: string;
+}
+
 export interface RunsResponse {
   runs: RunSummary[];
 }
