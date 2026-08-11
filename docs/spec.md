@@ -1036,3 +1036,17 @@ docs/
 6. Daemon 是否从第一版就作为系统服务安装。
 
 除第 4 项外，上述决策不改变本 Spec 的公共架构。
+
+## 22. SDK 集成约束补充
+
+Zuu 集成 Pi SDK 时必须遵守以下约束：
+
+1. Daemon 必须显式传入 app-owned `agentDir`，并让 `ModelRuntime`、`SettingsManager`、`DefaultResourceLoader` 和 `SessionManager` 使用同一目录策略。不得依赖 SDK 默认的 `~/.pi/agent` 作为应用状态目录。
+2. Session 持久化目录必须由 Daemon 管理。若使用 `SessionManager.create(cwd)`，必须显式传入 sessionDir。
+3. Daemon 不得把 Pi 原始事件直接暴露给 UI。必须映射为 Zuu 协议事件，并对未知事件保持前向兼容。
+4. Assistant message 中的 `stopReason: "error"` 必须映射为标准错误事件。
+5. Model diagnostics 必须区分“认证/目录可用”和“真实 provider stream 成功”。
+6. Package 加载前必须有信任边界；package 来源、错误和启用状态必须能通过 diagnostics 查询。
+7. Resume、fork、import 等替换 session 的能力必须重新建立订阅和 extension binding。
+8. Workflow、Subagent、DAG 和 Schedule 是 packages/adapter 能力，不属于 Pi SDK core。Spec 中相关 V1 目标只有在对应 package 或 adapter 验证通过后才可标记完成。
+9. 原生 Windows 不作为 workflow/subagent packages 的默认完整支持平台；Windows 用户优先走 WSL2。

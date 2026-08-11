@@ -407,6 +407,26 @@ docs/
 
 ---
 
+## 13. Pi SDK 文档审查补充
+
+Pi SDK 文档对于“嵌入一个单 Agent 会话”是合理的，已覆盖 `createAgentSession`、`AgentSession`、`ModelRuntime`、`SessionManager`、`SettingsManager`、`DefaultResourceLoader`、自定义工具、扩展、会话持久化、运行模式和 RPC。
+
+但完整 Agent 应用还必须在应用层补齐以下内容：
+
+1. **应用自管状态目录**：嵌入式应用应显式设置 `agentDir`、`SettingsManager`、`ModelRuntime` 的 auth/model 路径，以及 `SessionManager` 的 sessionDir。否则 SDK 默认使用 `~/.pi/agent`，不适合沙箱、便携应用或 daemon 自管状态。
+2. **模型可用性不等于调用成功**：`ModelRuntime.getAvailable()` 只能说明认证和模型目录看起来可用，真实 provider stream 仍可能因为网络、代理或服务商错误失败。
+3. **错误事件需要应用层映射**：Provider 失败可能表现为 assistant message，其中 `stopReason: "error"` 且带有 `errorMessage`，不一定由 `session.prompt()` 直接抛错。Daemon 必须把这类消息转换为 Client 可见错误事件。
+4. **Session replacement 是生命周期边界**：resume、fork、import 等会替换 active session。替换后必须重新订阅事件，并在使用 extensions 时重新绑定。
+5. **编排不是 SDK core**：Subagent、Workflow、DAG 和 Scheduler 依赖 Pi Packages 或自建 Adapter。`@agwab/pi-workflow` 更适合作为 workflow/subagent 主路径，`@agwab/pi-subagent` 是更底层 worker 工具，Scheduler 需要 `pi-crew` 或 daemon 托管的独立调度后端。
+6. **Package 信任必须产品化**：Pi packages 可以执行代码并影响 Agent 行为，Zuu 应暴露 package 来源、信任状态、启用/禁用状态和诊断信息。
+7. **SDK 不定义应用协议**：HTTP/SSE DTO、run ID、重连、取消、背压和错误规则都属于 Zuu 协议层。
+8. **Windows 支持边界要前置**：workflow/subagent 相关 package 页面要求 Node.js `>=22.19.0`，支持 macOS/Linux，Windows 建议 WSL2，不应默认承诺原生 Windows 完整支持。
+9. **文档与示例存在轻微漂移**：最新 SDK 页面展示了 `customTools` + `defineTool`，但本地 `examples/sdk/05-tools.ts` 仍引导读者去看 extensions 示例，后续实现应以实际安装包类型和编译结果为准。
+
+本次垂直切片验证了其中第 1、2、3、7 点：Zuu 已改为项目内 `.zuu/pi-agent` 存储，诊断接口会暴露 workflow/scheduler 缺口，SSE 映射会将 assistant error 转为客户端错误事件。
+
+---
+
 ## 附录 A：完整应用「功能清单」速查
 
 **必须有（P0）**

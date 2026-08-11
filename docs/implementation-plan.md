@@ -709,3 +709,30 @@ UI end-to-end
 - 文档已更新。
 - 不引入 UI 直连 Daemon。
 
+## 21. 当前垂直切片落地状态
+
+本仓库已先行实现一个最小可运行切片，用于验证 Pi SDK 嵌入方式和文档假设：
+
+- `src/index.ts`：Hono daemon、浏览器 UI、health、diagnostics、session、prompt、abort、compact API。
+- `src/agent-daemon.ts`：封装 `ModelRuntime`、`DefaultResourceLoader`、`SettingsManager`、`SessionManager`、`createAgentSession`、自定义工具和 SSE 事件映射。
+- `src/protocol.ts`：当前单包内的临时 DTO，后续应拆入 `@zuu/protocol`。
+- `.zuu/pi-agent`：默认 Pi app state 目录，可通过 `ZUU_AGENT_DIR` 覆盖，避免嵌入式运行时写入 `~/.pi/agent`。
+- `README.md`：当前运行方式和 API 入口。
+
+已验证：
+
+- `bun run check` 可以加载应用入口。
+- `GET /api/health` 正常。
+- `GET /api/diagnostics` 正常返回 SDK 版本、模型数量、skills、extensions、packages 和能力缺口。
+- `POST /api/prompt` 可以返回 SSE `session`、`error`、`agent_event` 和 `done` 事件。
+
+当前限制：
+
+- 还没有拆出真正的 `@zuu/client`，浏览器 UI 暂时直接调用本地 API；这只作为早期验证切片，正式 M2/M8 仍必须通过 Client SDK。
+- 当前没有 run ID，prompt stream 还不能独立追踪历史运行。
+- 默认工具集偏只读，`bash`、`edit`、`write` 需要 UI 显式启用。
+- 当前环境下真实模型 stream 可能因为网络返回 `Connection error`；daemon 已将 SDK assistant error 映射为 SSE error。
+- Workflow/subagent/scheduler 尚未安装 packages，diagnostics 会明确报告缺口。
+
+后续计划应从此切片继续收敛，而不是另起炉灶：先抽 `@zuu/protocol` 和 `@zuu/client`，再接 run registry、审批、package 管理、workflow adapter 和 scheduler backend。
+
