@@ -14,6 +14,15 @@ export interface SessionSummary {
   updatedAt: string;
 }
 
+export interface RunSummary {
+  id: string;
+  sessionId: string;
+  status: "running" | "done" | "error" | "aborted";
+  prompt: string;
+  startedAt: string;
+  endedAt?: string;
+}
+
 export interface PromptRequest {
   prompt: string;
   sessionId?: string;
@@ -29,6 +38,7 @@ export interface PromptRequest {
 }
 
 export interface PromptStreamEvent {
+  runId: string;
   type:
     | "session"
     | "text_delta"
@@ -49,13 +59,26 @@ export interface PromptStreamEvent {
     isError?: boolean;
   };
   eventType?: string;
+  run?: RunSummary;
+}
+
+export interface HealthResponse {
+  ok: boolean;
+}
+
+export interface SessionsResponse {
+  sessions: SessionSummary[];
+}
+
+export interface SessionResponse {
+  session: SessionSummary;
 }
 
 export interface Diagnostics {
   ok: boolean;
   cwd: string;
   runtime: {
-    bun: string;
+    node: string;
     platform: string;
     nodeVersionRequired: string;
   };
@@ -77,4 +100,11 @@ export interface Diagnostics {
     packages: string[];
   };
   gaps: string[];
+}
+
+export interface ApiErrorResponse {
+  error: {
+    message: string;
+    status: number;
+  };
 }

@@ -77,7 +77,7 @@ flowchart LR
 
 ### 5.1 目标
 
-在正式重构前确认 Pi SDK、Pi Packages、Bun、WSL2 和调度能力能够组合运行。
+在正式重构前确认 Pi SDK、Pi Packages、Node.js、WSL2 和调度能力能够组合运行。
 
 ### 5.2 工作项
 
@@ -111,8 +111,8 @@ flowchart LR
 
 #### SPIKE-005：运行时兼容
 
-- Bun 下运行主 Daemon。
-- 验证子 Pi 进程所需 Node.js 版本。
+- Node.js 下运行主 Daemon。
+- 验证主进程与子 Pi 进程所需 Node.js 版本。
 - 验证原生 Windows 与 WSL2 差异。
 - 明确开发和生产支持矩阵。
 
@@ -156,7 +156,7 @@ docs/
 
 #### ENG-001：Workspace
 
-- 将仓库转换为 Bun workspace。
+- 将仓库转换为 workspace，并以 Node.js 作为服务运行时。
 - 建立统一 TypeScript 配置。
 - 建立 build、typecheck、test、lint 脚本。
 - 保留临时兼容入口或迁移 `src/pi-agent.ts`。
@@ -190,7 +190,7 @@ docs/
 
 ### 6.3 退出标准
 
-- `bun install` 后可一次执行 build/typecheck/test。
+- 安装依赖后可一次执行 build/typecheck/test。
 - Protocol 不依赖 Hono 或 Pi。
 - Client 不依赖 Pi。
 - Daemon 可启动并返回 `/v1/health`。
@@ -647,7 +647,7 @@ UI end-to-end
 2. `SPIKE-002`：验证 ResourceLoader 与 Package diagnostics。
 3. `SPIKE-003`：验证 `pi-workflow` 与真实 Subagent。
 4. `SPIKE-004`：验证 Schedule。
-5. `ENG-001`：转换 Bun workspace。
+5. `ENG-001`：转换 workspace，并固定 Node.js 运行方式。
 6. `ENG-002`：创建 protocol 包。
 7. `ENG-003`：创建 daemon health。
 8. `ENG-004`：创建 client health。
@@ -657,7 +657,7 @@ UI end-to-end
 
 - 风险验证文档齐全。
 - Schedule Backend 有明确决策。
-- `bun run typecheck` 和 `bun test` 通过。
+- typecheck 和 test 通过。
 - `client.health.get()` 能访问 Daemon。
 - 下一迭代可以直接进入 Agent 垂直切片。
 
@@ -671,7 +671,7 @@ UI end-to-end
 - Pi Package 固定版本
 - Workflow Adapter 路径
 - Schedule Backend
-- Node/Bun 进程边界
+- Node.js 进程边界
 
 ### Gate B：M2 后
 
@@ -715,24 +715,28 @@ UI end-to-end
 
 - `src/index.ts`：Hono daemon、浏览器 UI、health、diagnostics、session、prompt、abort、compact API。
 - `src/agent-daemon.ts`：封装 `ModelRuntime`、`DefaultResourceLoader`、`SettingsManager`、`SessionManager`、`createAgentSession`、自定义工具和 SSE 事件映射。
+- `src/client.ts`：轻量 Zuu client，封装 health、diagnostics、sessions、prompt SSE、abort 和 compact。
 - `src/protocol.ts`：当前单包内的临时 DTO，后续应拆入 `@zuu/protocol`。
+- `/client.js`：由 `src/client.ts` 转译生成的浏览器端 client module，当前 WebUI 通过它调用 daemon。
 - `.zuu/pi-agent`：默认 Pi app state 目录，可通过 `ZUU_AGENT_DIR` 覆盖，避免嵌入式运行时写入 `~/.pi/agent`。
 - `README.md`：当前运行方式和 API 入口。
 
 已验证：
 
-- `bun run check` 可以加载应用入口。
+- `npm run check` 可以加载应用入口。
 - `GET /api/health` 正常。
 - `GET /api/diagnostics` 正常返回 SDK 版本、模型数量、skills、extensions、packages 和能力缺口。
 - `POST /api/prompt` 可以返回 SSE `session`、`error`、`agent_event` 和 `done` 事件。
+- `src/client.ts` 可从 Node.js 侧调用 health、diagnostics 和 prompt stream。
+- prompt stream 已携带稳定 `runId`。
 
 当前限制：
 
-- 还没有拆出真正的 `@zuu/client`，浏览器 UI 暂时直接调用本地 API；这只作为早期验证切片，正式 M2/M8 仍必须通过 Client SDK。
-- 当前没有 run ID，prompt stream 还不能独立追踪历史运行。
+- `src/client.ts` 还没有拆成真正的 workspace 包 `@zuu/client`。
+- 当前只有 `runId` 事件标识，还没有持久化 run registry、重连 replay 或历史查询 API。
 - 默认工具集偏只读，`bash`、`edit`、`write` 需要 UI 显式启用。
 - 当前环境下真实模型 stream 可能因为网络返回 `Connection error`；daemon 已将 SDK assistant error 映射为 SSE error。
 - Workflow/subagent/scheduler 尚未安装 packages，diagnostics 会明确报告缺口。
 
-后续计划应从此切片继续收敛，而不是另起炉灶：先抽 `@zuu/protocol` 和 `@zuu/client`，再接 run registry、审批、package 管理、workflow adapter 和 scheduler backend。
+后续计划应从此切片继续收敛，而不是另起炉灶：先把 `src/protocol.ts` 和 `src/client.ts` 拆成 workspace 包，再接 run registry、审批、package 管理、workflow adapter 和 scheduler backend。
 

@@ -109,7 +109,7 @@ WebUI / TUI / Desktop / IDE / Third-party App
 约束：
 
 - 不依赖 Pi SDK
-- 支持 Bun、Node.js 及浏览器
+- 支持 Node.js 及浏览器
 - 允许外部应用独立安装
 - 禁止以内部路由字符串作为主要公共 API
 
@@ -151,8 +151,8 @@ WebUI / TUI / Desktop / IDE / Third-party App
 ### 4.2 运行环境
 
 - 首选：Linux 或 WSL2
-- 开发运行时：Bun
-- Pi Workflow 依赖 Node.js 的部分必须满足其最低版本要求
+- 开发运行时：Node.js
+- Pi Workflow 依赖 Node.js，必须满足其最低版本要求
 - 原生 Windows 下不保证 `pi-workflow`、Unix socket broker 等能力完整
 
 ### 4.3 Daemon 生命周期

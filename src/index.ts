@@ -1,14 +1,32 @@
+import { readFile } from "node:fs/promises";
+import { pathToFileURL } from "node:url";
+import { serve } from "@hono/node-server";
 import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
+import ts from "typescript";
 import { ZuuDaemon } from "./agent-daemon";
 import type { PromptRequest } from "./protocol";
 
 const app = new Hono();
 const daemon = new ZuuDaemon();
+let clientJsPromise: Promise<string> | undefined;
 
 function jsonError(error: unknown, status = 500) {
   const message = error instanceof Error ? error.message : String(error);
   return { error: { message, status } };
+}
+
+async function getClientJs() {
+  clientJsPromise ??= readFile(new URL("./client.ts", import.meta.url), "utf8").then((source) => {
+    return ts.transpileModule(source, {
+      compilerOptions: {
+        module: ts.ModuleKind.ESNext,
+        target: ts.ScriptTarget.ES2022,
+        importsNotUsedAsValues: ts.ImportsNotUsedAsValues.Remove,
+      },
+    }).outputText;
+  });
+  return clientJsPromise;
 }
 
 const page = String.raw`<!doctype html>
@@ -339,6 +357,9 @@ const page = String.raw`<!doctype html>
   </div>
 
   <script type="module">
+    import { createZuuClient } from "/client.js";
+
+    const client = createZuuClient();
     const state = { sessionId: undefined, controller: undefined };
     const el = (id) => document.getElementById(id);
     const messages = el("messages");
@@ -362,8 +383,7 @@ const page = String.raw`<!doctype html>
     }
 
     async function loadDiagnostics() {
-      const response = await fetch("/api/diagnostics");
-      const diagnostics = await response.json();
+      const diagnostics = await client.diagnostics();
       const gaps = diagnostics.gaps.length ? "\nGaps:\n- " + diagnostics.gaps.join("\n- ") : "";
       el("diag").textContent =
         "SDK " + diagnostics.sdk.version +
@@ -372,16 +392,6 @@ const page = String.raw`<!doctype html>
         "\nSkills: " + diagnostics.resources.skills +
         "\nPackages: " + (diagnostics.resources.packages.join(", ") || "none") +
         gaps;
-    }
-
-    function decodeSse(buffer, onEvent) {
-      const parts = buffer.split("\n\n");
-      const rest = parts.pop() ?? "";
-      for (const part of parts) {
-        const data = part.split("\n").filter((line) => line.startsWith("data:")).map((line) => line.slice(5).trimStart()).join("\n");
-        if (data) onEvent(JSON.parse(data));
-      }
-      return rest;
     }
 
     async function sendPrompt() {
@@ -405,40 +415,24 @@ const page = String.raw`<!doctype html>
       state.controller = new AbortController();
 
       try {
-        const response = await fetch("/api/prompt", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify(body),
-          signal: state.controller.signal,
-        });
-
-        if (!response.ok || !response.body) {
-          throw new Error(await response.text());
-        }
-
-        const reader = response.body.pipeThrough(new TextDecoderStream()).getReader();
-        let buffer = "";
-        while (true) {
-          const { value, done } = await reader.read();
-          if (done) break;
-          buffer = decodeSse(buffer + value, (event) => {
-            if (event.type === "session" && event.session) {
-              state.sessionId = event.session.id;
-              el("title").textContent = event.session.name || event.session.id;
-              el("subtitle").textContent = event.session.model || "No model selected";
-            } else if (event.type === "text_delta") {
-              agentNode.textContent += event.delta || "";
-              messages.scrollTop = messages.scrollHeight;
-            } else if (event.type === "tool_start") {
-              addMessage("event", "tool start: " + event.tool.name);
-            } else if (event.type === "tool_end") {
-              addMessage("event", "tool end: " + event.tool.name + (event.tool.isError ? " (error)" : ""));
-            } else if (event.type === "error") {
-              addMessage("event", "error: " + event.message);
-            } else if (event.type === "done" && event.session) {
-              el("subtitle").textContent = event.session.model || "No model selected";
-            }
-          });
+        for await (const event of client.prompt(body, { signal: state.controller.signal })) {
+          if (event.type === "session" && event.session) {
+            state.sessionId = event.session.id;
+            el("title").textContent = event.session.name || event.session.id;
+            el("subtitle").textContent = event.session.model || "No model selected";
+            addMessage("event", "run start: " + event.runId);
+          } else if (event.type === "text_delta") {
+            agentNode.textContent += event.delta || "";
+            messages.scrollTop = messages.scrollHeight;
+          } else if (event.type === "tool_start") {
+            addMessage("event", "tool start: " + event.tool.name);
+          } else if (event.type === "tool_end") {
+            addMessage("event", "tool end: " + event.tool.name + (event.tool.isError ? " (error)" : ""));
+          } else if (event.type === "error") {
+            addMessage("event", "error: " + event.message);
+          } else if (event.type === "done" && event.session) {
+            el("subtitle").textContent = (event.session.model || "No model selected") + " · " + (event.run?.status || "done");
+          }
         }
       } catch (error) {
         if (error.name !== "AbortError") addMessage("event", String(error.message || error));
@@ -451,7 +445,7 @@ const page = String.raw`<!doctype html>
     async function abortPrompt() {
       state.controller?.abort();
       if (state.sessionId) {
-        await fetch("/api/sessions/" + encodeURIComponent(state.sessionId) + "/abort", { method: "POST" }).catch(() => {});
+        await client.abort(state.sessionId).catch(() => {});
       }
       setBusy(false);
     }
@@ -468,6 +462,12 @@ const page = String.raw`<!doctype html>
   </script>
 </body>
 </html>`;
+
+app.get("/client.js", async () => {
+  return new Response(await getClientJs(), {
+    headers: { "content-type": "application/javascript; charset=utf-8" },
+  });
+});
 
 app.get("/", (c) => c.html(page));
 
@@ -513,7 +513,11 @@ app.post("/api/prompt", async (c) => {
     } catch (error) {
       await stream.writeSSE({
         event: "error",
-        data: JSON.stringify({ type: "error", message: error instanceof Error ? error.message : String(error) }),
+        data: JSON.stringify({
+          runId: "unknown",
+          type: "error",
+          message: error instanceof Error ? error.message : String(error),
+        }),
       });
     }
   });
@@ -537,5 +541,11 @@ app.post("/api/sessions/:sessionId/compact", async (c) => {
     return c.json(jsonError(error, 404), 404);
   }
 });
+
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  const port = Number(process.env.PORT ?? 3000);
+  serve({ fetch: app.fetch, port });
+  console.log(`Zuu Agent listening on http://localhost:${port}`);
+}
 
 export default app;

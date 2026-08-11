@@ -1,15 +1,21 @@
 # Zuu Agent
 
-一个基于 Pi SDK 的最小完整 Agent 应用，包含 Hono daemon、浏览器 UI、SSE 流式输出、会话持久化、运行诊断，以及一个只读的自定义状态工具。
+一个基于 Pi SDK 的最小完整 Agent 应用，包含 Hono daemon、浏览器 UI、轻量 Client SDK、SSE 流式输出、会话持久化、运行诊断，以及一个只读的自定义状态工具。
 
 ## 运行
 
 ```sh
-bun install --linker hoisted --backend copyfile
-bun run dev
+pnpm install
+pnpm dev
 ```
 
 打开 http://localhost:3000。
+
+服务运行时是 Node.js，当前已验证 Node `v24.18.1`。
+
+项目脚本使用 Node 24 原生 `--env-file-if-exists=.env` 读取环境变量文件，不需要额外安装 `dotenv`。如果 `.env` 不存在，启动不会报错。
+
+如果 Windows PowerShell 拦截 `pnpm.ps1`，可以使用 `pnpm.cmd dev`。
 
 ## API
 
@@ -20,6 +26,8 @@ bun run dev
 - `POST /api/prompt`：以 SSE 方式流式返回事件
 - `POST /api/sessions/:sessionId/abort`
 - `POST /api/sessions/:sessionId/compact`
+
+浏览器 UI 通过 `/client.js` 加载 `src/client.ts` 转译出的同一套 client 实现；业务请求不再散落手写 `fetch` 和 SSE 解析逻辑。
 
 默认情况下，Zuu 会把 Pi 应用状态存放在 `.zuu/pi-agent`，这样嵌入式应用不需要写入 `~/.pi/agent`。可以通过 `ZUU_AGENT_DIR` 覆盖。
 

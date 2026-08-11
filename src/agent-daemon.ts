@@ -1,6 +1,6 @@
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { mkdirSync } from "node:fs";
+import { mkdirSync, readFileSync } from "node:fs";
 import { Type } from "typebox";
 import {
   createAgentSession,
@@ -12,7 +12,7 @@ import {
   type AgentSession,
   type AgentSessionEvent,
 } from "@earendil-works/pi-coding-agent";
-import type { Diagnostics, PromptRequest, PromptStreamEvent, SessionSummary, ThinkingLevel } from "./protocol";
+import type { Diagnostics, PromptRequest, PromptStreamEvent, RunSummary, SessionSummary, ThinkingLevel } from "./protocol";
 
 const DEFAULT_READ_ONLY_TOOLS = ["read", "grep", "find", "ls", "zuu_status"];
 const DEFAULT_AGENT_DIR = join(process.cwd(), ".zuu", "pi-agent");
@@ -34,10 +34,8 @@ interface CreateSessionOptions {
 }
 
 function sdkVersion() {
-  const packageJson = Bun.file(
-    join(process.cwd(), "node_modules", "@earendil-works", "pi-coding-agent", "package.json"),
-  );
-  return packageJson.json() as Promise<{ version: string; engines?: { node?: string } }>;
+  const packageJsonPath = join(process.cwd(), "node_modules", "@earendil-works", "pi-coding-agent", "package.json");
+  return JSON.parse(readFileSync(packageJsonPath, "utf8")) as { version: string; engines?: { node?: string } };
 }
 
 function getZuuAgentDir() {
@@ -62,13 +60,14 @@ function packageSourceToString(source: unknown): string {
   return String(source);
 }
 
-function compactAgentEvent(event: AgentSessionEvent): PromptStreamEvent | undefined {
+function compactAgentEvent(event: AgentSessionEvent, runId: string): PromptStreamEvent | undefined {
   if (event.type === "message_update" && event.assistantMessageEvent.type === "text_delta") {
-    return { type: "text_delta", delta: event.assistantMessageEvent.delta };
+    return { runId, type: "text_delta", delta: event.assistantMessageEvent.delta };
   }
 
   if (event.type === "tool_execution_start") {
     return {
+      runId,
       type: "tool_start",
       tool: { id: event.toolCallId, name: event.toolName, args: event.args },
     };
@@ -76,6 +75,7 @@ function compactAgentEvent(event: AgentSessionEvent): PromptStreamEvent | undefi
 
   if (event.type === "tool_execution_update") {
     return {
+      runId,
       type: "tool_update",
       tool: { id: event.toolCallId, name: event.toolName, args: event.args, result: event.partialResult },
     };
@@ -83,6 +83,7 @@ function compactAgentEvent(event: AgentSessionEvent): PromptStreamEvent | undefi
 
   if (event.type === "tool_execution_end") {
     return {
+      runId,
       type: "tool_end",
       tool: {
         id: event.toolCallId,
@@ -96,7 +97,7 @@ function compactAgentEvent(event: AgentSessionEvent): PromptStreamEvent | undefi
   if (event.type === "message_end") {
     const message = event.message as { role?: string; stopReason?: string; errorMessage?: string };
     if (message.role === "assistant" && message.stopReason === "error") {
-      return { type: "error", message: message.errorMessage ?? "Model request failed." };
+      return { runId, type: "error", message: message.errorMessage ?? "Model request failed." };
     }
   }
 
@@ -109,7 +110,7 @@ function compactAgentEvent(event: AgentSessionEvent): PromptStreamEvent | undefi
     event.type === "queue_update" ||
     event.type === "thinking_level_changed"
   ) {
-    return { type: "agent_event", eventType: event.type };
+    return { runId, type: "agent_event", eventType: event.type };
   }
 
   return undefined;
@@ -229,6 +230,7 @@ export class ZuuDaemon {
   }
 
   async *prompt(request: PromptRequest): AsyncGenerator<PromptStreamEvent> {
+    const runId = crypto.randomUUID();
     const session = await this.getOrCreateSession(request);
     const managed = this.sessions.get(session.sessionId);
     if (managed) managed.updatedAt = new Date().toISOString();
@@ -237,12 +239,21 @@ export class ZuuDaemon {
       session.setActiveToolsByName(request.tools);
     }
 
-    yield { type: "session", session: this.summarizeSession(session) };
+    const run: RunSummary = {
+      id: runId,
+      sessionId: session.sessionId,
+      status: "running",
+      prompt: request.prompt,
+      startedAt: new Date().toISOString(),
+    };
+
+    yield { runId, type: "session", session: this.summarizeSession(session), run };
 
     const queue: PromptStreamEvent[] = [];
     let notify: (() => void) | undefined;
     let finished = false;
     let promptError: unknown;
+    let sawError = false;
 
     const wake = () => {
       notify?.();
@@ -250,8 +261,9 @@ export class ZuuDaemon {
     };
 
     const unsubscribe = session.subscribe((event) => {
-      const compact = compactAgentEvent(event);
+      const compact = compactAgentEvent(event, runId);
       if (compact) {
+        if (compact.type === "error") sawError = true;
         queue.push(compact);
         wake();
       }
@@ -282,12 +294,16 @@ export class ZuuDaemon {
 
       if (promptError) {
         const message = promptError instanceof Error ? promptError.message : String(promptError);
-        yield { type: "error", message };
+        run.status = "error";
+        run.endedAt = new Date().toISOString();
+        yield { runId, type: "error", message, run };
         return;
       }
 
       if (managed) managed.updatedAt = new Date().toISOString();
-      yield { type: "done", session: this.summarizeSession(session) };
+      run.status = sawError ? "error" : "done";
+      run.endedAt = new Date().toISOString();
+      yield { runId, type: "done", session: this.summarizeSession(session), run };
     } finally {
       unsubscribe();
     }
@@ -341,7 +357,7 @@ export class ZuuDaemon {
       ok: extensionResult.errors.length === 0 && available.length > 0,
       cwd,
       runtime: {
-        bun: Bun.version,
+        node: process.versions.node,
         platform: process.platform,
         nodeVersionRequired: sdk.engines?.node ?? ">=22.19.0",
       },
