@@ -740,7 +740,7 @@ UI end-to-end
 
 - `src/client.ts` 还没有拆成真正的 workspace 包 `@zuu/client`。
 - run registry 已有文件持久化，但还没有 SSE 重连 replay、事件明细存档或跨进程写入协调。
-- WebUI 已支持打开持久化 session，但还没有 tree entry 选择器和 JSONL import 表单；fork/import 能力目前优先面向 client/API。
+- WebUI 已支持打开持久化 session、查看当前 session tree、按 entry fork，以及从本地 JSONL 路径 import。
 - Package API 只维护 source 列表，尚未接入 package 安装进度、信任确认和资源冲突 UI。
 - 默认工具集偏只读，`bash`、`edit`、`write` 需要 UI 显式启用。
 - 当前环境下真实模型 stream 可能因为网络返回 `Connection error`；daemon 已将 SDK assistant error 映射为 SSE error。

@@ -410,6 +410,15 @@ const page = String.raw`<!doctype html>
         <h2>Stored sessions</h2>
         <div id="stored-sessions" class="run-list"><p class="meta">No stored sessions yet.</p></div>
       </section>
+
+      <section class="panel stack">
+        <h2>Session tree</h2>
+        <div id="session-tree" class="run-list"><p class="meta">Open a session first.</p></div>
+        <label>Import JSONL <input id="import-path" placeholder="D:\\path\\session.jsonl" /></label>
+        <div class="actions">
+          <button id="import-session">Import</button>
+        </div>
+      </section>
     </aside>
 
     <main>
@@ -550,7 +559,7 @@ const page = String.raw`<!doctype html>
       const { session } = await client.openSession({ sessionFile });
       setActiveSession(session);
       addMessage("event", "opened session: " + session.id);
-      await Promise.all([loadRuns(), loadStoredSessions()]).catch(() => {});
+      await Promise.all([loadRuns(), loadStoredSessions(), loadSessionTree()]).catch(() => {});
     }
 
     async function loadStoredSessions() {
@@ -587,6 +596,88 @@ const page = String.raw`<!doctype html>
       }
     }
 
+    function flattenTree(entries, depth = 0) {
+      return entries.flatMap((entry) => [{ entry, depth }, ...flattenTree(entry.children || [], depth + 1)]);
+    }
+
+    async function forkFromEntry(entryId, position) {
+      if (!state.sessionId) return;
+      const result = await client.forkSession(state.sessionId, { entryId, position });
+      if (!result.cancelled) {
+        setActiveSession(result.session);
+        addMessage("event", "forked session: " + result.session.id);
+        await Promise.all([loadRuns(), loadStoredSessions(), loadSessionTree()]).catch(() => {});
+      }
+    }
+
+    async function loadSessionTree() {
+      const root = el("session-tree");
+      root.replaceChildren();
+
+      if (!state.sessionId) {
+        const empty = document.createElement("p");
+        empty.className = "meta";
+        empty.textContent = "Open a session first.";
+        root.appendChild(empty);
+        return;
+      }
+
+      const { tree } = await client.getSessionTree(state.sessionId);
+      const entries = flattenTree(tree);
+      if (!entries.length) {
+        const empty = document.createElement("p");
+        empty.className = "meta";
+        empty.textContent = "No entries yet.";
+        root.appendChild(empty);
+        return;
+      }
+
+      for (const { entry, depth } of entries.slice(0, 30)) {
+        const item = document.createElement("div");
+        item.className = "session-file";
+        item.style.marginLeft = Math.min(depth * 10, 40) + "px";
+        const text = document.createElement("div");
+        const title = document.createElement("strong");
+        title.textContent = (entry.role || entry.type) + " - " + entry.id.slice(0, 8);
+        const meta = document.createElement("span");
+        meta.textContent = (entry.text || entry.timestamp || "").slice(0, 120);
+        const actions = document.createElement("div");
+        actions.className = "actions";
+        const forkBefore = document.createElement("button");
+        forkBefore.type = "button";
+        forkBefore.textContent = "Before";
+        forkBefore.addEventListener("click", () => {
+          forkFromEntry(entry.id, "before").catch((error) => addMessage("event", String(error.message || error)));
+        });
+        const forkAt = document.createElement("button");
+        forkAt.type = "button";
+        forkAt.textContent = "At";
+        forkAt.addEventListener("click", () => {
+          forkFromEntry(entry.id, "at").catch((error) => addMessage("event", String(error.message || error)));
+        });
+        text.append(title, meta);
+        actions.append(forkBefore, forkAt);
+        item.append(text, actions);
+        root.appendChild(item);
+      }
+    }
+
+    async function importSession() {
+      const path = el("import-path").value.trim();
+      if (!path) return;
+      if (!state.sessionId) {
+        const { session } = await client.createSession({ persist: false, name: "Import anchor" });
+        setActiveSession(session);
+      }
+      const result = await client.importSession(state.sessionId, { path });
+      if (!result.cancelled) {
+        setActiveSession(result.session);
+        el("import-path").value = "";
+        addMessage("event", "imported session: " + result.session.id);
+        await Promise.all([loadRuns(), loadStoredSessions(), loadSessionTree()]).catch(() => {});
+      }
+    }
+
     async function sendPrompt() {
       const prompt = el("prompt").value.trim();
       if (!prompt) return;
@@ -612,7 +703,7 @@ const page = String.raw`<!doctype html>
           if (event.type === "session" && event.session) {
             setActiveSession(event.session);
             addMessage("event", "run start: " + event.runId);
-            await Promise.all([loadRuns(), loadStoredSessions()]).catch(() => {});
+            await Promise.all([loadRuns(), loadStoredSessions(), loadSessionTree()]).catch(() => {});
           } else if (event.type === "text_delta") {
             agentNode.textContent += event.delta || "";
             messages.scrollTop = messages.scrollHeight;
@@ -625,7 +716,7 @@ const page = String.raw`<!doctype html>
             await loadRuns().catch(() => {});
           } else if (event.type === "done" && event.session) {
             el("subtitle").textContent = (event.session.model || "No model selected") + " · " + (event.run?.status || "done");
-            await Promise.all([loadRuns(), loadStoredSessions()]).catch(() => {});
+            await Promise.all([loadRuns(), loadStoredSessions(), loadSessionTree()]).catch(() => {});
           }
         }
       } catch (error) {
@@ -640,7 +731,7 @@ const page = String.raw`<!doctype html>
       state.controller?.abort();
       if (state.sessionId) {
         await client.abort(state.sessionId).catch(() => {});
-        await Promise.all([loadRuns(), loadStoredSessions()]).catch(() => {});
+        await Promise.all([loadRuns(), loadStoredSessions(), loadSessionTree()]).catch(() => {});
       }
       setBusy(false);
     }
@@ -649,6 +740,9 @@ const page = String.raw`<!doctype html>
     el("abort").addEventListener("click", abortPrompt);
     el("add-package").addEventListener("click", () => {
       addPackage().catch((error) => addMessage("event", String(error.message || error)));
+    });
+    el("import-session").addEventListener("click", () => {
+      importSession().catch((error) => addMessage("event", String(error.message || error)));
     });
     el("prompt").addEventListener("keydown", (event) => {
       if ((event.metaKey || event.ctrlKey) && event.key === "Enter") sendPrompt();
@@ -660,6 +754,7 @@ const page = String.raw`<!doctype html>
     loadPackages().catch(() => {});
     loadRuns().catch(() => {});
     loadStoredSessions().catch(() => {});
+    loadSessionTree().catch(() => {});
   </script>
 </body>
 </html>`;
