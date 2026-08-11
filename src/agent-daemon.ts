@@ -1,6 +1,6 @@
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { mkdirSync, readFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { Type } from "typebox";
 import {
   createAgentSessionFromServices,
@@ -38,6 +38,7 @@ import type {
 
 const DEFAULT_READ_ONLY_TOOLS = ["read", "grep", "find", "ls", "zuu_status"];
 const DEFAULT_AGENT_DIR = join(process.cwd(), ".zuu", "pi-agent");
+const RUN_HISTORY_LIMIT = 200;
 
 interface ManagedRuntime {
   runtime: AgentSessionRuntime;
@@ -72,6 +73,26 @@ function getSessionDir(agentDir: string) {
   const sessionDir = join(agentDir, "sessions");
   mkdirSync(sessionDir, { recursive: true });
   return sessionDir;
+}
+
+function getRunStorePath(agentDir: string) {
+  return join(agentDir, "runs.json");
+}
+
+function loadRunHistory(path: string): RunSummary[] {
+  try {
+    const parsed = JSON.parse(readFileSync(path, "utf8")) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((run): run is RunSummary => {
+      return Boolean(run && typeof run === "object" && "id" in run && "sessionId" in run && "status" in run);
+    });
+  } catch {
+    return [];
+  }
+}
+
+function saveRunHistory(path: string, runs: RunSummary[]) {
+  writeFileSync(path, `${JSON.stringify(runs.slice(0, RUN_HISTORY_LIMIT), null, 2)}\n`, "utf8");
 }
 
 async function createModelRuntime() {
@@ -176,7 +197,10 @@ function entryRole(entry: SessionEntry) {
 
 export class ZuuDaemon {
   private readonly runtimes = new Map<string, ManagedRuntime>();
-  private readonly runs = new Map<string, RunSummary>();
+  private readonly runStorePath = getRunStorePath(getZuuAgentDir());
+  private readonly runs = new Map<string, RunSummary>(
+    loadRunHistory(this.runStorePath).map((run) => [run.id, run]),
+  );
   private readonly modelRuntimePromise = createModelRuntime();
   private readonly startedAt = new Date().toISOString();
   private sdkInfoPromise: ReturnType<typeof sdkVersion> | undefined;
@@ -354,6 +378,15 @@ export class ZuuDaemon {
       .sort((a, b) => b.startedAt.localeCompare(a.startedAt));
   }
 
+  private persistRuns() {
+    saveRunHistory(this.runStorePath, this.listRuns());
+  }
+
+  private setRun(run: RunSummary) {
+    this.runs.set(run.id, run);
+    this.persistRuns();
+  }
+
   getRun(runId: string) {
     const run = this.runs.get(runId);
     if (!run) throw new Error(`Unknown run: ${runId}`);
@@ -441,7 +474,7 @@ export class ZuuDaemon {
       prompt: request.prompt,
       startedAt: new Date().toISOString(),
     };
-    this.runs.set(runId, run);
+    this.setRun(run);
 
     yield { runId, type: "session", session: this.summarizeSession(session), run };
 
@@ -492,6 +525,7 @@ export class ZuuDaemon {
         const message = promptError instanceof Error ? promptError.message : String(promptError);
         run.status = run.status === "aborted" ? "aborted" : "error";
         run.endedAt = new Date().toISOString();
+        this.persistRuns();
         yield { runId, type: "error", message, run };
         return;
       }
@@ -499,6 +533,7 @@ export class ZuuDaemon {
       if (managed) managed.updatedAt = new Date().toISOString();
       run.status = run.status === "aborted" ? "aborted" : sawError ? "error" : "done";
       run.endedAt = new Date().toISOString();
+      this.persistRuns();
       yield { runId, type: "done", session: this.summarizeSession(session), run };
     } finally {
       unsubscribe();
@@ -516,6 +551,7 @@ export class ZuuDaemon {
         run.endedAt = endedAt;
       }
     }
+    this.persistRuns();
     return this.summarizeSession(managed.runtime.session);
   }
 

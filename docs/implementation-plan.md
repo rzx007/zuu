@@ -730,6 +730,7 @@ UI end-to-end
 - `POST /api/prompt` 可以返回 SSE `session`、`error`、`agent_event` 和 `done` 事件。
 - `src/client.ts` 可从 Node.js 侧调用 health、diagnostics 和 prompt stream。
 - prompt stream 已携带稳定 `runId`，并可通过 `GET /api/runs` 和 `GET /api/runs/:runId` 查询最近运行状态。
+- run registry 已持久化到 `.zuu/pi-agent/runs.json`，daemon 重启后可恢复最近运行摘要。
 - `AgentSessionRuntime` 的 `newSession`、`switchSession`、`fork` 和 `importFromJsonl` 已通过 daemon API 与 client 暴露。
 - `GET /api/session-files` 和 `POST /api/sessions/open` 已支持列出和打开 Pi 持久化 session 文件。
 - `GET /api/sessions/:sessionId/tree` 已支持读取当前 active session 的树形 entry 摘要，为 fork 选择器提供基础。
@@ -737,7 +738,7 @@ UI end-to-end
 当前限制：
 
 - `src/client.ts` 还没有拆成真正的 workspace 包 `@zuu/client`。
-- 当前 run registry 仍是内存实现，还没有持久化、重连 replay 或跨进程历史查询。
+- run registry 已有文件持久化，但还没有 SSE 重连 replay、事件明细存档或跨进程写入协调。
 - WebUI 已支持打开持久化 session，但还没有 tree entry 选择器和 JSONL import 表单；fork/import 能力目前优先面向 client/API。
 - 默认工具集偏只读，`bash`、`edit`、`write` 需要 UI 显式启用。
 - 当前环境下真实模型 stream 可能因为网络返回 `Connection error`；daemon 已将 SDK assistant error 映射为 SSE error。
