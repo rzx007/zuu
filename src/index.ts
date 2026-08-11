@@ -379,6 +379,11 @@ const page = String.raw`<!doctype html>
       <section class="panel stack">
         <h2>Session</h2>
         <label>Session name <input id="name" value="Zuu demo" /></label>
+        <label>Available model
+          <select id="model-select">
+            <option value="">Loading models...</option>
+          </select>
+        </label>
         <label>Provider <input id="provider" placeholder="anthropic" /></label>
         <label>Model <input id="model" placeholder="claude-opus-4-5" /></label>
         <label>Thinking
@@ -513,6 +518,34 @@ const page = String.raw`<!doctype html>
         text.append(title, meta);
         item.append(text, button);
         root.appendChild(item);
+      }
+    }
+
+    async function loadModels() {
+      const { models } = await client.listModels();
+      const select = el("model-select");
+      select.replaceChildren();
+
+      if (!models.length) {
+        const option = document.createElement("option");
+        option.value = "";
+        option.textContent = "No authenticated models";
+        select.appendChild(option);
+        return;
+      }
+
+      const empty = document.createElement("option");
+      empty.value = "";
+      empty.textContent = "Use default model";
+      select.appendChild(empty);
+
+      for (const model of models) {
+        const option = document.createElement("option");
+        option.value = model.provider + "/" + model.id;
+        option.textContent = model.provider + " / " + (model.label || model.id);
+        option.dataset.provider = model.provider;
+        option.dataset.model = model.id;
+        select.appendChild(option);
       }
     }
 
@@ -744,6 +777,11 @@ const page = String.raw`<!doctype html>
     el("import-session").addEventListener("click", () => {
       importSession().catch((error) => addMessage("event", String(error.message || error)));
     });
+    el("model-select").addEventListener("change", () => {
+      const option = el("model-select").selectedOptions[0];
+      el("provider").value = option?.dataset.provider || "";
+      el("model").value = option?.dataset.model || "";
+    });
     el("prompt").addEventListener("keydown", (event) => {
       if ((event.metaKey || event.ctrlKey) && event.key === "Enter") sendPrompt();
     });
@@ -752,6 +790,14 @@ const page = String.raw`<!doctype html>
       el("diag").textContent = String(error.message || error);
     });
     loadPackages().catch(() => {});
+    loadModels().catch(() => {
+      const select = el("model-select");
+      select.replaceChildren();
+      const option = document.createElement("option");
+      option.value = "";
+      option.textContent = "Failed to load models";
+      select.appendChild(option);
+    });
     loadRuns().catch(() => {});
     loadStoredSessions().catch(() => {});
     loadSessionTree().catch(() => {});
@@ -778,6 +824,14 @@ app.get("/api/diagnostics", async (c) => {
 });
 
 app.get("/api/packages", (c) => c.json({ packages: daemon.listPackages() }));
+
+app.get("/api/models", async (c) => {
+  try {
+    return c.json(await daemon.listModels());
+  } catch (error) {
+    return c.json(jsonError(error, 500), 500);
+  }
+});
 
 app.post("/api/packages", async (c) => {
   try {

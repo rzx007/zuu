@@ -28,6 +28,7 @@ pnpm typecheck
 
 - `GET /api/health`
 - `GET /api/diagnostics`
+- `GET /api/models`
 - `GET /api/packages`
 - `POST /api/packages`
 - `DELETE /api/packages`

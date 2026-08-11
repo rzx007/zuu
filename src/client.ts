@@ -7,6 +7,7 @@ import type {
   OpenSessionRequest,
   PackageMutationRequest,
   PackagesResponse,
+  ModelsResponse,
   PromptRequest,
   PromptStreamEvent,
   RunResponse,
@@ -32,6 +33,7 @@ export interface ZuuClient {
   health(): Promise<HealthResponse>;
   diagnostics(): Promise<Diagnostics>;
   listPackages(): Promise<PackagesResponse>;
+  listModels(): Promise<ModelsResponse>;
   addPackage(input: PackageMutationRequest): Promise<PackagesResponse>;
   removePackage(input: PackageMutationRequest): Promise<PackagesResponse>;
   listSessions(): Promise<SessionsResponse>;
@@ -113,6 +115,7 @@ export function createZuuClient(options: ZuuClientOptions = {}): ZuuClient {
     health: () => requestJson<HealthResponse>(fetchImpl, baseUrl, "/api/health"),
     diagnostics: () => requestJson<Diagnostics>(fetchImpl, baseUrl, "/api/diagnostics"),
     listPackages: () => requestJson<PackagesResponse>(fetchImpl, baseUrl, "/api/packages"),
+    listModels: () => requestJson<ModelsResponse>(fetchImpl, baseUrl, "/api/models"),
     addPackage: (input) =>
       requestJson<PackagesResponse>(fetchImpl, baseUrl, "/api/packages", {
         method: "POST",

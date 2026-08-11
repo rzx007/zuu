@@ -187,6 +187,17 @@ export interface PackageMutationRequest {
   source: string;
 }
 
+export interface ModelSummary {
+  provider: string;
+  id: string;
+  label?: string;
+}
+
+export interface ModelsResponse {
+  models: ModelSummary[];
+  configuredProviders: string[];
+}
+
 export interface ApiErrorResponse {
   error: {
     message: string;

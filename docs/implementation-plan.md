@@ -713,9 +713,9 @@ UI end-to-end
 
 本仓库已先行实现一个最小可运行切片，用于验证 Pi SDK 嵌入方式和文档假设：
 
-- `src/index.ts`：Hono daemon、浏览器 UI、health、diagnostics、package、active session、stored session、session tree、run、prompt、abort、compact、new、switch、fork、import API。
+- `src/index.ts`：Hono daemon、浏览器 UI、health、diagnostics、model、package、active session、stored session、session tree、run、prompt、abort、compact、new、switch、fork、import API。
 - `src/agent-daemon.ts`：封装 `ModelRuntime`、`DefaultResourceLoader`、`SettingsManager`、`SessionManager`、`createAgentSessionServices`、`createAgentSessionFromServices`、`createAgentSessionRuntime`、自定义工具和 SSE 事件映射。
-- `src/client.ts`：轻量 Zuu client，封装 health、diagnostics、packages、active sessions、stored sessions、session tree、runs、prompt SSE、abort、compact 和 runtime lifecycle 操作。
+- `src/client.ts`：轻量 Zuu client，封装 health、diagnostics、models、packages、active sessions、stored sessions、session tree、runs、prompt SSE、abort、compact 和 runtime lifecycle 操作。
 - `src/protocol.ts`：当前单包内的临时 DTO，后续应拆入 `@zuu/protocol`。
 - `/client.js`：由 `src/client.ts` 转译生成的浏览器端 client module，当前 WebUI 通过它调用 daemon。
 - `.zuu/pi-agent`：默认 Pi app state 目录，可通过 `ZUU_AGENT_DIR` 覆盖，避免嵌入式运行时写入 `~/.pi/agent`。
@@ -723,7 +723,7 @@ UI end-to-end
 
 已验证：
 
-- `pnpm run check` 可以加载应用入口并验证 health/packages/runs/stored sessions/session tree/runtime lifecycle client 合同。
+- `pnpm run check` 可以加载应用入口并验证 health/models/packages/runs/stored sessions/session tree/runtime lifecycle client 合同。
 - `pnpm run typecheck` 可以完成 TypeScript `noEmit` 校验。
 - `GET /api/health` 正常。
 - `GET /api/diagnostics` 正常返回 SDK 版本、模型数量、skills、extensions、packages 和能力缺口。
@@ -735,6 +735,7 @@ UI end-to-end
 - `GET /api/session-files` 和 `POST /api/sessions/open` 已支持列出和打开 Pi 持久化 session 文件。
 - `GET /api/sessions/:sessionId/tree` 已支持读取当前 active session 的树形 entry 摘要，为 fork 选择器提供基础。
 - `GET/POST/DELETE /api/packages` 已支持查看和维护 Pi package source 列表。
+- `GET /api/models` 已支持列出当前已认证可用模型，WebUI 可直接下拉选择。
 
 当前限制：
 

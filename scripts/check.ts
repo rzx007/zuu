@@ -16,6 +16,9 @@ async function main() {
 
   const packages = await client.listPackages();
   if (!Array.isArray(packages.packages)) throw new Error("packages response is invalid");
+  const models = await client.listModels();
+  if (!Array.isArray(models.models)) throw new Error("models response is invalid");
+
   let emptyPackageFailed = false;
   try {
     await client.addPackage({ source: " " });
