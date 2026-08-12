@@ -4,26 +4,19 @@ import {
   type AgentSession,
   type EventBusController,
   type ModelRuntime,
-  type SessionInfo,
-  type SessionTreeNode,
 } from "@earendil-works/pi-coding-agent";
 import type {
   ForkSessionRequest,
   ImportSessionRequest,
   NewSessionRequest,
   OpenSessionRequest,
-  SessionActionResponse,
   SessionSummary,
-  SessionTreeEntry,
-  StoredSessionSummary,
   SwitchSessionRequest,
-  ThinkingLevel,
   UpdateSessionRequest,
 } from "@zuu/client";
 import { ApiError, notFound, validationError } from "../http";
 import type { ApprovalRegistry } from "./approval-service";
 import { assertAllowedPath, getSessionDir } from "./environment";
-import { entryRole, entryText } from "./events";
 import type { PackageService } from "./packages";
 import type { ProjectService } from "./project-service";
 import {
@@ -33,6 +26,12 @@ import {
   type CreateSessionOptions,
   type ManagedRuntime,
 } from "./session-runtime";
+import {
+  summarizeAgentSession,
+  summarizeSessionAction,
+  summarizeSessionTree,
+  summarizeStoredSession,
+} from "./session-summary";
 
 export interface SessionServiceOptions {
   agentDir: string;
@@ -204,37 +203,12 @@ export class SessionService {
   }
 
   summarizeSession(session: AgentSession): SessionSummary {
-    const managed = this.runtimes.get(session.sessionId);
-    return {
-      id: session.sessionId,
-      projectId: managed?.projectId ?? this.options.projects.get().id,
-      name: session.sessionName,
-      cwd: managed?.cwd ?? process.cwd(),
-      model: session.model ? `${session.model.provider}/${session.model.id}` : undefined,
-      thinkingLevel: session.thinkingLevel as ThinkingLevel,
-      activeTools: session.getActiveToolNames(),
-      messageCount: session.messages.length,
-      isStreaming: session.isStreaming,
-      sessionFile: session.sessionFile,
-      createdAt: managed?.createdAt ?? new Date().toISOString(),
-      updatedAt: managed?.updatedAt ?? new Date().toISOString(),
-    };
+    return summarizeAgentSession(session, this.sessionSummaryContext(session));
   }
 
   summarizeSessionTree(sessionId: string) {
     const managed = this.getManagedRuntime(sessionId);
-    const visit = (node: SessionTreeNode): SessionTreeEntry => ({
-      id: node.entry.id,
-      parentId: node.entry.parentId,
-      type: node.entry.type,
-      timestamp: node.entry.timestamp,
-      label: node.label,
-      role: entryRole(node.entry),
-      text: entryText(node.entry),
-      children: node.children.map(visit),
-    });
-
-    return managed.runtime.session.sessionManager.getTree().map(visit);
+    return summarizeSessionTree(managed.runtime.session.sessionManager.getTree());
   }
 
   async abort(sessionId: string) {
@@ -332,29 +306,27 @@ export class SessionService {
     }
   }
 
-  private summarizeStoredSession(session: SessionInfo, projectId?: string): StoredSessionSummary {
-    return {
-      id: session.id,
-      path: session.path,
+  private summarizeStoredSession(session: Parameters<typeof summarizeStoredSession>[0], projectId?: string) {
+    return summarizeStoredSession(session, {
       projectId,
-      cwd: session.cwd,
-      name: session.name,
-      parentSessionPath: session.parentSessionPath,
-      createdAt: session.created.toISOString(),
-      updatedAt: session.modified.toISOString(),
-      messageCount: session.messageCount,
-      firstMessage: session.firstMessage,
       isActive: [...this.runtimes.values()].some((runtime) => runtime.runtime.session.sessionFile === session.path),
-    };
+    });
   }
 
-  private summarizeRuntimeAction(managed: ManagedRuntime, result: { cancelled: boolean; selectedText?: string }): SessionActionResponse {
+  private summarizeRuntimeAction(managed: ManagedRuntime, result: { cancelled: boolean; selectedText?: string }) {
     managed.cwd = managed.runtime.cwd;
     managed.updatedAt = new Date().toISOString();
+    return summarizeSessionAction(this.summarizeSession(managed.runtime.session), result);
+  }
+
+  private sessionSummaryContext(session: AgentSession) {
+    const managed = this.runtimes.get(session.sessionId);
+    const now = new Date().toISOString();
     return {
-      session: this.summarizeSession(managed.runtime.session),
-      cancelled: result.cancelled,
-      selectedText: result.selectedText,
+      projectId: managed?.projectId ?? this.options.projects.get().id,
+      cwd: managed?.cwd ?? process.cwd(),
+      createdAt: managed?.createdAt ?? now,
+      updatedAt: managed?.updatedAt ?? now,
     };
   }
 }
