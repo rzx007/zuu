@@ -494,6 +494,8 @@ interface ResolveApprovalRequest {
 - cron 表达式合法
 - timezone 是有效 IANA timezone
 - interval 不低于系统最小值
+- overlapPolicy 是 `skip`、`queue` 或 `parallel`
+- misfirePolicy 是 `skip` 或 `run_once`
 - Project、Workflow 和目标 Session 存在
 - 调度后端可用
 

@@ -13,6 +13,7 @@ const MIN_INTERVAL_MS = 1_000;
 const CRON_SEARCH_LIMIT_MINUTES = 366 * 24 * 60;
 const SCHEDULE_RUN_STATUSES = new Set(["queued", "running", "completed", "failed", "skipped", "aborted"]);
 const SCHEDULE_OVERLAP_POLICIES = new Set(["skip"]);
+const SCHEDULE_MISFIRE_POLICIES = new Set(["skip", "run_once"]);
 
 type PromptAction = Extract<ScheduleAction, { type: "prompt" }>;
 type WorkflowAction = Extract<ScheduleAction, { type: "workflow" }>;
@@ -36,6 +37,9 @@ function isSchedule(value: unknown): value is Schedule {
       "overlapPolicy" in value &&
       typeof value.overlapPolicy === "string" &&
       SCHEDULE_OVERLAP_POLICIES.has(value.overlapPolicy) &&
+      "misfirePolicy" in value &&
+      typeof value.misfirePolicy === "string" &&
+      SCHEDULE_MISFIRE_POLICIES.has(value.misfirePolicy) &&
       "runs" in value &&
       Array.isArray(value.runs) &&
       value.runs.every(isScheduleRun) &&
@@ -141,6 +145,11 @@ function validateOverlapPolicy(overlapPolicy: CreateScheduleRequest["overlapPoli
   throw new Error("overlapPolicy queue and parallel are not supported yet; use skip");
 }
 
+function validateMisfirePolicy(misfirePolicy: CreateScheduleRequest["misfirePolicy"]) {
+  if (misfirePolicy === undefined || SCHEDULE_MISFIRE_POLICIES.has(misfirePolicy)) return;
+  throw new Error("misfirePolicy must be skip or run_once");
+}
+
 function computeNextRunAt(trigger: ScheduleTrigger, after = Date.now()) {
   if (trigger.kind === "once") {
     const runAt = Date.parse(trigger.runAt ?? "");
@@ -197,6 +206,7 @@ export class ScheduleStore {
     validateTrigger(request.trigger);
     validateAction(request.action);
     validateOverlapPolicy(request.overlapPolicy);
+    validateMisfirePolicy(request.misfirePolicy);
 
     const now = new Date().toISOString();
     const schedule: Schedule = {
@@ -206,6 +216,7 @@ export class ScheduleStore {
       trigger: request.trigger,
       action: request.action,
       overlapPolicy: request.overlapPolicy ?? "skip",
+      misfirePolicy: request.misfirePolicy ?? "skip",
       createdAt: now,
       updatedAt: now,
       nextRunAt: computeNextRunAt(request.trigger),
@@ -341,6 +352,24 @@ export class ScheduleStore {
     return schedule;
   }
 
+  private skipMisfire(schedule: Schedule) {
+    const missedRunAt = schedule.nextRunAt;
+    if (!missedRunAt) return;
+
+    const now = new Date().toISOString();
+    const run: ScheduleRun = {
+      id: crypto.randomUUID(),
+      scheduleId: schedule.id,
+      status: "skipped",
+      scheduledFor: missedRunAt,
+      finishedAt: now,
+      reason: "schedule_misfire",
+    };
+    schedule.runs = [run, ...schedule.runs].slice(0, SCHEDULE_RUN_HISTORY_LIMIT);
+    schedule.updatedAt = now;
+    this.updateNextRun(schedule);
+  }
+
   private arm(schedule: Schedule) {
     this.clearTimer(schedule.id);
     if (schedule.status !== "active" || !schedule.nextRunAt) return;
@@ -360,12 +389,25 @@ export class ScheduleStore {
   }
 
   private rescheduleAll() {
+    let changed = false;
     for (const schedule of this.schedules.values()) {
       if (schedule.status === "active" && !schedule.nextRunAt) {
         schedule.nextRunAt = computeNextRunAt(schedule.trigger);
+        changed = true;
+      }
+      if (schedule.status === "active" && schedule.nextRunAt && Date.parse(schedule.nextRunAt) <= Date.now()) {
+        if (schedule.misfirePolicy === "run_once") {
+          this.arm(schedule);
+        } else {
+          this.skipMisfire(schedule);
+          changed = true;
+          this.arm(schedule);
+        }
+        continue;
       }
       this.arm(schedule);
     }
+    if (changed) this.persist();
   }
 
   private sortedSchedules() {

@@ -394,6 +394,9 @@ async function main() {
   if (schedule.schedule.overlapPolicy !== "skip") {
     throw new Error("schedule overlap policy should default to skip");
   }
+  if (schedule.schedule.misfirePolicy !== "skip") {
+    throw new Error("schedule misfire policy should default to skip");
+  }
   const filteredSchedules = await client.listProjectSchedules(defaultProject.id);
   if (!filteredSchedules.schedules.some((item) => item.id === schedule.schedule.id)) {
     throw new Error("project-filtered schedules should include the default project schedule");
@@ -456,6 +459,17 @@ async function main() {
     unsupportedOverlapFailed = true;
   }
   if (!unsupportedOverlapFailed) throw new Error("unsupported overlap policy should fail");
+  let unsupportedMisfireFailed = false;
+  try {
+    await client.createProjectSchedule(defaultProject.id, {
+      trigger: { kind: "interval", everyMs: 60_000 },
+      action: { type: "workflow", workflowId: workflows.workflows[0].id },
+      misfirePolicy: "later" as never,
+    });
+  } catch {
+    unsupportedMisfireFailed = true;
+  }
+  if (!unsupportedMisfireFailed) throw new Error("unsupported misfire policy should fail");
   let cronTimezoneFailed = false;
   try {
     await client.createProjectSchedule(defaultProject.id, {
@@ -510,6 +524,104 @@ async function main() {
     throw new Error("first overlapping schedule run should complete after the skipped run is recorded");
   }
   overlapStore.dispose();
+
+  const missedRunAt = new Date(Date.now() - 60_000).toISOString();
+  const misfireSkipPath = join(mkdtempSync(join(tmpdir(), "zuu-schedule-misfire-skip-check-")), "schedules.json");
+  writeFileSync(
+    misfireSkipPath,
+    JSON.stringify({
+      version: 1,
+      data: [
+        {
+          id: "misfire-skip",
+          name: "misfire skip",
+          status: "active",
+          trigger: { kind: "once", runAt: missedRunAt },
+          action: { type: "workflow", workflowId: workflows.workflows[0].id, projectId: defaultProject.id },
+          overlapPolicy: "skip",
+          misfirePolicy: "skip",
+          createdAt: missedRunAt,
+          updatedAt: missedRunAt,
+          nextRunAt: missedRunAt,
+          runs: [],
+        },
+      ],
+    }),
+    "utf8",
+  );
+  const misfireSkipStore = new ScheduleStore(misfireSkipPath, {
+    runPrompt: async () => {
+      throw new Error("misfire skip check should use workflow action");
+    },
+    runWorkflow: async () => {
+      throw new Error("misfire skip policy should not run missed work");
+    },
+  });
+  const misfireSkipSchedule = misfireSkipStore.get("misfire-skip");
+  if (
+    misfireSkipSchedule.status !== "paused" ||
+    misfireSkipSchedule.nextRunAt ||
+    misfireSkipSchedule.runs[0]?.status !== "skipped" ||
+    misfireSkipSchedule.runs[0].reason !== "schedule_misfire" ||
+    misfireSkipSchedule.runs[0].scheduledFor !== missedRunAt
+  ) {
+    throw new Error("misfire skip policy should record a skipped run and pause a missed one-shot schedule");
+  }
+  misfireSkipStore.dispose();
+
+  const misfireRunOncePath = join(mkdtempSync(join(tmpdir(), "zuu-schedule-misfire-run-once-check-")), "schedules.json");
+  writeFileSync(
+    misfireRunOncePath,
+    JSON.stringify({
+      version: 1,
+      data: [
+        {
+          id: "misfire-run-once",
+          name: "misfire run once",
+          status: "active",
+          trigger: { kind: "interval", everyMs: 60_000 },
+          action: { type: "workflow", workflowId: workflows.workflows[0].id, projectId: defaultProject.id },
+          overlapPolicy: "skip",
+          misfirePolicy: "run_once",
+          createdAt: missedRunAt,
+          updatedAt: missedRunAt,
+          nextRunAt: missedRunAt,
+          runs: [],
+        },
+      ],
+    }),
+    "utf8",
+  );
+  let markMisfireRunOnceTriggered: (() => void) | undefined;
+  const misfireRunOnceTriggered = new Promise<void>((resolve) => {
+    markMisfireRunOnceTriggered = resolve;
+  });
+  const misfireRunOnceStore = new ScheduleStore(misfireRunOncePath, {
+    runPrompt: async () => {
+      throw new Error("misfire run_once check should use workflow action");
+    },
+    runWorkflow: async () => {
+      markMisfireRunOnceTriggered?.();
+      return { workflowRunId: "misfire-run-once-workflow" };
+    },
+  });
+  let misfireRunOnceTimeoutId: NodeJS.Timeout | undefined;
+  const misfireRunOnceTimeout = new Promise<never>((_, reject) => {
+    misfireRunOnceTimeoutId = setTimeout(() => reject(new Error("misfire run_once policy did not trigger missed work")), 1_000);
+  });
+  await Promise.race([misfireRunOnceTriggered, misfireRunOnceTimeout]);
+  if (misfireRunOnceTimeoutId) clearTimeout(misfireRunOnceTimeoutId);
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  const misfireRunOnceSchedule = misfireRunOnceStore.get("misfire-run-once");
+  if (
+    misfireRunOnceSchedule.runs[0]?.status !== "completed" ||
+    misfireRunOnceSchedule.runs[0].workflowRunId !== "misfire-run-once-workflow" ||
+    misfireRunOnceSchedule.runs[0].scheduledFor !== missedRunAt ||
+    !misfireRunOnceSchedule.nextRunAt
+  ) {
+    throw new Error("misfire run_once policy should run the missed work once and keep interval schedules active");
+  }
+  misfireRunOnceStore.dispose();
 
   const approvals = await client.listApprovals();
   if (!Array.isArray(approvals.approvals)) throw new Error("approvals response is invalid");

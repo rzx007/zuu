@@ -98,6 +98,7 @@ const scheduleRunAt = ref(toDatetimeLocal(new Date(Date.now() + 10 * 60_000)))
 const scheduleEveryMinutes = ref(30)
 const scheduleCron = ref('*/5 * * * *')
 const scheduleActionType = ref<'workflow' | 'prompt'>('workflow')
+const scheduleMisfirePolicy = ref<'skip' | 'run_once'>('skip')
 const schedulePrompt = ref('Run a scheduled Zuu status check and summarize the result.')
 const messages = ref<MessageItem[]>([])
 const isRunning = ref(false)
@@ -705,6 +706,7 @@ async function createSchedule() {
     trigger,
     action,
     overlapPolicy: 'skip',
+    misfirePolicy: scheduleMisfirePolicy.value,
   })
   addMessage('event', `schedule created: ${result.schedule.name}`)
   await loadSchedules()
@@ -1099,6 +1101,13 @@ onUnmounted(() => {
               </select>
             </label>
           </div>
+          <label class="field-label">
+            Misfire
+            <select v-model="scheduleMisfirePolicy" class="field-input">
+              <option value="skip">Skip missed</option>
+              <option value="run_once">Run once</option>
+            </select>
+          </label>
           <label v-if="scheduleKind === 'once'" class="field-label">
             Run at
             <input v-model="scheduleRunAt" class="field-input" type="datetime-local">
@@ -1127,6 +1136,7 @@ onUnmounted(() => {
                 <strong>{{ schedule.name }}</strong>
                 <span>{{ schedule.status }} / {{ scheduleTriggerLabel(schedule) }}</span>
                 <span>overlap {{ schedule.overlapPolicy }}</span>
+                <span>misfire {{ schedule.misfirePolicy }}</span>
                 <span>{{ scheduleActionLabel(schedule.action) }}</span>
                 <span v-if="schedule.nextRunAt">next {{ schedule.nextRunAt }}</span>
               </div>
@@ -1294,6 +1304,7 @@ onUnmounted(() => {
                   </div>
                   <span>{{ scheduleTriggerLabel(schedule) }}</span>
                   <span>overlap {{ schedule.overlapPolicy }}</span>
+                  <span>misfire {{ schedule.misfirePolicy }}</span>
                   <span v-if="schedule.nextRunAt">next {{ schedule.nextRunAt }}</span>
                   <div v-if="schedule.runs[0]" class="workflow-progress">
                     <span>{{ schedule.runs[0].status }}</span>

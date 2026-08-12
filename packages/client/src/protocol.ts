@@ -359,6 +359,7 @@ export type ScheduleStatus = "active" | "paused";
 export type ScheduleTriggerKind = "once" | "interval" | "cron";
 export type ScheduleRunStatus = "queued" | "running" | "completed" | "failed" | "skipped" | "aborted";
 export type ScheduleOverlapPolicy = "skip" | "queue" | "parallel";
+export type ScheduleMisfirePolicy = "skip" | "run_once";
 
 export interface ScheduleTrigger {
   kind: ScheduleTriggerKind;
@@ -409,6 +410,7 @@ export interface Schedule {
   trigger: ScheduleTrigger;
   action: ScheduleAction;
   overlapPolicy: ScheduleOverlapPolicy;
+  misfirePolicy: ScheduleMisfirePolicy;
   createdAt: string;
   updatedAt: string;
   nextRunAt?: string;
@@ -421,6 +423,7 @@ export interface CreateScheduleRequest {
   trigger: ScheduleTrigger;
   action: ScheduleAction;
   overlapPolicy?: ScheduleOverlapPolicy;
+  misfirePolicy?: ScheduleMisfirePolicy;
 }
 
 export interface CreateSessionRequest {

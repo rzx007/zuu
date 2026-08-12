@@ -31,6 +31,7 @@ const APPROVAL_DECISIONS = new Set(["allow_once", "allow_session", "deny"]);
 const FORK_POSITIONS = new Set(["before", "at"]);
 const RUN_SOURCES = new Set(["user", "schedule", "workflow", "api"]);
 const SCHEDULE_OVERLAP_POLICIES = new Set(["skip", "queue", "parallel"]);
+const SCHEDULE_MISFIRE_POLICIES = new Set(["skip", "run_once"]);
 const STREAMING_BEHAVIORS = new Set(["steer", "followUp"]);
 const THINKING_LEVELS = new Set(["off", "minimal", "low", "medium", "high", "xhigh", "max"]);
 
@@ -139,11 +140,16 @@ export function parseCreateSchedule(value: unknown): CreateScheduleRequest {
   if (overlapPolicy !== undefined && !SCHEDULE_OVERLAP_POLICIES.has(overlapPolicy)) {
     validationError("overlapPolicy must be skip, queue, or parallel", { field: "overlapPolicy" });
   }
+  const misfirePolicy = optionalString(value.misfirePolicy, "misfirePolicy");
+  if (misfirePolicy !== undefined && !SCHEDULE_MISFIRE_POLICIES.has(misfirePolicy)) {
+    validationError("misfirePolicy must be skip or run_once", { field: "misfirePolicy" });
+  }
   return {
     name: optionalString(value.name, "name"),
     trigger: parseScheduleTrigger(value.trigger),
     action: parseScheduleAction(value.action),
     overlapPolicy: overlapPolicy as CreateScheduleRequest["overlapPolicy"],
+    misfirePolicy: misfirePolicy as CreateScheduleRequest["misfirePolicy"],
   };
 }
 
