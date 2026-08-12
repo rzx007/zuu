@@ -290,7 +290,7 @@ function parseScheduleTrigger(value: unknown): ScheduleTrigger {
     return {
       kind,
       cron: requireString(value.cron, "trigger.cron"),
-      timezone: optionalString(value.timezone, "trigger.timezone"),
+      timezone: requireString(value.timezone, "trigger.timezone"),
     };
   }
   validationError("trigger.kind must be once, interval, or cron", { field: "trigger.kind" });

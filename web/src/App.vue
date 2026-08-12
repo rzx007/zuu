@@ -973,6 +973,11 @@ async function createSchedule() {
   const action = scheduleAction()
   if (!action) return
   const everyMinutes = Math.max(1, Number(scheduleEveryMinutes.value) || 1)
+  const cronTimezone = scheduleTimezone.value.trim()
+  if (scheduleKind.value === 'cron' && !cronTimezone) {
+    addMessage('error', 'cron schedule timezone is required')
+    return
+  }
   const trigger = (() => {
     if (scheduleKind.value === 'once') {
       return { kind: 'once' as const, runAt: new Date(scheduleRunAt.value).toISOString() }
@@ -983,7 +988,7 @@ async function createSchedule() {
     return {
       kind: 'cron' as const,
       cron: scheduleCron.value.trim() || '*/5 * * * *',
-      timezone: scheduleTimezone.value.trim() || 'UTC',
+      timezone: cronTimezone,
     }
   })()
   const input: CreateScheduleRequest = {
@@ -1018,8 +1023,8 @@ function editSchedule(schedule: Schedule) {
   } else if (schedule.trigger.kind === 'interval') {
     scheduleEveryMinutes.value = Math.max(1, Math.round((schedule.trigger.everyMs || 60_000) / 60_000))
   } else {
-    scheduleCron.value = schedule.trigger.cron || '*/5 * * * *'
-    scheduleTimezone.value = schedule.trigger.timezone || 'UTC'
+    scheduleCron.value = schedule.trigger.cron
+    scheduleTimezone.value = schedule.trigger.timezone
   }
   scheduleActionType.value = schedule.action.type
   scheduleOverlapPolicy.value = schedule.overlapPolicy

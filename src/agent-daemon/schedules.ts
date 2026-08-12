@@ -140,7 +140,10 @@ function validateTrigger(trigger: ScheduleTrigger) {
   }
 
   if (trigger.kind === "cron") {
-    validateTimeZone(trigger.timezone ?? "UTC");
+    if (typeof trigger.timezone !== "string" || !trigger.timezone.trim()) {
+      throw new Error("trigger.timezone is required for cron schedules");
+    }
+    validateTimeZone(trigger.timezone);
     parseCron(trigger.cron);
     return;
   }
@@ -197,7 +200,7 @@ function computeNextRunAt(trigger: ScheduleTrigger, after = Date.now()) {
   }
 
   if (trigger.kind === "cron") {
-    const next = nextCronDate(trigger.cron, after, trigger.timezone ?? "UTC");
+    const next = nextCronDate(trigger.cron, after, trigger.timezone);
     return next?.toISOString();
   }
 

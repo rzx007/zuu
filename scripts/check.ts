@@ -971,6 +971,7 @@ async function main() {
   if (
     updatedSchedule.schedule.id !== schedule.schedule.id ||
     updatedSchedule.schedule.name !== "updated workflow schedule" ||
+    updatedSchedule.schedule.trigger.kind !== "interval" ||
     updatedSchedule.schedule.trigger.everyMs !== 120_000 ||
     updatedSchedule.schedule.misfirePolicy !== "run_once" ||
     updatedSchedule.schedule.retryPolicy?.maxAttempts !== 2 ||
@@ -1041,13 +1042,23 @@ async function main() {
     throw new Error("delete schedule returned the wrong schedule");
   }
   const cronSchedule = await client.createProjectSchedule(defaultProject.id, {
-    trigger: { kind: "cron", cron: "*/5 * * * *" },
+    trigger: { kind: "cron", cron: "*/5 * * * *", timezone: "UTC" },
     action: { type: "workflow", workflowId: workflows.workflows[0].id },
   });
   if (cronSchedule.schedule.trigger.kind !== "cron" || !cronSchedule.schedule.nextRunAt) {
     throw new Error("cron schedule response is invalid");
   }
   await client.deleteProjectSchedule(defaultProject.id, cronSchedule.schedule.id);
+  let missingCronTimezoneFailed = false;
+  try {
+    await client.createProjectSchedule(defaultProject.id, {
+      trigger: { kind: "cron", cron: "* * * * *" } as never,
+      action: { type: "workflow", workflowId: workflows.workflows[0].id },
+    });
+  } catch {
+    missingCronTimezoneFailed = true;
+  }
+  if (!missingCronTimezoneFailed) throw new Error("cron schedule timezone should be required");
   const queuedPolicySchedule = await client.createProjectSchedule(defaultProject.id, {
     trigger: { kind: "interval", everyMs: 60_000 },
     action: { type: "workflow", workflowId: workflows.workflows[0].id },
@@ -1101,6 +1112,7 @@ async function main() {
       }).formatToParts(new Date(shanghaiCronSchedule.schedule.nextRunAt)).map((part) => [part.type, part.value]))
     : undefined;
   if (
+    shanghaiCronSchedule.schedule.trigger.kind !== "cron" ||
     shanghaiCronSchedule.schedule.trigger.timezone !== "Asia/Shanghai" ||
     shanghaiCronNext?.hour !== "09" ||
     shanghaiCronNext?.minute !== "00"

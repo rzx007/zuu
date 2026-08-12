@@ -488,13 +488,10 @@ export interface ScheduleRetryPolicy {
   retryableCodes?: string[];
 }
 
-export interface ScheduleTrigger {
-  kind: ScheduleTriggerKind;
-  runAt?: string;
-  everyMs?: number;
-  cron?: string;
-  timezone?: string;
-}
+export type ScheduleTrigger =
+  | { kind: "once"; runAt: string }
+  | { kind: "interval"; everyMs: number }
+  | { kind: "cron"; cron: string; timezone: string };
 
 export type ScheduleAction =
   | {
