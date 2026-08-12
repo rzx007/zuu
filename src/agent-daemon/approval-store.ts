@@ -53,6 +53,7 @@ export function assertApprovalStatus(status: unknown): asserts status is Approva
 
 export class ApprovalStore {
   private readonly approvals: Map<string, Approval>;
+  private readonly waiters = new Map<string, Set<(approval: Approval) => void>>();
 
   constructor(private readonly path: string) {
     this.approvals = new Map(loadApprovals(this.path).map((approval) => [approval.id, approval]));
@@ -110,6 +111,33 @@ export class ApprovalStore {
     return approval;
   }
 
+  waitForResolution(id: string) {
+    const approval = this.get(id);
+    if (approval.status !== "pending") return Promise.resolve(approval);
+
+    return new Promise<Approval>((resolve) => {
+      let timeout: ReturnType<typeof setTimeout> | undefined;
+      const waiter = (next: Approval) => {
+        if (timeout) clearTimeout(timeout);
+        this.waiters.get(id)?.delete(waiter);
+        resolve(next);
+      };
+      const waiters = this.waiters.get(id) ?? new Set<(next: Approval) => void>();
+      waiters.add(waiter);
+      this.waiters.set(id, waiters);
+
+      if (approval.expiresAt) {
+        const expiresAtMs = Date.parse(approval.expiresAt);
+        if (Number.isFinite(expiresAtMs)) {
+          timeout = setTimeout(() => {
+            this.expireApprovals();
+            if (this.waiters.has(id)) waiter(this.get(id));
+          }, Math.max(0, Math.min(expiresAtMs - Date.now(), 2_147_483_647)));
+        }
+      }
+    });
+  }
+
   resolve(id: string, request: ResolveApprovalRequest) {
     assertDecision(request.decision);
     const approval = this.get(id);
@@ -123,12 +151,14 @@ export class ApprovalStore {
     approval.resolvedAt = now;
     approval.updatedAt = now;
     this.persist();
+    this.notifyWaiters(approval);
     return approval;
   }
 
   private expireApprovals() {
     const now = Date.now();
     let changed = false;
+    const expired: Approval[] = [];
     for (const approval of this.approvals.values()) {
       if (
         (approval.status === "pending" || approval.status === "allowed") &&
@@ -138,9 +168,13 @@ export class ApprovalStore {
         approval.status = "expired";
         approval.updatedAt = new Date().toISOString();
         changed = true;
+        expired.push(approval);
       }
     }
-    if (changed) this.persist();
+    if (changed) {
+      this.persist();
+      expired.forEach((approval) => this.notifyWaiters(approval));
+    }
   }
 
   private sortedApprovals() {
@@ -149,5 +183,12 @@ export class ApprovalStore {
 
   private persist() {
     saveApprovals(this.path, this.sortedApprovals());
+  }
+
+  private notifyWaiters(approval: Approval) {
+    const waiters = this.waiters.get(approval.id);
+    if (!waiters) return;
+    this.waiters.delete(approval.id);
+    waiters.forEach((waiter) => waiter(approval));
   }
 }

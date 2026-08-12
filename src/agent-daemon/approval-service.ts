@@ -9,6 +9,7 @@ import { ApprovalStore, assertApprovalStatus } from "./approval-store";
 export interface ApprovalRegistry {
   create(request: CreateApprovalRequest): Approval;
   consumeGrant(request: Pick<CreateApprovalRequest, "sessionId" | "kind" | "scope">): Approval | undefined;
+  waitForResolution(approvalId: string): Promise<Approval>;
 }
 
 export class ApprovalService implements ApprovalRegistry {
@@ -24,6 +25,10 @@ export class ApprovalService implements ApprovalRegistry {
 
   consumeGrant(request: Pick<CreateApprovalRequest, "sessionId" | "kind" | "scope">) {
     return this.store.consumeGrant(request);
+  }
+
+  waitForResolution(approvalId: string) {
+    return this.store.waitForResolution(approvalId);
   }
 
   listApprovals(status?: ApprovalStatus) {

@@ -1764,6 +1764,7 @@ async function main() {
   });
   const toolCallHandlers: Array<(event: unknown, ctx: unknown) => unknown> = [];
   const approvalEvents: unknown[] = [];
+  const approvalEventCount = () => approvalEvents.length;
   const eventBus = createEventBus();
   eventBus.on("zuu:approval", (event) => approvalEvents.push(event));
   const extensionFactory = typeof extension === "function" ? extension : extension.factory;
@@ -1778,23 +1779,27 @@ async function main() {
       getSessionId: () => "extension-session",
     },
   };
-  const blocked = await toolCallHandlers[0]?.(
-    { type: "tool_call", toolName: "bash", toolCallId: "tool-call-check", input: { command: "echo check" } },
-    toolCallContext,
+  const bashApprovalResult = Promise.resolve(
+    toolCallHandlers[0]?.(
+      { type: "tool_call", toolName: "bash", toolCallId: "tool-call-check", input: { command: "echo check" } },
+      toolCallContext,
+    ),
   );
-  if (!blocked || typeof blocked !== "object" || !("block" in blocked) || blocked.block !== true) {
-    throw new Error("approval extension should block unapproved dangerous tools");
-  }
+  await new Promise((resolve) => setTimeout(resolve, 0));
   const requested = extensionStore.list("pending")[0];
-  if (!requested || requested.scope !== "tool:bash" || approvalEvents.length !== 1) {
+  if (!requested || requested.scope !== "tool:bash" || approvalEventCount() !== 1) {
     throw new Error("approval extension did not create a pending approval");
   }
   extensionStore.resolve(requested.id, { decision: "allow_session" });
+  const allowedAfterResolution = await bashApprovalResult;
+  if (allowedAfterResolution !== undefined || approvalEventCount() !== 2) {
+    throw new Error("approval extension should wait for approval and then allow the same tool call");
+  }
   const allowed = await toolCallHandlers[0]?.(
     { type: "tool_call", toolName: "bash", toolCallId: "tool-call-check-2", input: { command: "echo check" } },
     toolCallContext,
   );
-  if (allowed !== undefined || approvalEvents.length < 2) {
+  if (allowed !== undefined || approvalEventCount() < 3) {
     throw new Error("approval extension should allow session-granted tools");
   }
   const safeRead = await toolCallHandlers[0]?.(
@@ -1804,35 +1809,65 @@ async function main() {
   if (safeRead !== undefined) {
     throw new Error("approval extension should allow non-sensitive read tools");
   }
-  const sensitiveRead = await toolCallHandlers[0]?.(
-    { type: "tool_call", toolName: "read", toolCallId: "tool-call-sensitive-read", input: { path: ".env" } },
-    toolCallContext,
+  const sensitiveReadResult = Promise.resolve(
+    toolCallHandlers[0]?.(
+      { type: "tool_call", toolName: "read", toolCallId: "tool-call-sensitive-read", input: { path: ".env" } },
+      toolCallContext,
+    ),
   );
-  if (!sensitiveRead || typeof sensitiveRead !== "object" || !("block" in sensitiveRead) || sensitiveRead.block !== true) {
-    throw new Error("approval extension should block sensitive read paths");
-  }
+  await new Promise((resolve) => setTimeout(resolve, 0));
   const sensitiveApproval = extensionStore.list("pending").find((approval) => approval.scope === "tool:read:sensitive_path");
   if (!sensitiveApproval || sensitiveApproval.kind !== "filesystem" || sensitiveApproval.risk !== "high") {
     throw new Error("sensitive read approval should use a filesystem scoped approval");
   }
-  const sensitiveList = await toolCallHandlers[0]?.(
-    { type: "tool_call", toolName: "ls", toolCallId: "tool-call-sensitive-list", input: { path: ".ssh/id_ed25519" } },
-    toolCallContext,
-  );
-  if (!sensitiveList || typeof sensitiveList !== "object" || !("block" in sensitiveList) || sensitiveList.block !== true) {
-    throw new Error("approval extension should apply the filesystem policy matrix to sensitive list paths");
+  extensionStore.resolve(sensitiveApproval.id, { decision: "deny" });
+  const sensitiveRead = await sensitiveReadResult;
+  if (!sensitiveRead || typeof sensitiveRead !== "object" || !("block" in sensitiveRead) || sensitiveRead.block !== true) {
+    throw new Error("approval extension should block denied sensitive read paths");
   }
+  const sensitiveListResult = Promise.resolve(
+    toolCallHandlers[0]?.(
+      { type: "tool_call", toolName: "ls", toolCallId: "tool-call-sensitive-list", input: { path: ".ssh/id_ed25519" } },
+      toolCallContext,
+    ),
+  );
+  await new Promise((resolve) => setTimeout(resolve, 0));
   const sensitiveListApproval = extensionStore.list("pending").find((approval) => approval.scope === "tool:ls:sensitive_path");
   if (!sensitiveListApproval || sensitiveListApproval.kind !== "filesystem" || sensitiveListApproval.risk !== "high") {
     throw new Error("sensitive list approval should use the filesystem policy matrix");
   }
-  extensionStore.resolve(sensitiveApproval.id, { decision: "allow_session" });
+  extensionStore.resolve(sensitiveListApproval.id, { decision: "allow_session" });
+  const sensitiveList = await sensitiveListResult;
+  if (sensitiveList !== undefined) {
+    throw new Error("approval extension should apply the filesystem policy matrix to sensitive list paths");
+  }
+  const allowedSensitiveReadGrant = extensionStore.create({
+    sessionId: "extension-session",
+    runId: "extension-run",
+    kind: "filesystem",
+    scope: "tool:read:sensitive_path",
+    title: "Allow sensitive read",
+    description: "Grant sensitive read for extension check",
+    risk: "high",
+  });
+  extensionStore.resolve(allowedSensitiveReadGrant.id, { decision: "allow_session" });
   const allowedSensitiveRead = await toolCallHandlers[0]?.(
     { type: "tool_call", toolName: "read", toolCallId: "tool-call-sensitive-read-allowed", input: { path: ".env" } },
     toolCallContext,
   );
   if (allowedSensitiveRead !== undefined) {
     throw new Error("approval extension should allow session-granted sensitive reads");
+  }
+  const missingRunBlocked = await toolCallHandlers[0]?.(
+    { type: "tool_call", toolName: "bash", toolCallId: "tool-call-check", input: { command: "echo check" } },
+    {
+      sessionManager: {
+        getSessionId: () => "missing-run-session",
+      },
+    },
+  );
+  if (!missingRunBlocked || typeof missingRunBlocked !== "object" || !("block" in missingRunBlocked) || missingRunBlocked.block !== true) {
+    throw new Error("approval extension should block when no active run is registered");
   }
 
   const packages = await client.listPackages();

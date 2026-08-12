@@ -13,6 +13,7 @@ import type { RunEventDraft } from "./run-events";
 
 const APPROVAL_EVENT_CHANNEL = "zuu:approval";
 const TOOL_INPUT_PREVIEW_LIMIT = 600;
+const TOOL_APPROVAL_TIMEOUT_MS = 10 * 60_000;
 const SENSITIVE_PATH_FRAGMENTS = [
   ".env",
   "/.ssh/",
@@ -95,7 +96,7 @@ export function createApprovalExtension(options: ApprovalExtensionOptions): Inli
     name: "zuu-approval-policy",
     hidden: true,
     factory: (pi) => {
-      pi.on("tool_call", (event, ctx) => {
+      pi.on("tool_call", async (event, ctx) => {
         const approvalDecision = approvalDecisionForToolCall(event);
         const requiresApproval = Boolean(approvalDecision);
         const request = createToolApprovalRequest(
@@ -131,10 +132,25 @@ export function createApprovalExtension(options: ApprovalExtensionOptions): Inli
           approval,
         } satisfies ApprovalEvent);
 
+        const resolved = await options.approvals.waitForResolution(approval.id);
+        pi.events.emit(APPROVAL_EVENT_CHANNEL, {
+          type: "approval_resolved",
+          runId: request.runId,
+          approval: resolved,
+        } satisfies ApprovalEvent);
+
+        if (resolved.status === "allowed") {
+          options.approvals.consumeGrant(request);
+          return undefined;
+        }
+
         return {
           block: true,
           terminate: true,
-          reason: `Approval required for ${event.toolName}. Resolve approval ${approval.id} with allow_session and retry.`,
+          reason:
+            resolved.status === "expired"
+              ? `Approval expired for ${event.toolName}.`
+              : `Approval denied for ${event.toolName}.`,
         };
       });
     },
@@ -163,6 +179,7 @@ function createToolApprovalRequest(
       ? `The agent requested ${event.toolName} ${decision.policy.action} access to a sensitive path with input: ${previewInput(event.input)}`
       : `The agent requested the ${event.toolName} ${decision.policy.action} tool with input: ${previewInput(event.input)}`,
     risk: decision.risk,
+    expiresAt: new Date(Date.now() + TOOL_APPROVAL_TIMEOUT_MS).toISOString(),
   };
 }
 

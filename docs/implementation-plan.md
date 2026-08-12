@@ -764,7 +764,7 @@ UI end-to-end
 - JSON store 已有原子写和损坏恢复，prompt run 事件已有最小存档、按 run 补拉、daemon 级 `/v1/events` replay/live stream 和 SDK 自动 SSE 重连，但还没有 SQLite migration 或跨进程写入协调。
 - WebUI 已迁移到 Vue + Vite，并支持打开持久化 session、查看当前 session tree、按 entry fork、从本地 JSONL 路径 import、处理 pending approvals、启动/查看 fake workflow runs、创建/暂停/恢复/触发/删除 schedule、模型 smoke test、查看 audit events，以及通过 daemon 级 `subscribeEvents()` 实时展示事件并节流刷新 runs、approvals、session tree、schedule 和 workflow run 状态。
 - Package API 已能展示安装状态、信任状态、加载状态、显式触发安装/更新/删除，并通过持久化 operation 记录暴露任务进度和失败原因；WebUI 已能 trust/revoke package source 并展示 SDK resource diagnostics/collision。未信任 package 会保留在配置清单中，但已从 Pi `ResourceLoader` 和 `pi-package` workflow backend 的加载链路中过滤，diagnostics 会通过 `blockedPackages` 暴露被阻止加载的 source。
-- Approval 已接入 Pi tool call 拦截和 SSE 事件，但当前策略是 fail-closed：危险工具被阻断后需要用户 resolve 并重试 prompt，尚未实现挂起并恢复同一个 tool call 的交互式等待。
+- Approval 已接入 Pi tool call 拦截、SSE 事件和 WebUI resolve；危险工具会让同一个 tool call 异步等待审批，allow 后继续执行，deny/expire 才阻断本次工具调用。
 - 当前 API token 已有 admin/read 最小权限分级和多 actor 本地 token 管理；审计日志已覆盖受保护只读 API、已授权写 API、auth token create/revoke、`authScope` / `authActor` / `authTokenId` details 和常用检索过滤；后续仍可继续细化更多 scope 和 token lifecycle 策略。
 - 路径保护已有根目录级 allowlist，并已对默认只读工具增加敏感路径审批；tool-call approval policy 已收敛为按工具/动作声明的基础策略矩阵，覆盖 `bash/edit/write` 默认阻断以及 `read/grep/find/ls` 敏感路径阻断；后续可继续扩展更细的工具参数和动作级策略。
 - 默认工具集偏只读，`bash`、`edit`、`write` 需要 UI 显式启用。

@@ -71,6 +71,9 @@ export class PromptService {
       if (event.type === "approval_requested" && run.status === "running") {
         run.status = "waiting_approval";
         this.options.runs.saveRun(run);
+      } else if (event.type === "approval_resolved" && run.status === "waiting_approval") {
+        run.status = "running";
+        this.options.runs.saveRun(run);
       }
       queue.push(event);
       wake();
