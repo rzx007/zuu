@@ -89,14 +89,9 @@ async function drainStream(stream: AsyncGenerator<unknown>) {
 }
 
 function assertReadmeApiListMatchesRoutes() {
-  const routeFiles = [
-    "src/routes/activity.ts",
-    "src/routes/approvals.ts",
-    "src/routes/core.ts",
-    "src/routes/packages.ts",
-    "src/routes/projects.ts",
-    "src/routes/sessions.ts",
-  ];
+  const routeFiles = readdirSync("src/routes")
+    .filter((file) => file.endsWith(".ts"))
+    .map((file) => join("src/routes", file));
   const actual = new Set<string>();
   const routePattern = /app\.(get|post|patch|delete)\("([^"]+)"/g;
   for (const file of routeFiles) {
