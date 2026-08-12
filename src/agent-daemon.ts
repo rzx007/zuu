@@ -10,7 +10,6 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import {
   assertAllowedPath,
-  createModelRuntime,
   getApprovalStorePath,
   getPackageOperationStorePath,
   getPackageTrustStorePath,
@@ -23,8 +22,8 @@ import {
 } from "./agent-daemon/environment";
 import { ApprovalService } from "./agent-daemon/approval-service";
 import { subscribeApprovalEvents } from "./agent-daemon/approval-policy";
-import { buildDiagnostics } from "./agent-daemon/diagnostics";
 import { compactAgentEvent, entryRole, entryText } from "./agent-daemon/events";
+import { ModelService } from "./agent-daemon/model-service";
 import { ProjectService } from "./agent-daemon/project-service";
 import { ScheduleService } from "./agent-daemon/schedule-service";
 import { PackageService } from "./agent-daemon/packages";
@@ -70,6 +69,7 @@ export class ZuuDaemon {
   private readonly runService = new RunService(getRunStorePath(this.agentDir), getRunEventStorePath(this.agentDir));
   private readonly projectService = new ProjectService(getProjectStorePath(this.agentDir), this.agentDir);
   private readonly approvalService = new ApprovalService(getApprovalStorePath(this.agentDir));
+  private readonly modelService = new ModelService();
   private readonly activeRunBySessionId = new Map<string, string>();
   private readonly eventBus: EventBusController = createEventBus();
   private readonly packageService = new PackageService(
@@ -84,7 +84,6 @@ export class ZuuDaemon {
     projects: this.projectService,
     launchPrompt: (request) => this.launchWorkflowPrompt(request),
   });
-  private readonly modelRuntimePromise = createModelRuntime();
   private readonly startedAt = new Date().toISOString();
   private readonly scheduleService = new ScheduleService({
     path: getScheduleStorePath(this.agentDir),
@@ -158,7 +157,7 @@ export class ZuuDaemon {
     const runtimeFactory = createZuuRuntimeFactory(
       {
         packageService: this.packageService,
-        modelRuntimePromise: this.modelRuntimePromise,
+        modelRuntimePromise: this.modelService.getRuntimePromise(),
         approvals: this.approvalService,
         activeRunBySessionId: this.activeRunBySessionId,
         eventBus: this.eventBus,
@@ -547,28 +546,11 @@ export class ZuuDaemon {
   }
 
   async diagnostics() {
-    return buildDiagnostics(await this.modelRuntimePromise, this.workflowService.getBackendInfo(), this.listSessions()[0]?.model);
+    return this.modelService.diagnostics(this.workflowService.getBackendInfo(), this.listSessions()[0]?.model);
   }
 
   async listModels() {
-    const modelRuntime = await this.modelRuntimePromise;
-    const models = await modelRuntime.getAvailable();
-    const configuredProviders = modelRuntime
-      .getProviders()
-      .filter((provider) => modelRuntime.hasConfiguredAuth(provider.id))
-      .map((provider) => provider.id);
-
-    return {
-      configuredProviders,
-      models: models.map((model) => {
-        const metadata = model as { name?: string; label?: string };
-        return {
-          provider: model.provider,
-          id: model.id,
-          label: metadata.label ?? metadata.name,
-        };
-      }),
-    };
+    return this.modelService.listModels();
   }
 
   listPackages() {
