@@ -1,7 +1,6 @@
 import type {
   CreateScheduleRequest,
   Schedule,
-  ScheduleAction,
   ScheduleRun,
   UpdateScheduleRequest,
 } from "@zuu/client";
@@ -16,7 +15,14 @@ import {
   type ScheduleTriggerOptions,
 } from "./schedule-run-factory";
 import type { ScheduleLease } from "./schedule-lease";
-import { runScheduleAction, type ScheduleExecutor } from "./schedule-runner";
+import type { ScheduleExecutor } from "./schedule-runner";
+import {
+  compareScheduleRuns,
+  defaultScheduleName,
+  executeScheduleRun,
+  restoreNextRun,
+  updateNextRun,
+} from "./schedule-state";
 import { computeNextRunAt } from "./schedule-timing";
 import { validateCreateScheduleRequest, validateUpdateScheduleRequest } from "./schedule-validation";
 
@@ -166,26 +172,16 @@ export class ScheduleStore {
     prependScheduleRun(schedule, run);
     schedule.updatedAt = runningRun.startedAt;
     if (options.automatic) {
-      this.updateNextRun(schedule);
+      updateNextRun(schedule);
     }
     this.persist();
     if (options.automatic) this.arm(schedule);
 
     try {
-      await runScheduleAction(schedule, run, this.executor);
-      if (!isScheduleRunAborted(run)) run.status = "completed";
-    } catch (error) {
-      if (!isScheduleRunAborted(run)) {
-        run.status = "failed";
-        run.error = error instanceof Error ? error.message : String(error);
-      }
+      await executeScheduleRun(schedule, run, this.executor);
     } finally {
-      const now = new Date().toISOString();
-      run.finishedAt = run.finishedAt ?? now;
-      schedule.lastRunAt = now;
-      schedule.updatedAt = now;
       if (!options.automatic) {
-        this.restoreNextRun(schedule, previousNextRunAt);
+        restoreNextRun(schedule, previousNextRunAt);
       }
       this.persist();
       if (!options.automatic) this.arm(schedule);
@@ -210,21 +206,6 @@ export class ScheduleStore {
     this.lease?.release();
   }
 
-  private updateNextRun(schedule: Schedule) {
-    if (schedule.status !== "active") {
-      schedule.nextRunAt = undefined;
-      return;
-    }
-
-    if (schedule.trigger.kind === "once") {
-      schedule.status = "paused";
-      schedule.nextRunAt = undefined;
-      return;
-    }
-
-    schedule.nextRunAt = computeNextRunAt(schedule.trigger);
-  }
-
   private skipOverlap(schedule: Schedule, options: ScheduleTriggerOptions) {
     const previousNextRunAt = schedule.nextRunAt;
     this.clearTimer(schedule.id);
@@ -232,9 +213,9 @@ export class ScheduleStore {
     prependScheduleRun(schedule, run);
     schedule.updatedAt = run.finishedAt;
     if (options.automatic) {
-      this.updateNextRun(schedule);
+      updateNextRun(schedule);
     } else {
-      this.restoreNextRun(schedule, previousNextRunAt);
+      restoreNextRun(schedule, previousNextRunAt);
     }
     this.persist();
     this.arm(schedule);
@@ -253,9 +234,9 @@ export class ScheduleStore {
     prependScheduleRun(schedule, run);
     schedule.updatedAt = recordedAt;
     if (options.automatic) {
-      this.updateNextRun(schedule);
+      updateNextRun(schedule);
     } else {
-      this.restoreNextRun(schedule, previousNextRunAt);
+      restoreNextRun(schedule, previousNextRunAt);
     }
     this.persist();
     this.arm(schedule);
@@ -269,9 +250,9 @@ export class ScheduleStore {
     prependScheduleRun(schedule, run);
     schedule.updatedAt = run.finishedAt;
     if (options.automatic) {
-      this.updateNextRun(schedule);
+      updateNextRun(schedule);
     } else {
-      this.restoreNextRun(schedule, previousNextRunAt);
+      restoreNextRun(schedule, previousNextRunAt);
     }
     this.persist();
     this.arm(schedule);
@@ -297,19 +278,9 @@ export class ScheduleStore {
     this.persist();
 
     try {
-      await runScheduleAction(schedule, run, this.executor);
-      if (!isScheduleRunAborted(run)) run.status = "completed";
-    } catch (error) {
-      if (!isScheduleRunAborted(run)) {
-        run.status = "failed";
-        run.error = error instanceof Error ? error.message : String(error);
-      }
+      await executeScheduleRun(schedule, run, this.executor);
     } finally {
-      const now = new Date().toISOString();
-      run.finishedAt = run.finishedAt ?? now;
-      schedule.lastRunAt = now;
-      schedule.updatedAt = now;
-      this.restoreNextRun(schedule, previousNextRunAt);
+      restoreNextRun(schedule, previousNextRunAt);
       this.persist();
       this.arm(schedule);
       this.drainQueued(schedule);
@@ -321,7 +292,7 @@ export class ScheduleStore {
     if (!run) return;
     prependScheduleRun(schedule, run);
     schedule.updatedAt = run.finishedAt;
-    this.updateNextRun(schedule);
+    updateNextRun(schedule);
   }
 
   private arm(schedule: Schedule) {
@@ -400,33 +371,7 @@ export class ScheduleStore {
     return schedule;
   }
 
-  private restoreNextRun(schedule: Schedule, previousNextRunAt: string | undefined) {
-    if (schedule.status !== "active") {
-      schedule.nextRunAt = undefined;
-      return;
-    }
-
-    if (previousNextRunAt && Date.parse(previousNextRunAt) > Date.now()) {
-      schedule.nextRunAt = previousNextRunAt;
-      return;
-    }
-
-    this.updateNextRun(schedule);
-  }
-
   private persist() {
     saveSchedules(this.path, this.sortedSchedules());
   }
-}
-
-function compareScheduleRuns(a: ScheduleRun, b: ScheduleRun) {
-  return (b.startedAt ?? b.scheduledFor).localeCompare(a.startedAt ?? a.scheduledFor);
-}
-
-function isScheduleRunAborted(run: ScheduleRun) {
-  return run.status === "aborted";
-}
-
-function defaultScheduleName(action: ScheduleAction) {
-  return action.type === "workflow" ? `Workflow: ${action.workflowId}` : "Prompt schedule";
 }
