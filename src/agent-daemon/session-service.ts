@@ -20,7 +20,7 @@ import type {
   ThinkingLevel,
   UpdateSessionRequest,
 } from "@zuu/client";
-import { ApiError, notFound } from "../http";
+import { ApiError, notFound, validationError } from "../http";
 import type { ApprovalRegistry } from "./approval-service";
 import { assertAllowedPath, getSessionDir } from "./environment";
 import { entryRole, entryText } from "./events";
@@ -57,7 +57,11 @@ export class SessionService {
       const existing = this.findRuntimeBySessionFile(options.sessionFile);
       if (existing) {
         if (options.projectId && existing.projectId !== options.projectId) {
-          throw new Error(`Session file is already open in project ${existing.projectId}`);
+          throw new ApiError(`Session file is already open in project ${existing.projectId}`, {
+            status: 409,
+            code: "session_file_busy",
+            details: { sessionFile: options.sessionFile, projectId: existing.projectId },
+          });
         }
         return existing.runtime.session;
       }
@@ -110,7 +114,7 @@ export class SessionService {
 
   async openSession(options: OpenSessionRequest) {
     if (!options.sessionFile || typeof options.sessionFile !== "string") {
-      throw new Error("sessionFile is required");
+      validationError("sessionFile is required", { field: "sessionFile" });
     }
 
     return this.createSession({
@@ -266,7 +270,7 @@ export class SessionService {
 
   async switchSession(sessionId: string, options: SwitchSessionRequest) {
     if (!options.sessionFile || typeof options.sessionFile !== "string") {
-      throw new Error("sessionFile is required");
+      validationError("sessionFile is required", { field: "sessionFile" });
     }
 
     const managed = this.getManagedRuntime(sessionId);
@@ -278,7 +282,7 @@ export class SessionService {
 
   async forkSession(sessionId: string, options: ForkSessionRequest) {
     if (!options.entryId || typeof options.entryId !== "string") {
-      throw new Error("entryId is required");
+      validationError("entryId is required", { field: "entryId" });
     }
 
     const managed = this.getManagedRuntime(sessionId);
@@ -288,7 +292,7 @@ export class SessionService {
 
   async importSession(sessionId: string, options: ImportSessionRequest) {
     if (!options.path || typeof options.path !== "string") {
-      throw new Error("path is required");
+      validationError("path is required", { field: "path" });
     }
 
     const managed = this.getManagedRuntime(sessionId);

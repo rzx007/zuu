@@ -2807,6 +2807,12 @@ async function main() {
   if (!persisted.session.sessionFile) throw new Error("persisted session is missing sessionFile");
   const opened = await client.openProjectSession(defaultProject.id, { sessionFile: persisted.session.sessionFile });
   if (opened.session.id !== persisted.session.id) throw new Error("openSession returned the wrong session");
+  const conflictingProject = await client.createProject({ cwd: process.cwd(), name: "session conflict check" });
+  await expectClientError(
+    () => client.openProjectSession(conflictingProject.project.id, { sessionFile: persisted.session.sessionFile! }),
+    { status: 409, code: "session_file_busy" },
+  );
+  await client.deleteProject(conflictingProject.project.id);
 
   await expectClientError(() => client.getRun("missing"), { status: 404, code: "not_found" });
   await expectClientError(() => client.getSchedule("missing"), { status: 404, code: "not_found" });
