@@ -19,7 +19,6 @@ import {
   getRunStorePath,
   getScheduleStorePath,
   getSessionDir,
-  getWorkflowStorePath,
   getZuuAgentDir,
 } from "./agent-daemon/environment";
 import { ApprovalStore, assertApprovalStatus } from "./agent-daemon/approval-store";
@@ -27,9 +26,9 @@ import { subscribeApprovalEvents } from "./agent-daemon/approval-policy";
 import { buildDiagnostics } from "./agent-daemon/diagnostics";
 import { compactAgentEvent, entryRole, entryText } from "./agent-daemon/events";
 import { ProjectStore } from "./agent-daemon/projects";
-import { ScheduleStore } from "./agent-daemon/schedules";
+import { ScheduleService } from "./agent-daemon/schedule-service";
 import { PackageService } from "./agent-daemon/packages";
-import { createWorkflowBackend } from "./agent-daemon/workflows";
+import { WorkflowService } from "./agent-daemon/workflow-service";
 import type {
   CreateScheduleRequest,
   CreateSessionRequest,
@@ -80,26 +79,36 @@ export class ZuuDaemon {
     getPackageOperationStorePath(this.agentDir),
     getPackageTrustStorePath(this.agentDir),
   );
+  private readonly workflowService = new WorkflowService({
+    agentDir: this.agentDir,
+    packageService: this.packageService,
+    projectStore: this.projectStore,
+    launchPrompt: (request) => this.launchWorkflowPrompt(request),
+  });
   private readonly modelRuntimePromise = createModelRuntime();
   private readonly startedAt = new Date().toISOString();
-  private readonly scheduleStore = new ScheduleStore(getScheduleStorePath(this.agentDir), {
-    runPrompt: async (action) => {
-      const { type: _type, ...request } = action;
-      let agentRunId: string | undefined;
-      for await (const event of this.prompt(request)) {
-        agentRunId = event.run?.id ?? event.runId ?? agentRunId;
-      }
-      return { agentRunId };
-    },
-    runWorkflow: async (action) => {
-      const run = await this.startWorkflow(action.workflowId, {
-        projectId: action.projectId,
-        sessionId: action.sessionId,
-        prompt: action.prompt,
-        inputs: action.inputs,
-        source: "schedule",
-      });
-      return { workflowRunId: run.id };
+  private readonly scheduleService = new ScheduleService({
+    path: getScheduleStorePath(this.agentDir),
+    projectStore: this.projectStore,
+    executor: {
+      runPrompt: async (action) => {
+        const { type: _type, ...request } = action;
+        let agentRunId: string | undefined;
+        for await (const event of this.prompt(request)) {
+          agentRunId = event.run?.id ?? event.runId ?? agentRunId;
+        }
+        return { agentRunId };
+      },
+      runWorkflow: async (action) => {
+        const run = await this.startWorkflow(action.workflowId, {
+          projectId: action.projectId,
+          sessionId: action.sessionId,
+          prompt: action.prompt,
+          inputs: action.inputs,
+          source: "schedule",
+        });
+        return { workflowRunId: run.id };
+      },
     },
   });
 
@@ -275,45 +284,24 @@ export class ZuuDaemon {
     return this.approvalStore.resolve(approvalId, request);
   }
 
-  private createWorkflowBackend() {
-    return createWorkflowBackend({
-      path: getWorkflowStorePath(this.agentDir),
-      packages: this.packageService.listTrustedPackageSources(),
-      requestedKind: process.env.ZUU_WORKFLOW_BACKEND,
-      agentDir: this.agentDir,
-      launchPrompt: (request) => this.launchWorkflowPrompt(request),
-    });
-  }
-
   listWorkflows(projectId?: string) {
-    if (projectId) this.projectStore.get(projectId);
-    const backend = this.createWorkflowBackend();
-    return backend.listDefinitions().then((workflows) => ({ workflows, backend: backend.getInfo() }));
+    return this.workflowService.listWorkflows(projectId);
   }
 
   startWorkflow(workflowId: string, request: StartWorkflowRequest = {}, projectId?: string) {
-    return this.createWorkflowBackend().start(workflowId, {
-      ...request,
-      projectId: this.projectStore.get(projectId ?? request.projectId).id,
-    });
+    return this.workflowService.startWorkflow(workflowId, request, projectId);
   }
 
   async listWorkflowRuns(projectId?: string) {
-    if (projectId) this.projectStore.get(projectId);
-    const runs = await this.createWorkflowBackend().listRuns();
-    return runs.filter((run) => !projectId || run.projectId === projectId);
+    return this.workflowService.listWorkflowRuns(projectId);
   }
 
   async getWorkflowRun(runId: string, projectId?: string) {
-    if (projectId) this.projectStore.get(projectId);
-    const run = await this.createWorkflowBackend().getRun(runId);
-    if (projectId && run.projectId !== projectId) throw new Error(`Unknown workflow run: ${runId}`);
-    return run;
+    return this.workflowService.getWorkflowRun(runId, projectId);
   }
 
   async abortWorkflowRun(runId: string, projectId?: string) {
-    await this.getWorkflowRun(runId, projectId);
-    return this.createWorkflowBackend().abort(runId);
+    return this.workflowService.abortWorkflowRun(runId, projectId);
   }
 
   private async launchWorkflowPrompt(request: PromptRequest) {
@@ -326,46 +314,31 @@ export class ZuuDaemon {
   }
 
   listSchedules(projectId?: string) {
-    if (projectId) this.projectStore.get(projectId);
-    return this.scheduleStore.list(projectId);
+    return this.scheduleService.listSchedules(projectId);
   }
 
   createSchedule(request: CreateScheduleRequest, projectIdOverride?: string) {
-    const projectId = this.projectStore.get(projectIdOverride ?? request.action.projectId).id;
-    return this.scheduleStore.create({
-      ...request,
-      action: {
-        ...request.action,
-        projectId,
-      },
-    });
+    return this.scheduleService.createSchedule(request, projectIdOverride);
   }
 
   getSchedule(scheduleId: string, projectId?: string) {
-    if (projectId) this.projectStore.get(projectId);
-    const schedule = this.scheduleStore.get(scheduleId);
-    if (projectId && schedule.action.projectId !== projectId) throw new Error(`Unknown schedule: ${scheduleId}`);
-    return schedule;
+    return this.scheduleService.getSchedule(scheduleId, projectId);
   }
 
   pauseSchedule(scheduleId: string, projectId?: string) {
-    this.getSchedule(scheduleId, projectId);
-    return this.scheduleStore.pause(scheduleId);
+    return this.scheduleService.pauseSchedule(scheduleId, projectId);
   }
 
   resumeSchedule(scheduleId: string, projectId?: string) {
-    this.getSchedule(scheduleId, projectId);
-    return this.scheduleStore.resume(scheduleId);
+    return this.scheduleService.resumeSchedule(scheduleId, projectId);
   }
 
   triggerSchedule(scheduleId: string, projectId?: string) {
-    this.getSchedule(scheduleId, projectId);
-    return this.scheduleStore.trigger(scheduleId);
+    return this.scheduleService.triggerSchedule(scheduleId, projectId);
   }
 
   deleteSchedule(scheduleId: string, projectId?: string) {
-    this.getSchedule(scheduleId, projectId);
-    return this.scheduleStore.delete(scheduleId);
+    return this.scheduleService.deleteSchedule(scheduleId, projectId);
   }
 
   private getManagedRuntime(sessionId: string) {
@@ -583,7 +556,7 @@ export class ZuuDaemon {
   }
 
   async diagnostics() {
-    return buildDiagnostics(await this.modelRuntimePromise, this.createWorkflowBackend().getInfo(), this.listSessions()[0]?.model);
+    return buildDiagnostics(await this.modelRuntimePromise, this.workflowService.getBackendInfo(), this.listSessions()[0]?.model);
   }
 
   async listModels() {
@@ -644,7 +617,7 @@ export class ZuuDaemon {
   }
 
   async dispose() {
-    this.scheduleStore.dispose();
+    this.scheduleService.dispose();
     for (const managed of this.runtimes.values()) {
       await managed.runtime.dispose();
     }
