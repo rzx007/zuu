@@ -1,4 +1,8 @@
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import app from "../src/index";
+import { ApprovalStore } from "../src/agent-daemon/approval-store";
 import { createZuuClient } from "@zuu/client";
 
 const fetchFromApp: typeof fetch = async (input, init) => {
@@ -45,6 +49,62 @@ async function main() {
 
   const { runs } = await client.listRuns();
   if (!Array.isArray(runs)) throw new Error("runs response is invalid");
+
+  const approvals = await client.listApprovals();
+  if (!Array.isArray(approvals.approvals)) throw new Error("approvals response is invalid");
+
+  let invalidApprovalStatusFailed = false;
+  try {
+    await client.listApprovals("unknown" as never);
+  } catch {
+    invalidApprovalStatusFailed = true;
+  }
+  if (!invalidApprovalStatusFailed) throw new Error("invalid approval status should fail");
+
+  let missingApprovalFailed = false;
+  try {
+    await client.getApproval("missing");
+  } catch {
+    missingApprovalFailed = true;
+  }
+  if (!missingApprovalFailed) throw new Error("missing approval should fail");
+
+  let missingApprovalResolveFailed = false;
+  try {
+    await client.resolveApproval("missing", { decision: "deny" });
+  } catch {
+    missingApprovalResolveFailed = true;
+  }
+  if (!missingApprovalResolveFailed) throw new Error("missing approval resolve should fail");
+
+  const approvalStore = new ApprovalStore(join(mkdtempSync(join(tmpdir(), "zuu-approval-check-")), "approvals.json"));
+  const pendingApproval = approvalStore.create({
+    sessionId: "check-session",
+    runId: "check-run",
+    kind: "tool",
+    title: "Check approval",
+    description: "Approval store contract check",
+    risk: "medium",
+  });
+  if (approvalStore.list("pending")[0]?.id !== pendingApproval.id) {
+    throw new Error("pending approval was not listed");
+  }
+  const resolvedApproval = approvalStore.resolve(pendingApproval.id, { decision: "allow_once" });
+  if (resolvedApproval.status !== "allowed" || resolvedApproval.decision !== "allow_once") {
+    throw new Error("approval was not resolved");
+  }
+  const expiredApproval = approvalStore.create({
+    sessionId: "check-session",
+    runId: "check-run",
+    kind: "command",
+    title: "Expired check approval",
+    description: "Approval expiration contract check",
+    risk: "high",
+    expiresAt: "1970-01-01T00:00:00.000Z",
+  });
+  if (approvalStore.get(expiredApproval.id).status !== "expired") {
+    throw new Error("expired approval did not expire");
+  }
 
   const packages = await client.listPackages();
   if (!Array.isArray(packages.packages)) throw new Error("packages response is invalid");

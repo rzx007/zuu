@@ -28,6 +28,10 @@ export function getRunStorePath(agentDir: string) {
   return join(agentDir, "runs.json");
 }
 
+export function getApprovalStorePath(agentDir: string) {
+  return join(agentDir, "approvals.json");
+}
+
 function normalizePathForCompare(pathname: string) {
   const resolved = resolve(pathname);
   return process.platform === "win32" ? resolved.toLowerCase() : resolved;

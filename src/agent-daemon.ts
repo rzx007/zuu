@@ -16,12 +16,14 @@ import {
   assertAllowedPath,
   createModelRuntime,
   DEFAULT_READ_ONLY_TOOLS,
+  getApprovalStorePath,
   getRunStorePath,
   getSessionDir,
   getZuuAgentDir,
   normalizePackageSource,
   packageSourceToString,
 } from "./agent-daemon/environment";
+import { ApprovalStore, assertApprovalStatus } from "./agent-daemon/approval-store";
 import { buildDiagnostics } from "./agent-daemon/diagnostics";
 import { compactAgentEvent, entryRole, entryText } from "./agent-daemon/events";
 import { createStatusTool } from "./agent-daemon/status-tool";
@@ -30,9 +32,12 @@ import type {
   ImportSessionRequest,
   NewSessionRequest,
   OpenSessionRequest,
+  ApprovalStatus,
+  CreateApprovalRequest,
   PackageMutationRequest,
   PromptRequest,
   PromptStreamEvent,
+  ResolveApprovalRequest,
   RunSummary,
   SessionActionResponse,
   SessionSummary,
@@ -64,7 +69,9 @@ interface CreateSessionOptions {
 
 export class ZuuDaemon {
   private readonly runtimes = new Map<string, ManagedRuntime>();
-  private readonly runStorePath = getRunStorePath(getZuuAgentDir());
+  private readonly agentDir = getZuuAgentDir();
+  private readonly runStorePath = getRunStorePath(this.agentDir);
+  private readonly approvalStore = new ApprovalStore(getApprovalStorePath(this.agentDir));
   private readonly runs = new Map<string, RunSummary>(
     loadRunHistory(this.runStorePath).map((run) => [run.id, run]),
   );
@@ -229,6 +236,23 @@ export class ZuuDaemon {
     const run = this.runs.get(runId);
     if (!run) throw new Error(`Unknown run: ${runId}`);
     return run;
+  }
+
+  createApproval(request: CreateApprovalRequest) {
+    return this.approvalStore.create(request);
+  }
+
+  listApprovals(status?: ApprovalStatus) {
+    assertApprovalStatus(status);
+    return this.approvalStore.list(status);
+  }
+
+  getApproval(approvalId: string) {
+    return this.approvalStore.get(approvalId);
+  }
+
+  resolveApproval(approvalId: string, request: ResolveApprovalRequest) {
+    return this.approvalStore.resolve(approvalId, request);
   }
 
   private getManagedRuntime(sessionId: string) {

@@ -41,6 +41,9 @@ pnpm typecheck
 - `GET /api/sessions/:sessionId/tree`
 - `GET /api/runs`
 - `GET /api/runs/:runId`
+- `GET /api/approvals`
+- `GET /api/approvals/:approvalId`
+- `POST /api/approvals/:approvalId/resolve`
 - `POST /api/sessions`
 - `POST /api/sessions/open`
 - `POST /api/prompt`：以 SSE 方式流式返回事件

@@ -11,8 +11,10 @@ import type {
   ImportSessionRequest,
   NewSessionRequest,
   OpenSessionRequest,
+  ApprovalStatus,
   PackageMutationRequest,
   PromptRequest,
+  ResolveApprovalRequest,
   SwitchSessionRequest,
 } from "@zuu/client";
 
@@ -914,6 +916,31 @@ app.get("/api/runs/:runId", (c) => {
     return c.json({ run: daemon.getRun(c.req.param("runId")) });
   } catch (error) {
     return c.json(jsonError(error, 404), 404);
+  }
+});
+
+app.get("/api/approvals", (c) => {
+  try {
+    return c.json({ approvals: daemon.listApprovals(c.req.query("status") as ApprovalStatus | undefined) });
+  } catch (error) {
+    return c.json(jsonError(error, 400), 400);
+  }
+});
+
+app.get("/api/approvals/:approvalId", (c) => {
+  try {
+    return c.json({ approval: daemon.getApproval(c.req.param("approvalId")) });
+  } catch (error) {
+    return c.json(jsonError(error, 404), 404);
+  }
+});
+
+app.post("/api/approvals/:approvalId/resolve", async (c) => {
+  try {
+    const body = (await c.req.json()) as ResolveApprovalRequest;
+    return c.json({ approval: daemon.resolveApproval(c.req.param("approvalId"), body) });
+  } catch (error) {
+    return c.json(jsonError(error, 400), 400);
   }
 });
 

@@ -5,6 +5,9 @@ import type {
   ImportSessionRequest,
   NewSessionRequest,
   OpenSessionRequest,
+  ApprovalResponse,
+  ApprovalStatus,
+  ApprovalsResponse,
   PackageMutationRequest,
   PackagesResponse,
   ModelsResponse,
@@ -12,6 +15,7 @@ import type {
   PromptStreamEvent,
   RunResponse,
   RunsResponse,
+  ResolveApprovalRequest,
   SessionActionResponse,
   SessionResponse,
   SessionsResponse,
@@ -44,6 +48,9 @@ export interface ZuuClient {
   getSessionTree(sessionId: string): Promise<SessionTreeResponse>;
   listRuns(sessionId?: string): Promise<RunsResponse>;
   getRun(runId: string): Promise<RunResponse>;
+  listApprovals(status?: ApprovalStatus): Promise<ApprovalsResponse>;
+  getApproval(approvalId: string): Promise<ApprovalResponse>;
+  resolveApproval(approvalId: string, input: ResolveApprovalRequest): Promise<ApprovalResponse>;
   createSession(input?: Record<string, unknown>): Promise<SessionResponse>;
   openSession(input: OpenSessionRequest): Promise<SessionResponse>;
   prompt(input: PromptRequest, options?: PromptStreamOptions): AsyncGenerator<PromptStreamEvent>;
@@ -152,6 +159,21 @@ export function createZuuClient(options: ZuuClientOptions = {}): ZuuClient {
         apiToken,
       ),
     getRun: (runId) => requestJson<RunResponse>(fetchImpl, baseUrl, `/api/runs/${encodeURIComponent(runId)}`, undefined, apiToken),
+    listApprovals: (status) =>
+      requestJson<ApprovalsResponse>(
+        fetchImpl,
+        baseUrl,
+        status ? `/api/approvals?status=${encodeURIComponent(status)}` : "/api/approvals",
+        undefined,
+        apiToken,
+      ),
+    getApproval: (approvalId) =>
+      requestJson<ApprovalResponse>(fetchImpl, baseUrl, `/api/approvals/${encodeURIComponent(approvalId)}`, undefined, apiToken),
+    resolveApproval: (approvalId, input) =>
+      requestJson<ApprovalResponse>(fetchImpl, baseUrl, `/api/approvals/${encodeURIComponent(approvalId)}/resolve`, {
+        method: "POST",
+        body: JSON.stringify(input),
+      }, apiToken),
     createSession: (input = {}) =>
       requestJson<SessionResponse>(fetchImpl, baseUrl, "/api/sessions", {
         method: "POST",

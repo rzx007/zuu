@@ -23,6 +23,41 @@ export interface RunSummary {
   endedAt?: string;
 }
 
+export type ApprovalKind = "tool" | "command" | "filesystem" | "network" | "package";
+export type ApprovalRisk = "low" | "medium" | "high" | "critical";
+export type ApprovalStatus = "pending" | "allowed" | "denied" | "expired";
+export type ApprovalDecision = "allow_once" | "allow_session" | "deny";
+
+export interface Approval {
+  id: string;
+  sessionId: string;
+  runId: string;
+  kind: ApprovalKind;
+  title: string;
+  description: string;
+  risk: ApprovalRisk;
+  status: ApprovalStatus;
+  createdAt: string;
+  updatedAt: string;
+  expiresAt?: string;
+  resolvedAt?: string;
+  decision?: ApprovalDecision;
+}
+
+export interface CreateApprovalRequest {
+  sessionId: string;
+  runId: string;
+  kind: ApprovalKind;
+  title: string;
+  description: string;
+  risk: ApprovalRisk;
+  expiresAt?: string;
+}
+
+export interface ResolveApprovalRequest {
+  decision: ApprovalDecision;
+}
+
 export interface PromptRequest {
   prompt: string;
   sessionId?: string;
@@ -149,6 +184,14 @@ export interface RunsResponse {
 
 export interface RunResponse {
   run: RunSummary;
+}
+
+export interface ApprovalsResponse {
+  approvals: Approval[];
+}
+
+export interface ApprovalResponse {
+  approval: Approval;
 }
 
 export interface Diagnostics {
