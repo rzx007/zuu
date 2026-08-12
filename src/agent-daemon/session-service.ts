@@ -1,5 +1,4 @@
 import {
-  createAgentSessionRuntime,
   SessionManager,
   type AgentSession,
   type EventBusController,
@@ -21,8 +20,7 @@ import type { PackageService } from "./packages";
 import type { ProjectService } from "./project-service";
 import { SessionRuntimeRegistry } from "./session-registry";
 import {
-  createManagedSessionManager,
-  createZuuRuntimeFactory,
+  createManagedRuntime,
   type CreateSessionOptions,
   type ManagedRuntime,
 } from "./session-runtime";
@@ -67,14 +65,11 @@ export class SessionService {
     }
 
     const project = this.options.projects.resolveProject(options);
-    const cwd = project.cwd;
-    assertAllowedPath(cwd, "cwd");
-    const sessionDir = getSessionDir(this.options.agentDir);
-    const sessionManager = createManagedSessionManager(options, cwd, sessionDir);
-    const runtimeCwd = sessionManager.getCwd();
-
-    const runtimeFactory = createZuuRuntimeFactory(
+    const managed = await createManagedRuntime(
       {
+        agentDir: this.options.agentDir,
+        projectId: project.id,
+        cwd: project.cwd,
         packageService: this.options.packageService,
         modelRuntimePromise: this.options.modelRuntimePromise,
         approvals: this.options.approvals,
@@ -86,28 +81,8 @@ export class SessionService {
       },
       options,
     );
-    const runtime = await createAgentSessionRuntime(
-      runtimeFactory,
-      {
-        cwd: runtimeCwd,
-        agentDir: this.options.agentDir,
-        sessionManager,
-      },
-    );
-    const session = runtime.session;
-
-    if (options.name) session.setSessionName(options.name);
-
-    const now = new Date().toISOString();
-    const managed: ManagedRuntime = {
-      runtime,
-      projectId: project.id,
-      cwd: runtime.cwd,
-      createdAt: now,
-      updatedAt: now,
-    };
     this.runtimes.add(managed);
-    return session;
+    return managed.runtime.session;
   }
 
   async openSession(options: OpenSessionRequest) {

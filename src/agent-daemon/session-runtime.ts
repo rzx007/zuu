@@ -1,4 +1,5 @@
 import {
+  createAgentSessionRuntime,
   createAgentSessionFromServices,
   createAgentSessionServices,
   SessionManager,
@@ -11,7 +12,7 @@ import {
 import type { CreateSessionRequest } from "@zuu/client";
 import { createApprovalExtension } from "./approval-policy";
 import type { ApprovalRegistry } from "./approval-service";
-import { assertAllowedPath, DEFAULT_READ_ONLY_TOOLS } from "./environment";
+import { assertAllowedPath, DEFAULT_READ_ONLY_TOOLS, getSessionDir } from "./environment";
 import type { PackageService } from "./packages";
 import { createStatusTool } from "./status-tool";
 
@@ -34,6 +35,42 @@ export interface RuntimeFactoryDeps {
   eventBus: EventBusController;
   startedAt: string;
   getSessionCount: () => number;
+}
+
+export interface CreateManagedRuntimeDeps extends RuntimeFactoryDeps {
+  agentDir: string;
+  projectId: string;
+  cwd: string;
+}
+
+export async function createManagedRuntime(
+  deps: CreateManagedRuntimeDeps,
+  options: CreateSessionOptions,
+): Promise<ManagedRuntime> {
+  assertAllowedPath(deps.cwd, "cwd");
+  const sessionDir = getSessionDir(deps.agentDir);
+  const sessionManager = createManagedSessionManager(options, deps.cwd, sessionDir);
+  const runtimeCwd = sessionManager.getCwd();
+  const runtimeFactory = createZuuRuntimeFactory(deps, options);
+  const runtime = await createAgentSessionRuntime(
+    runtimeFactory,
+    {
+      cwd: runtimeCwd,
+      agentDir: deps.agentDir,
+      sessionManager,
+    },
+  );
+
+  if (options.name) runtime.session.setSessionName(options.name);
+
+  const now = new Date().toISOString();
+  return {
+    runtime,
+    projectId: deps.projectId,
+    cwd: runtime.cwd,
+    createdAt: now,
+    updatedAt: now,
+  };
 }
 
 export function createZuuRuntimeFactory(
