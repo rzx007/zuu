@@ -54,6 +54,8 @@ export interface ZuuClient {
   addPackage(input: PackageMutationRequest): Promise<PackagesResponse>;
   installPackage(input: PackageMutationRequest): Promise<PackageInstallResponse>;
   removePackage(input: PackageMutationRequest): Promise<PackagesResponse>;
+  trustPackage(input: PackageMutationRequest): Promise<PackagesResponse>;
+  revokePackageTrust(input: PackageMutationRequest): Promise<PackagesResponse>;
   listPackageOperations(): Promise<PackageOperationsResponse>;
   getPackageOperation(operationId: string): Promise<PackageOperationResponse>;
   listSessions(): Promise<SessionsResponse>;
@@ -166,6 +168,16 @@ export function createZuuClient(options: ZuuClientOptions = {}): ZuuClient {
       }, apiToken),
     removePackage: (input) =>
       requestJson<PackagesResponse>(fetchImpl, baseUrl, "/api/packages", {
+        method: "DELETE",
+        body: JSON.stringify(input),
+      }, apiToken),
+    trustPackage: (input) =>
+      requestJson<PackagesResponse>(fetchImpl, baseUrl, "/api/packages/trust", {
+        method: "POST",
+        body: JSON.stringify(input),
+      }, apiToken),
+    revokePackageTrust: (input) =>
+      requestJson<PackagesResponse>(fetchImpl, baseUrl, "/api/packages/trust", {
         method: "DELETE",
         body: JSON.stringify(input),
       }, apiToken),

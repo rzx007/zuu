@@ -4,6 +4,7 @@ import { join } from "node:path";
 import app from "../src/index";
 import { ApprovalStore } from "../src/agent-daemon/approval-store";
 import { createApprovalExtension } from "../src/agent-daemon/approval-policy";
+import { PackageTrustStore } from "../src/agent-daemon/package-trust";
 import { createWorkflowBackend } from "../src/agent-daemon/workflows";
 import { createZuuClient } from "@zuu/client";
 import { createEventBus } from "@earendil-works/pi-coding-agent";
@@ -17,6 +18,10 @@ async function main() {
   const client = createZuuClient({ baseUrl: "http://zuu.local", fetch: fetchFromApp });
   const health = await client.health();
   if (!health.ok) throw new Error("health check failed");
+  const diagnostics = await client.diagnostics();
+  if (!Array.isArray(diagnostics.resources.resourceDiagnostics)) {
+    throw new Error("resource diagnostics response is invalid");
+  }
 
   let sawAuthHeader = false;
   const authClient = createZuuClient({
@@ -272,6 +277,9 @@ async function main() {
 
   const packages = await client.listPackages();
   if (!Array.isArray(packages.packages)) throw new Error("packages response is invalid");
+  if (packages.packages.some((item) => typeof item.trusted !== "boolean" || !item.trustStatus)) {
+    throw new Error("packages trust response is invalid");
+  }
   const packageOperations = await client.listPackageOperations();
   if (!Array.isArray(packageOperations.operations)) throw new Error("package operations response is invalid");
   let missingPackageOperationFailed = false;
@@ -298,6 +306,23 @@ async function main() {
     emptyPackageInstallFailed = true;
   }
   if (!emptyPackageInstallFailed) throw new Error("empty package install source should fail");
+  let emptyPackageTrustFailed = false;
+  try {
+    await client.trustPackage({ source: " " });
+  } catch {
+    emptyPackageTrustFailed = true;
+  }
+  if (!emptyPackageTrustFailed) throw new Error("empty package trust source should fail");
+
+  const trustStore = new PackageTrustStore(join(mkdtempSync(join(tmpdir(), "zuu-package-trust-check-")), "trust.json"));
+  const trustedPackage = trustStore.trust("npm:check-package");
+  if (trustedPackage.status !== "trusted" || !trustStore.isTrusted("npm:check-package")) {
+    throw new Error("package trust was not recorded");
+  }
+  const untrustedPackage = trustStore.revoke("npm:check-package");
+  if (untrustedPackage.status !== "untrusted" || trustStore.isTrusted("npm:check-package")) {
+    throw new Error("package trust was not revoked");
+  }
 
   const storedBefore = await client.listStoredSessions();
   if (!Array.isArray(storedBefore.sessions)) throw new Error("stored sessions response is invalid");

@@ -102,6 +102,24 @@ app.delete("/api/packages", async (c) => {
   }
 });
 
+app.post("/api/packages/trust", async (c) => {
+  try {
+    const body = (await c.req.json()) as PackageMutationRequest;
+    return c.json(daemon.trustPackage(body));
+  } catch (error) {
+    return c.json(jsonError(error, 400), 400);
+  }
+});
+
+app.delete("/api/packages/trust", async (c) => {
+  try {
+    const body = (await c.req.json()) as PackageMutationRequest;
+    return c.json(daemon.revokePackageTrust(body));
+  } catch (error) {
+    return c.json(jsonError(error, 400), 400);
+  }
+});
+
 app.get("/api/sessions", (c) => c.json({ sessions: daemon.listSessions() }));
 
 app.get("/api/session-files", async (c) => {

@@ -816,6 +816,8 @@ Pi Packages 和 Extensions 具有本机代码执行权限。必须：
 - 固定精确版本
 - 记录安装来源与校验信息
 - 记录安装 operation、进度事件和失败原因
+- 安装前必须有用户或策略产生的 package source 信任记录
+- 资源加载 warning、error 和 name collision 必须能通过 diagnostics 查询
 - 项目首次加载前获得信任
 - 升级后重新运行安全和集成测试
 

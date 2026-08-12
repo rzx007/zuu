@@ -4,7 +4,7 @@ import {
   type ModelRuntime,
 } from "@earendil-works/pi-coding-agent";
 import { getZuuAgentDir, packageSourceToString, sdkVersion } from "./environment";
-import type { Diagnostics, WorkflowBackendInfo } from "@zuu/client";
+import type { Diagnostics, ResourceDiagnostic, WorkflowBackendInfo } from "@zuu/client";
 
 let sdkInfo: ReturnType<typeof sdkVersion> | undefined;
 
@@ -27,6 +27,9 @@ export async function buildDiagnostics(
   const available = await modelRuntime.getAvailable();
   const sdk = getSdkInfo();
   const extensionResult = resourceLoader.getExtensions();
+  const skills = resourceLoader.getSkills();
+  const prompts = resourceLoader.getPrompts();
+  const themes = resourceLoader.getThemes();
   const configuredProviders = modelRuntime
     .getProviders()
     .filter((provider) => modelRuntime.hasConfiguredAuth(provider.id))
@@ -46,9 +49,22 @@ export async function buildDiagnostics(
   if (available.length === 0) {
     gaps.push("No authenticated model is available; configure provider auth in ~/.pi/agent/auth.json or environment variables.");
   }
+  const resourceDiagnostics: ResourceDiagnostic[] = [
+    ...extensionResult.errors.map((error): ResourceDiagnostic => ({
+      type: "error",
+      message: error.error,
+      path: error.path,
+    })),
+    ...skills.diagnostics,
+    ...prompts.diagnostics,
+    ...themes.diagnostics,
+  ];
+  if (resourceDiagnostics.some((diagnostic) => diagnostic.type === "collision")) {
+    gaps.push("One or more package resources have name collisions; inspect resource diagnostics before relying on the loaded tools or skills.");
+  }
 
   return {
-    ok: extensionResult.errors.length === 0 && available.length > 0,
+    ok: extensionResult.errors.length === 0 && !resourceDiagnostics.some((diagnostic) => diagnostic.type === "error") && available.length > 0,
     cwd,
     runtime: {
       node: process.versions.node,
@@ -66,10 +82,11 @@ export async function buildDiagnostics(
       error: modelRuntime.getError(),
     },
     resources: {
-      skills: resourceLoader.getSkills().skills.length,
-      prompts: resourceLoader.getPrompts().prompts.length,
+      skills: skills.skills.length,
+      prompts: prompts.prompts.length,
       extensions: extensionResult.extensions.length,
       extensionErrors: extensionResult.errors,
+      resourceDiagnostics,
       packages,
       workflowBackend,
     },

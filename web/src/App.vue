@@ -94,6 +94,7 @@ const pendingApprovals = computed(() => approvals.value.filter((approval) => app
 const flatTree = computed(() => flattenTree(sessionTree.value))
 const statusText = computed(() => (isRunning.value ? 'running' : 'ready'))
 const configuredProviders = computed(() => diagnostics.value?.models.configuredProviders.join(', ') || 'none')
+const resourceDiagnostics = computed(() => diagnostics.value?.resources.resourceDiagnostics || [])
 const selectedWorkflow = computed(() => workflows.value.find((workflow) => workflow.id === selectedWorkflowId.value))
 const runningPackageOperations = computed(() => packageOperations.value.filter((operation) => operation.status === 'running'))
 
@@ -251,6 +252,20 @@ async function installPackage(source: string) {
 async function removePackage(source: string) {
   await client.removePackage({ source })
   await Promise.all([loadPackages(), loadDiagnostics()])
+}
+
+async function trustPackage(source: string) {
+  const response = await client.trustPackage({ source })
+  packages.value = response.packages
+  addMessage('event', `package trusted: ${source}`)
+  await loadDiagnostics()
+}
+
+async function revokePackageTrust(source: string) {
+  const response = await client.revokePackageTrust({ source })
+  packages.value = response.packages
+  addMessage('event', `package trust revoked: ${source}`)
+  await loadDiagnostics()
 }
 
 async function openStoredSession(sessionFile: string) {
@@ -516,6 +531,7 @@ onUnmounted(() => {
             <div><dt>Providers</dt><dd>{{ configuredProviders }}</dd></div>
             <div><dt>Skills</dt><dd>{{ diagnostics?.resources.skills ?? 0 }}</dd></div>
           </dl>
+          <p v-if="resourceDiagnostics.length" class="text-destructive text-xs">{{ resourceDiagnostics.length }} resource diagnostics</p>
           <p v-if="diagnostics?.gaps.length" class="text-destructive text-xs">{{ diagnostics.gaps.join(' / ') }}</p>
           <label class="field-label">
             API token
@@ -581,14 +597,17 @@ onUnmounted(() => {
             <div v-for="item in packages" :key="item.source" class="compact-row">
               <div class="min-w-0">
                 <strong>{{ item.source }}</strong>
-                <span>{{ item.scope }} / {{ item.status }}</span>
+                <span>{{ item.scope }} / {{ item.status }} / {{ item.trustStatus }}</span>
+                <span v-if="item.trustedAt">trusted {{ item.trustedAt }}</span>
                 <span v-if="item.installedPath">{{ item.installedPath }}</span>
                 <span v-if="latestPackageOperation(item.source)">
                   install {{ latestPackageOperation(item.source)?.status }} / {{ packageOperationMessage(latestPackageOperation(item.source)) }}
                 </span>
               </div>
               <div class="flex flex-wrap justify-end gap-1">
-                <Button v-if="item.status !== 'installed'" variant="outline" size="xs" :disabled="isPackageInstalling(item.source)" @click="installPackage(item.source).catch((error) => addMessage('error', errorMessage(error)))">
+                <Button v-if="!item.trusted" variant="outline" size="xs" @click="trustPackage(item.source).catch((error) => addMessage('error', errorMessage(error)))">Trust</Button>
+                <Button v-else variant="ghost" size="xs" @click="revokePackageTrust(item.source).catch((error) => addMessage('error', errorMessage(error)))">Revoke</Button>
+                <Button v-if="item.status !== 'installed'" variant="outline" size="xs" :disabled="!item.trusted || isPackageInstalling(item.source)" @click="installPackage(item.source).catch((error) => addMessage('error', errorMessage(error)))">
                   {{ isPackageInstalling(item.source) ? 'Installing' : 'Install' }}
                 </Button>
                 <Button variant="ghost" size="xs" @click="removePackage(item.source).catch((error) => addMessage('error', errorMessage(error)))">Remove</Button>
@@ -748,6 +767,26 @@ onUnmounted(() => {
                 </div>
               </div>
               <p v-else class="empty-text">No approvals yet.</p>
+            </section>
+
+            <section class="side-panel">
+              <div class="section-title">
+                <h2>Resources</h2>
+                <Button variant="ghost" size="xs" @click="loadDiagnostics">Refresh</Button>
+              </div>
+              <div v-if="resourceDiagnostics.length" class="list-stack overflow-auto">
+                <div v-for="diagnostic in resourceDiagnostics.slice(0, 10)" :key="`${diagnostic.type}-${diagnostic.path || diagnostic.message}`" class="workflow-row">
+                  <div class="flex items-center justify-between gap-2">
+                    <strong>{{ diagnostic.collision?.name || diagnostic.type }}</strong>
+                    <Badge :variant="diagnostic.type === 'error' || diagnostic.type === 'collision' ? 'destructive' : 'outline'">{{ diagnostic.type }}</Badge>
+                  </div>
+                  <p>{{ diagnostic.message }}</p>
+                  <span v-if="diagnostic.path">{{ diagnostic.path }}</span>
+                  <span v-if="diagnostic.collision">winner {{ diagnostic.collision.winnerPath }}</span>
+                  <span v-if="diagnostic.collision">loser {{ diagnostic.collision.loserPath }}</span>
+                </div>
+              </div>
+              <p v-else class="empty-text">No resource diagnostics.</p>
             </section>
 
             <section class="side-panel">

@@ -385,10 +385,27 @@ export interface Diagnostics {
     prompts: number;
     extensions: number;
     extensionErrors: Array<{ path: string; error: string }>;
+    resourceDiagnostics: ResourceDiagnostic[];
     packages: string[];
     workflowBackend: WorkflowBackendInfo;
   };
   gaps: string[];
+}
+
+export interface ResourceCollision {
+  resourceType: "extension" | "skill" | "prompt" | "theme";
+  name: string;
+  winnerPath: string;
+  loserPath: string;
+  winnerSource?: string;
+  loserSource?: string;
+}
+
+export interface ResourceDiagnostic {
+  type: "warning" | "error" | "collision";
+  message: string;
+  path?: string;
+  collision?: ResourceCollision;
 }
 
 export interface PackagesResponse {
@@ -413,6 +430,7 @@ export interface PackageMutationRequest {
 
 export type PackageStatus = "configured" | "installed" | "filtered";
 export type PackageScope = "user" | "project";
+export type PackageTrustStatus = "trusted" | "untrusted";
 export type PackageOperationAction = "install";
 export type PackageOperationStatus = "running" | "done" | "error";
 export type PackageProgressAction = "install" | "remove" | "update" | "clone" | "pull";
@@ -424,6 +442,15 @@ export interface PackageSummary {
   filtered: boolean;
   installedPath?: string;
   status: PackageStatus;
+  trustStatus: PackageTrustStatus;
+  trusted: boolean;
+  trustedAt?: string;
+}
+
+export interface PackageTrustRecord {
+  source: string;
+  status: PackageTrustStatus;
+  trustedAt?: string;
 }
 
 export interface PackageOperationEvent {

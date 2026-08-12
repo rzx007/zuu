@@ -715,8 +715,8 @@ UI end-to-end
 
 - `src/index.ts`：Hono daemon、health、diagnostics、model、package、active session、stored session、session tree、run、prompt、abort、compact、new、switch、fork、import API，以及生产态 WebUI 静态托管。
 - `src/agent-daemon.ts`：封装 `ModelRuntime`、`DefaultResourceLoader`、`SettingsManager`、`SessionManager`、`createAgentSessionServices`、`createAgentSessionFromServices`、`createAgentSessionRuntime` 和 runtime lifecycle 编排；daemon 辅助逻辑统一放在 `src/agent-daemon/`，workflow 后端已拆到 `src/agent-daemon/workflow-adapters/`。
-- `packages/client`：workspace 包 `@zuu/client`，封装协议 DTO、health、diagnostics、models、packages、package operations、active sessions、stored sessions、session tree、runs、prompt SSE、abort、compact 和 runtime lifecycle 操作。
-- `web/`：Vue + Vite WebUI，浏览器侧直接 bundle `@zuu/client`，用于 diagnostics、model 选择、package source、prompt SSE、session 文件、session tree、runs 和 approval 操作。
+- `packages/client`：workspace 包 `@zuu/client`，封装协议 DTO、health、diagnostics、models、packages、package trust、package operations、active sessions、stored sessions、session tree、runs、prompt SSE、abort、compact 和 runtime lifecycle 操作。
+- `web/`：Vue + Vite WebUI，浏览器侧直接 bundle `@zuu/client`，用于 diagnostics、resource diagnostics、model 选择、package source/trust/install、prompt SSE、session 文件、session tree、runs 和 approval 操作。
 - `scripts/check-pi-workflow-runtime.ts`：WSL2/Linux 专用的真实 `@agwab/pi-workflow` readiness 和 launch 验证脚本；默认只检查 ready，设置 `ZUU_PI_WORKFLOW_RUN=1` 才发起真实 workflow。
 - `docs/spikes/pi-workflow-runtime.md`：记录真实 pi-workflow 验证步骤、通过标准、失败诊断和后续 board/run-state 映射任务。
 - `.zuu/pi-agent`：默认 Pi app state 目录，可通过 `ZUU_AGENT_DIR` 覆盖，避免嵌入式运行时写入 `~/.pi/agent`。
@@ -728,7 +728,7 @@ UI end-to-end
 - `pnpm run typecheck` 可以完成 TypeScript `noEmit` 校验。
 - `pnpm run check:pi-workflow` 已作为真实环境验证入口，但只应在 `ZUU_WORKFLOW_BACKEND=pi-package` 的 WSL2/Linux daemon 旁运行。
 - `GET /api/health` 正常。
-- `GET /api/diagnostics` 正常返回 SDK 版本、模型数量、skills、extensions、packages 和能力缺口。
+- `GET /api/diagnostics` 正常返回 SDK 版本、模型数量、skills、extensions、resource diagnostics、packages 和能力缺口。
 - `POST /api/prompt` 可以返回 SSE `session`、`error`、`agent_event` 和 `done` 事件。
 - `@zuu/client` 可从 Node.js 侧调用 health、diagnostics 和 prompt stream。
 - prompt stream 已携带稳定 `runId`，并可通过 `GET /api/runs` 和 `GET /api/runs/:runId` 查询最近运行状态。
@@ -736,7 +736,7 @@ UI end-to-end
 - `AgentSessionRuntime` 的 `newSession`、`switchSession`、`fork` 和 `importFromJsonl` 已通过 daemon API 与 client 暴露。
 - `GET /api/session-files` 和 `POST /api/sessions/open` 已支持列出和打开 Pi 持久化 session 文件。
 - `GET /api/sessions/:sessionId/tree` 已支持读取当前 active session 的树形 entry 摘要，为 fork 选择器提供基础。
-- `GET/POST/DELETE /api/packages` 已支持查看和维护结构化 Pi package 列表；`GET /api/packages` 会返回 `configured`、`installed`、`filtered` 状态和安装路径，`POST /api/packages/install` 会创建后台安装 operation，调用 Pi package manager 安装 source，并记录 SDK progress callback、完成状态和失败原因；`GET /api/package-operations` 与 `GET /api/package-operations/:operationId` 可查询最近安装任务。
+- `GET/POST/DELETE /api/packages` 已支持查看和维护结构化 Pi package 列表；`GET /api/packages` 会返回 `configured`、`installed`、`filtered`、trust 状态和安装路径，`POST /api/packages/trust` 与 `DELETE /api/packages/trust` 可维护 package source 信任记录，`POST /api/packages/install` 会在 source 已信任后创建后台安装 operation，调用 Pi package manager 安装 source，并记录 SDK progress callback、完成状态和失败原因；`GET /api/package-operations` 与 `GET /api/package-operations/:operationId` 可查询最近安装任务。
 - `GET /api/models` 已支持列出当前已认证可用模型，WebUI 可直接下拉选择。
 - `GET /api/approvals`、`GET /api/approvals/:approvalId` 和 `POST /api/approvals/:approvalId/resolve` 已支持审批列表、详情与处理，审批记录持久化到 `.zuu/pi-agent/approvals.json`。
 - `GET /api/workflows`、`POST /api/workflows/:workflowId/runs`、`GET /api/workflow-runs`、`GET /api/workflow-runs/:runId` 和 `POST /api/workflow-runs/:runId/abort` 已支持最小 workflow 合约；默认后端是 `FakeWorkflowBackend`，用于稳定 Definition/Run/Stage/Task/Artifact DTO 和 UI board，不启动真实 subagent。
@@ -752,7 +752,7 @@ UI end-to-end
 - `@zuu/client` 已是 workspace 包，但还没有独立构建产物、版本发布流程和第三方示例。
 - run registry 已有文件持久化，但还没有 SSE 重连 replay、事件明细存档或跨进程写入协调。
 - WebUI 已迁移到 Vue + Vite，并支持打开持久化 session、查看当前 session tree、按 entry fork、从本地 JSONL 路径 import、处理 pending approvals、启动/查看 fake workflow runs，以及创建/暂停/恢复/触发/删除 schedule。
-- Package API 已能展示安装状态、显式触发安装，并通过持久化 operation 记录暴露安装进度和失败原因；尚未接入信任确认和资源冲突 UI。
+- Package API 已能展示安装状态、信任状态、显式触发安装，并通过持久化 operation 记录暴露安装进度和失败原因；WebUI 已能 trust/revoke package source 并展示 SDK resource diagnostics/collision。尚未把未信任 package 从 Pi ResourceLoader 加载链路中强制过滤。
 - Approval 已接入 Pi tool call 拦截和 SSE 事件，但当前策略是 fail-closed：危险工具被阻断后需要用户 resolve 并重试 prompt，尚未实现挂起并恢复同一个 tool call 的交互式等待。
 - 当前 API token 是单 token 配置，尚未实现 token 轮换、权限分级和审计日志。
 - 路径保护是根目录级 allowlist，尚未做到按工具/动作细粒度授权。

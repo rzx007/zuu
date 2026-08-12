@@ -11,16 +11,20 @@ import type {
 } from "@zuu/client";
 import { normalizePackageSource, packageSourceToString } from "./environment";
 import { PackageOperationStore } from "./package-operations";
+import { PackageTrustStore } from "./package-trust";
 
 export class PackageService {
   private readonly operations: PackageOperationStore;
+  private readonly trust: PackageTrustStore;
 
   constructor(
     private readonly cwd: string,
     private readonly agentDir: string,
     packageOperationStorePath: string,
+    packageTrustStorePath: string,
   ) {
     this.operations = new PackageOperationStore(packageOperationStorePath);
+    this.trust = new PackageTrustStore(packageTrustStorePath);
   }
 
   list(): PackagesResponse {
@@ -42,6 +46,9 @@ export class PackageService {
 
   install(request: PackageMutationRequest): PackageInstallResponse {
     const source = normalizePackageSource(request.source);
+    if (!this.trust.isTrusted(source)) {
+      throw new Error("Package source must be trusted before installation");
+    }
     const operation = this.operations.create(source, "install");
     this.operations.addEvent(operation.id, {
       type: "progress",
@@ -59,6 +66,18 @@ export class PackageService {
     const packages = settingsManager.getPackages().map(packageSourceToString);
     settingsManager.setPackages(packages.filter((item) => item !== source));
     await settingsManager.flush();
+    return this.list();
+  }
+
+  trustPackage(request: PackageMutationRequest): PackagesResponse {
+    const source = normalizePackageSource(request.source);
+    this.trust.trust(source);
+    return this.list();
+  }
+
+  revokeTrust(request: PackageMutationRequest): PackagesResponse {
+    const source = normalizePackageSource(request.source);
+    this.trust.revoke(source);
     return this.list();
   }
 
@@ -85,12 +104,16 @@ export class PackageService {
         const scope = item?.scope ?? "user";
         const installedPath = item?.installedPath ?? packageManager.getInstalledPath(source, scope);
         const filtered = item?.filtered ?? false;
+        const trust = this.trust.get(source);
         return {
           source,
           scope,
           filtered,
           installedPath,
           status: filtered ? "filtered" : installedPath ? "installed" : "configured",
+          trustStatus: trust.status,
+          trusted: trust.status === "trusted",
+          trustedAt: trust.trustedAt,
         };
       })
       .sort((a, b) => a.source.localeCompare(b.source));
