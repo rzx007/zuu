@@ -185,7 +185,7 @@ pnpm --filter @zuu/client pack:dry
 
 ## 当前能力边界
 
-浏览器会话默认启用 `read`、`grep`、`find`、`ls` 和 `zuu_status`。普通只读工具可直接使用；如果只读工具命中 `.env`、SSH、auth token、credential、secret、key 等敏感路径，会先进入 Zuu approval。需要更强的 coding agent 能力时，可以在界面里有意识地启用 `bash`、`edit` 或 `write`，这些危险工具默认也需要审批。
+浏览器会话默认启用 `read`、`grep`、`find`、`ls` 和 `zuu_status`。普通只读工具可直接使用；如果只读工具命中 `.env`、SSH、auth token、credential、secret、key 等敏感路径，会先进入 Zuu approval，并让同一个 tool call 等待 WebUI resolve；allow 后继续执行，deny 或过期才阻断本次工具调用。需要更强的 coding agent 能力时，可以在界面里有意识地启用 `bash`、`edit` 或 `write`，这些危险工具默认也需要审批。
 
 当前 workflow API 默认使用内置 `FakeWorkflowBackend`，用于验证 `WorkflowDefinition`、`WorkflowRun`、`Stage`、`Task` 和 `Artifact` 的 daemon/client/WebUI 合约。Workflow Run、Stage 和 Task 使用 `queued/running/completed/failed/aborted` 状态以及 `finishedAt` 完成时间。Fake 后端会立即生成一个完成态 run，不会启动真实 subagent。
 
