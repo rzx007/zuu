@@ -2189,6 +2189,88 @@ async function main() {
   if (sessionApiAbort.id !== "session-api-check" || sessionApiAbortedRuns[0] !== "session-api-check") {
     throw new Error("session API abort should abort the runtime session and linked runs");
   }
+  const sessionApiRunDir = mkdtempSync(join(tmpdir(), "zuu-session-api-run-check-"));
+  const sessionApiRuns = new RunService(join(sessionApiRunDir, "runs.json"), join(sessionApiRunDir, "run-events.json"));
+  const compactSessionSummary = {
+    id: "compact-session",
+    projectId: "compact-project",
+    cwd: process.cwd(),
+    thinkingLevel: "medium" as const,
+    activeTools: [],
+    messageCount: 1,
+    isStreaming: false,
+    createdAt: "2026-08-12T00:00:00.000Z",
+    updatedAt: "2026-08-12T00:00:01.000Z",
+  };
+  const compactSessionApi = new SessionApiService(
+    {
+      getProjectId: () => "compact-project",
+      getSession: () => compactSessionSummary,
+      compact: async () => ({ ...compactSessionSummary, messageCount: 2 }),
+    } as unknown as SessionService,
+    sessionApiRuns,
+  );
+  await compactSessionApi.compactSession("compact-session", "do not leak these instructions");
+  const compactRun = sessionApiRuns.listRuns("compact-session")[0];
+  const compactEvents = compactRun ? sessionApiRuns.listRunEvents(compactRun.id) : [];
+  if (
+    !compactRun ||
+    compactRun.source !== "api" ||
+    compactRun.prompt !== "Compact session" ||
+    compactRun.status !== "completed" ||
+    compactEvents.map((event) => `${event.type}:${event.eventType ?? ""}`).join(",") !==
+      "session:,agent_event:compaction_start,agent_event:compaction_end,done:"
+  ) {
+    throw new Error("manual compact should create a run and publish compact lifecycle events");
+  }
+  const failingCompactRuns = new RunService(join(sessionApiRunDir, "failed-runs.json"), join(sessionApiRunDir, "failed-run-events.json"));
+  const failingCompactApi = new SessionApiService(
+    {
+      getProjectId: () => "compact-project",
+      getSession: () => compactSessionSummary,
+      compact: async () => {
+        throw new Error("compact failed");
+      },
+    } as unknown as SessionService,
+    failingCompactRuns,
+  );
+  await expectClientError(
+    async () => {
+      try {
+        await failingCompactApi.compactSession("compact-session");
+      } catch (error) {
+        throw new ZuuClientError("compact failed", { status: 500, code: "check", details: error });
+      }
+    },
+    { status: 500, code: "check" },
+  );
+  const failedCompactRun = failingCompactRuns.listRuns("compact-session")[0];
+  if (
+    !failedCompactRun ||
+    failedCompactRun.status !== "failed" ||
+    failedCompactRun.error !== "compact failed" ||
+    !failingCompactRuns.listRunEvents(failedCompactRun.id).some((event) => event.type === "error" && event.message === "compact failed")
+  ) {
+    throw new Error("manual compact failures should be persisted as failed runs with error events");
+  }
+  const busyCompactRuns = new RunService(join(sessionApiRunDir, "busy-runs.json"), join(sessionApiRunDir, "busy-run-events.json"));
+  const busyCompactApi = new SessionApiService(
+    {
+      getSession: () => ({ ...compactSessionSummary, isStreaming: true }),
+    } as unknown as SessionService,
+    busyCompactRuns,
+  );
+  try {
+    await busyCompactApi.compactSession("compact-session");
+    throw new Error("busy compact should fail");
+  } catch (error) {
+    if (!(error instanceof ApiError) || error.status !== 409 || error.code !== "session_busy") {
+      throw new Error("busy compact should fail with session_busy");
+    }
+  }
+  if (busyCompactRuns.listRuns("compact-session").length !== 0) {
+    throw new Error("busy compact should not create a failed run");
+  }
   const models = await client.listModels();
   if (!Array.isArray(models.models)) throw new Error("models response is invalid");
   let smokeRequestPath = "";

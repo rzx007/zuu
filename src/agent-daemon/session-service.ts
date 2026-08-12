@@ -242,6 +242,14 @@ export class SessionService {
 
   async compact(sessionId: string, instructions?: string) {
     const managed = this.getManagedRuntime(sessionId);
+    if (managed.runtime.session.isStreaming) {
+      throw new ApiError("Session is running; abort it before compacting", {
+        status: 409,
+        code: "session_busy",
+        details: { sessionId },
+      });
+    }
+
     await managed.runtime.session.compact(instructions);
     managed.updatedAt = new Date().toISOString();
     return this.summarizeSession(managed.runtime.session);

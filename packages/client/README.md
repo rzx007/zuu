@@ -117,6 +117,8 @@ for await (const event of client.followUpSession(session.id, {
   console.log(event.type);
 }
 
+await client.compact(session.id, "保留项目结构、当前限制和下一步计划。");
+
 const projectRuns = await client.listProjectRuns(currentProjectId);
 const loadedSession = await client.getProjectSession(currentProjectId, session.id);
 const updatedSession = await client.updateProjectSession(currentProjectId, session.id, {
