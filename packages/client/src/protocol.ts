@@ -264,6 +264,8 @@ export interface AuditEventsQuery {
   outcome?: AuditEventOutcome;
   target?: string;
   authScope?: AuthScope;
+  authActor?: string;
+  authTokenId?: string;
   since?: string;
   until?: string;
 }

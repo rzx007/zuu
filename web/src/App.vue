@@ -78,6 +78,8 @@ const auditEvents = ref<AuditEvent[]>([])
 const auditAction = ref<'' | AuditEventAction>('')
 const auditOutcome = ref<'' | AuditEventOutcome>('')
 const auditAuthScope = ref<'' | AuthScope>('')
+const auditAuthActor = ref('')
+const auditAuthTokenId = ref('')
 const auditTarget = ref('')
 const auditSince = ref('')
 const auditUntil = ref('')
@@ -390,6 +392,8 @@ async function loadAuditEvents() {
     action: auditAction.value || undefined,
     outcome: auditOutcome.value || undefined,
     authScope: auditAuthScope.value || undefined,
+    authActor: auditAuthActor.value.trim() || undefined,
+    authTokenId: auditAuthTokenId.value.trim() || undefined,
     target: auditTarget.value.trim() || undefined,
     since: optionalDatetimeIso(auditSince.value),
     until: optionalDatetimeIso(auditUntil.value),
@@ -1553,6 +1557,10 @@ onUnmounted(() => {
               </div>
               <input v-model="auditTarget" class="field-input" placeholder="Target contains" @keydown.enter="loadAuditEvents">
               <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
+                <input v-model="auditAuthActor" class="field-input" placeholder="Auth actor" @keydown.enter="loadAuditEvents">
+                <input v-model="auditAuthTokenId" class="field-input" placeholder="Auth token id" @keydown.enter="loadAuditEvents">
+              </div>
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
                 <input v-model="auditSince" class="field-input" type="datetime-local" aria-label="Audit since" @keydown.enter="loadAuditEvents">
                 <input v-model="auditUntil" class="field-input" type="datetime-local" aria-label="Audit until" @keydown.enter="loadAuditEvents">
               </div>
@@ -1564,6 +1572,8 @@ onUnmounted(() => {
                   </div>
                   <span>{{ event.createdAt }}</span>
                   <span v-if="event.details?.authScope">{{ event.details.authScope }}</span>
+                  <span v-if="event.details?.authActor">{{ event.details.authActor }}</span>
+                  <span v-if="event.details?.authTokenId">{{ event.details.authTokenId }}</span>
                   <p v-if="event.target">{{ event.target }}</p>
                 </div>
               </div>

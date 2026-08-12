@@ -103,17 +103,39 @@ async function main() {
   if (!Array.isArray(readOnlyProjects.projects)) {
     throw new Error("read token should be able to call protected GET routes");
   }
+  const localReadTokenStatus = auth.status().tokens.find((token) => token.actor === "local" && token.scope === "read");
+  if (!localReadTokenStatus) throw new Error("local read token status should be available");
   const readScopedAuditEvents = await client.listAuditEvents({ action: "api.read", target: "GET /v1/projects", limit: 20 });
-  if (!readScopedAuditEvents.events.some((event) => event.target === "GET /v1/projects" && event.details?.authScope === "read")) {
-    throw new Error("read token API audit events should include authScope");
+  if (
+    !readScopedAuditEvents.events.some(
+      (event) =>
+        event.target === "GET /v1/projects" &&
+        event.details?.authScope === "read" &&
+        event.details.authActor === "local" &&
+        event.details.authTokenId === localReadTokenStatus.id,
+    )
+  ) {
+    throw new Error("read token API audit events should include authScope, authActor, and authTokenId");
   }
-  const readScopeFilteredAuditEvents = await client.listAuditEvents({ action: "api.read", authScope: "read", target: "GET /v1/projects", limit: 20 });
+  const readScopeFilteredAuditEvents = await client.listAuditEvents({
+    action: "api.read",
+    authScope: "read",
+    authActor: "local",
+    authTokenId: localReadTokenStatus.id,
+    target: "GET /v1/projects",
+    limit: 20,
+  });
   const readScopeFilteredEvent = readScopeFilteredAuditEvents.events.find((event) => event.target === "GET /v1/projects");
   if (
     !readScopeFilteredEvent ||
-    readScopeFilteredAuditEvents.events.some((event) => event.details?.authScope !== "read")
+    readScopeFilteredAuditEvents.events.some(
+      (event) =>
+        event.details?.authScope !== "read" ||
+        event.details.authActor !== "local" ||
+        event.details.authTokenId !== localReadTokenStatus.id,
+    )
   ) {
-    throw new Error("audit events should be filterable by authScope");
+    throw new Error("audit events should be filterable by authScope, authActor, and authTokenId");
   }
   const readSince = new Date(Date.parse(readScopeFilteredEvent.createdAt) - 1).toISOString();
   const readUntil = new Date(Date.parse(readScopeFilteredEvent.createdAt) - 1).toISOString();
@@ -136,6 +158,16 @@ async function main() {
   const createdReadClient = createZuuClient({ baseUrl: "http://zuu.local", fetch: fetchFromApp, apiToken: createdReadToken.apiToken });
   if (!(await createdReadClient.listProjects()).projects.length) {
     throw new Error("created read token should be able to call protected GET routes");
+  }
+  const createdReadAuditEvents = await client.listAuditEvents({
+    action: "api.read",
+    target: "GET /v1/projects",
+    authActor: "check-reader",
+    authTokenId: createdReadToken.token.id,
+    limit: 20,
+  });
+  if (!createdReadAuditEvents.events.some((event) => event.details?.authScope === "read")) {
+    throw new Error("created actor token API audit events should include actor and token id");
   }
   await expectClientError(() => createdReadClient.createProject({ cwd: process.cwd(), name: "created read token write check" }), {
     status: 403,
@@ -263,7 +295,7 @@ async function main() {
       const request = input instanceof Request ? input : new Request(input);
       sawAuditRoute =
         request.url ===
-        "http://zuu.local/v1/audit-events?limit=5&action=package.trust&outcome=success&target=npm%3Acheck&authScope=admin&since=2026-08-12T00%3A00%3A00.000Z&until=2026-08-13T00%3A00%3A00.000Z";
+        "http://zuu.local/v1/audit-events?limit=5&action=package.trust&outcome=success&target=npm%3Acheck&authScope=admin&authActor=local&authTokenId=local-admin&since=2026-08-12T00%3A00%3A00.000Z&until=2026-08-13T00%3A00%3A00.000Z";
       return Response.json({ events: [] });
     },
   });
@@ -273,6 +305,8 @@ async function main() {
     outcome: "success",
     target: "npm:check",
     authScope: "admin",
+    authActor: "local",
+    authTokenId: "local-admin",
     since: "2026-08-12T00:00:00.000Z",
     until: "2026-08-13T00:00:00.000Z",
   });
@@ -296,12 +330,15 @@ async function main() {
     throw new Error("local auth tokens should be generated and rotated");
   }
   const extraReadToken = localAuth.createToken({ scope: "read", actor: "service-check" });
+  const extraReadContext = localAuth.contextForAuthorization(`Bearer ${extraReadToken.apiToken}`);
   if (
     !extraReadToken.apiToken ||
     extraReadToken.token.actor !== "service-check" ||
-    localAuth.scopeForAuthorization(`Bearer ${extraReadToken.apiToken}`) !== "read"
+    localAuth.scopeForAuthorization(`Bearer ${extraReadToken.apiToken}`) !== "read" ||
+    extraReadContext?.actor !== "service-check" ||
+    extraReadContext.tokenId !== extraReadToken.token.id
   ) {
-    throw new Error("local auth service should create additional actor-scoped tokens");
+    throw new Error("local auth service should create additional actor-scoped token contexts");
   }
   const revokedExtraReadToken = localAuth.revokeToken(extraReadToken.token.id);
   if (
@@ -326,7 +363,11 @@ async function main() {
   }
 
   const auditService = new AuditService(join(mkdtempSync(join(tmpdir(), "zuu-audit-service-check-")), "audit.json"));
-  const auditEvent = auditService.record({ action: "package.trust", target: "npm:check", details: { source: "npm:check", authScope: "admin" } });
+  const auditEvent = auditService.record({
+    action: "package.trust",
+    target: "npm:check",
+    details: { source: "npm:check", authScope: "admin", authActor: "local", authTokenId: "local-admin" },
+  });
   auditService.record({ action: "package.add", target: "npm:other", outcome: "failure" });
   if (auditService.list(1).length !== 1 || auditService.list(0).length !== 1) {
     throw new Error("audit service should record and clamp event limits");
@@ -336,10 +377,14 @@ async function main() {
     auditService.list({ action: "package.trust", outcome: "failure" }).length !== 0 ||
     auditService.list({ authScope: "admin" }).length !== 1 ||
     auditService.list({ authScope: "read" }).length !== 0 ||
+    auditService.list({ authActor: "local" }).length !== 1 ||
+    auditService.list({ authActor: "other" }).length !== 0 ||
+    auditService.list({ authTokenId: "local-admin" }).length !== 1 ||
+    auditService.list({ authTokenId: "missing" }).length !== 0 ||
     auditService.list({ target: "check", since: new Date(Date.parse(auditEvent.createdAt) - 1).toISOString() }).length !== 1 ||
     auditService.list({ target: "check", until: new Date(Date.parse(auditEvent.createdAt) - 1).toISOString() }).length !== 0
   ) {
-    throw new Error("audit service should filter by action, outcome, target, authScope, and time window");
+    throw new Error("audit service should filter by action, outcome, target, authScope, actor, token id, and time window");
   }
   const packageApiAudit = new AuditService(join(mkdtempSync(join(tmpdir(), "zuu-package-api-audit-check-")), "audit.json"));
   const failingPackageApi = new PackageApiService(
@@ -1816,8 +1861,16 @@ async function main() {
   await client.addPackage({ source: packageAuditSource });
   await client.trustPackage({ source: packageAuditSource });
   const mutatingAuditEvents = await client.listAuditEvents({ action: "api.mutate", outcome: "success", target: "/v1/packages/trust", limit: 20 });
-  if (!mutatingAuditEvents.events.some((event) => event.target === "POST /v1/packages/trust" && event.details?.authScope === "admin")) {
-    throw new Error("successful mutating API calls should be recorded in audit events");
+  if (
+    !mutatingAuditEvents.events.some(
+      (event) =>
+        event.target === "POST /v1/packages/trust" &&
+        event.details?.authScope === "admin" &&
+        event.details.authActor === "local" &&
+        event.details.authTokenId === "local-admin",
+    )
+  ) {
+    throw new Error("successful mutating API calls should record auth scope, actor, and token id");
   }
   const latestAuditEvents = await client.listAuditEvents(20);
   if (!latestAuditEvents.events.some((event) => event.action === "package.trust" && event.target === packageAuditSource)) {
@@ -1832,6 +1885,14 @@ async function main() {
     code: "validation_failed",
   });
   await expectClientError(() => client.listAuditEvents({ authScope: "invalid" as never }), {
+    status: 400,
+    code: "validation_failed",
+  });
+  await expectClientError(() => client.listAuditEvents({ authActor: " " }), {
+    status: 400,
+    code: "validation_failed",
+  });
+  await expectClientError(() => client.listAuditEvents({ authTokenId: "x".repeat(129) }), {
     status: 400,
     code: "validation_failed",
   });

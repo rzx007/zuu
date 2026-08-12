@@ -234,6 +234,8 @@ function withAuditQuery(query: number | AuditEventsQuery | undefined) {
     outcome: query?.outcome,
     target: query?.target,
     authScope: query?.authScope,
+    authActor: query?.authActor,
+    authTokenId: query?.authTokenId,
     since: query?.since,
     until: query?.until,
   });

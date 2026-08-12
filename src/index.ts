@@ -40,7 +40,7 @@ app.use("/v1/*", async (c, next) => {
   await next();
 });
 
-app.use("/v1/*", createAuditMiddleware(audit, { resolveAuthScope: (authorization) => auth.scopeForAuthorization(authorization) }));
+app.use("/v1/*", createAuditMiddleware(audit, { resolveAuthContext: (authorization) => auth.contextForAuthorization(authorization) }));
 
 app.all("/api/*", (c) => c.json(jsonError("Use /v1 instead of /api.", 404), 404));
 

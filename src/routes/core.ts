@@ -30,6 +30,8 @@ export function registerCoreRoutes({ app, audit, auth, daemon }: RouteDeps) {
       const action = auditAction(c.req.query("action"));
       const outcome = auditOutcome(c.req.query("outcome"));
       const authScope = authScopeFilter(c.req.query("authScope"));
+      const authActor = auditTextFilter(c.req.query("authActor"), "authActor");
+      const authTokenId = auditTextFilter(c.req.query("authTokenId"), "authTokenId");
       const since = auditTimestamp(c.req.query("since"), "since");
       const until = auditTimestamp(c.req.query("until"), "until");
       return c.json({
@@ -39,6 +41,8 @@ export function registerCoreRoutes({ app, audit, auth, daemon }: RouteDeps) {
           outcome,
           target: c.req.query("target"),
           authScope,
+          authActor,
+          authTokenId,
           since,
           until,
         }),
@@ -149,6 +153,15 @@ function auditTimestamp(value: string | undefined, field: "since" | "until") {
   const timestamp = Date.parse(value);
   if (Number.isNaN(timestamp)) throw new ApiError(`${field} is invalid`, { status: 400, code: "validation_failed", details: { field } });
   return new Date(timestamp).toISOString();
+}
+
+function auditTextFilter(value: string | undefined, field: "authActor" | "authTokenId") {
+  if (value === undefined) return undefined;
+  const trimmed = value.trim();
+  if (!trimmed || trimmed.length > 128) {
+    throw new ApiError(`${field} is invalid`, { status: 400, code: "validation_failed", details: { field } });
+  }
+  return trimmed;
 }
 
 function parseAuthCreateToken(value: unknown): AuthCreateTokenRequest {

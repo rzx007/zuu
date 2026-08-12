@@ -1,13 +1,13 @@
 import type { MiddlewareHandler } from "hono";
 import type { AuditEventAction } from "@zuu/client";
-import type { AuthScope } from "./auth-service";
+import type { AuthContext } from "./auth-service";
 import type { AuditService } from "./audit-service";
 
 const MUTATING_METHODS = new Set(["POST", "PATCH", "DELETE"]);
 const IGNORED_READ_PATHS = new Set(["/v1/health"]);
 
 interface AuditMiddlewareOptions {
-  resolveAuthScope?: (authorization: string | undefined) => AuthScope | undefined;
+  resolveAuthContext?: (authorization: string | undefined) => AuthContext | undefined;
 }
 
 export function createAuditMiddleware(audit: AuditService, options: AuditMiddlewareOptions = {}): MiddlewareHandler {
@@ -19,7 +19,7 @@ export function createAuditMiddleware(audit: AuditService, options: AuditMiddlew
     }
 
     await next();
-    const authScope = options.resolveAuthScope?.(c.req.header("authorization"));
+    const authContext = options.resolveAuthContext?.(c.req.header("authorization"));
     audit.record({
       action,
       target: `${c.req.method} ${c.req.path}`,
@@ -28,7 +28,13 @@ export function createAuditMiddleware(audit: AuditService, options: AuditMiddlew
         method: c.req.method,
         path: c.req.path,
         status: c.res.status,
-        ...(authScope ? { authScope } : {}),
+        ...(authContext
+          ? {
+              authScope: authContext.scope,
+              authActor: authContext.actor,
+              authTokenId: authContext.tokenId,
+            }
+          : {}),
       },
     });
   };

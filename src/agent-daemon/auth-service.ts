@@ -65,7 +65,15 @@ export interface AuthRevokeTokenResult {
 export interface AuthDecision {
   authorized: boolean;
   scope?: AuthScope;
+  actor?: string;
+  tokenId?: string;
   reason?: "unauthorized" | "forbidden";
+}
+
+export interface AuthContext {
+  scope: AuthScope;
+  actor: string;
+  tokenId: string;
 }
 
 const DEFAULT_TOKEN_RECORD: AuthTokenRecord = { createdAt: "", tokens: [] };
@@ -97,21 +105,26 @@ export class AuthService {
   }
 
   authorize(authorization: string | undefined, requiredScope: AuthScope = "admin"): AuthDecision {
-    const scope = this.scopeForAuthorization(authorization);
-    if (!scope) return { authorized: false, reason: "unauthorized" };
-    if (scope === "admin") return { authorized: true, scope };
-    if (scope === "read") {
-      return requiredScope === "read" ? { authorized: true, scope: "read" } : { authorized: false, scope: "read", reason: "forbidden" };
+    const context = this.contextForAuthorization(authorization);
+    if (!context) return { authorized: false, reason: "unauthorized" };
+    if (context.scope === "admin") return { authorized: true, ...context };
+    if (context.scope === "read") {
+      return requiredScope === "read" ? { authorized: true, ...context } : { authorized: false, ...context, reason: "forbidden" };
     }
     return { authorized: false, reason: "unauthorized" };
   }
 
   scopeForAuthorization(authorization: string | undefined): AuthScope | undefined {
+    return this.contextForAuthorization(authorization)?.scope;
+  }
+
+  contextForAuthorization(authorization: string | undefined): AuthContext | undefined {
     const token = bearerToken(authorization);
     if (!token) return undefined;
-    if (this.envToken) return token === this.envToken ? "admin" : undefined;
+    if (this.envToken) return token === this.envToken ? { scope: "admin", actor: "env", tokenId: "env-admin" } : undefined;
 
-    return this.getLocalRecord().tokens.find((item) => item.token === token)?.scope;
+    const stored = this.getLocalRecord().tokens.find((item) => item.token === token);
+    return stored ? { scope: stored.scope, actor: stored.actor, tokenId: stored.id } : undefined;
   }
 
   status(): AuthStatus {

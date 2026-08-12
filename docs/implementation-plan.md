@@ -737,7 +737,7 @@ UI end-to-end
 - `GET /v1/health` 正常且作为公开探针，已返回 `ok/status/protocolVersion/version/startedAt/uptimeMs/node/platform`；除 health 外的 `/v1/*` 默认要求 Bearer token。
 - API 错误响应已统一为 `{ error: { message, status, retryable, code?, details? } }`；`@zuu/client` 会把非 2xx 响应映射为 `ZuuClientError`。
 - `GET /v1/auth/status`、`POST /v1/auth/rotate`、`POST /v1/auth/tokens` 和 `DELETE /v1/auth/tokens/:tokenId` 已支持本地多 token 状态查询、整体轮换、按 actor 创建 read/admin token 和撤销 token；read token 只能访问受保护 `GET /v1/*`，写操作需要 admin token；最后一个 admin token 不允许撤销；`ZUU_API_TOKEN` 仍可作为环境变量覆盖，此时它作为 admin token 由进程外管理且 API 不允许轮换、创建或撤销。
-- `GET /v1/audit-events` 已支持查询最近审计事件，并可按 `action`、`outcome`、`target`、`authScope`、`since`、`until` 和 `limit` 过滤；当前会为受保护的 `GET /v1/*` 只读操作记录 `api.read`，为已授权的 `POST/PATCH/DELETE /v1/*` 写操作记录 `api.mutate`，并在 details 中写入 `authScope`；还会额外记录 auth rotate、approval resolve 和 package add/trust/install/update/remove 等领域动作；公开探针 `/v1/health` 和 daemon 级 SSE `/v1/events` 不进入审计，同时避免写入 token/provider key 等密钥。
+- `GET /v1/audit-events` 已支持查询最近审计事件，并可按 `action`、`outcome`、`target`、`authScope`、`authActor`、`authTokenId`、`since`、`until` 和 `limit` 过滤；当前会为受保护的 `GET /v1/*` 只读操作记录 `api.read`，为已授权的 `POST/PATCH/DELETE /v1/*` 写操作记录 `api.mutate`，并在 details 中写入 `authScope`、`authActor` 和 `authTokenId` 元数据；还会额外记录 auth rotate、approval resolve 和 package add/trust/install/update/remove 等领域动作；公开探针 `/v1/health` 和 daemon 级 SSE `/v1/events` 不进入审计，同时避免写入原始 token/provider key 等密钥。
 - `GET /v1/diagnostics` 正常返回 SDK 版本、模型数量、skills、extensions、resource diagnostics、trusted packages、blocked packages、JSON store 健康状态和能力缺口，store diagnostics 已包含本地 auth-token store 和 audit-events store。
 - `POST /v1/prompt` 可以返回带稳定事件 ID 和 `createdAt` 的 SSE `session`、`error`、`agent_event` 和 `done` 事件；`GET /v1/events` 支持按 `runId`/`sessionId` 过滤，并通过 `afterEventId` 或 `Last-Event-ID` 先 replay 再订阅 live 事件。
 - `@zuu/client` 可从 Node.js 侧调用 health、diagnostics、prompt stream、session-scoped prompt、steer 和 follow-up，并可通过 `pnpm example:client` 运行第三方消费示例。
@@ -765,7 +765,7 @@ UI end-to-end
 - WebUI 已迁移到 Vue + Vite，并支持打开持久化 session、查看当前 session tree、按 entry fork、从本地 JSONL 路径 import、处理 pending approvals、启动/查看 fake workflow runs、创建/暂停/恢复/触发/删除 schedule、模型 smoke test、查看 audit events，以及通过 daemon 级 `subscribeEvents()` 实时展示事件并节流刷新 runs、approvals、session tree、schedule 和 workflow run 状态。
 - Package API 已能展示安装状态、信任状态、加载状态、显式触发安装/更新/删除，并通过持久化 operation 记录暴露任务进度和失败原因；WebUI 已能 trust/revoke package source 并展示 SDK resource diagnostics/collision。未信任 package 会保留在配置清单中，但已从 Pi `ResourceLoader` 和 `pi-package` workflow backend 的加载链路中过滤，diagnostics 会通过 `blockedPackages` 暴露被阻止加载的 source。
 - Approval 已接入 Pi tool call 拦截和 SSE 事件，但当前策略是 fail-closed：危险工具被阻断后需要用户 resolve 并重试 prompt，尚未实现挂起并恢复同一个 tool call 的交互式等待。
-- 当前 API token 已有 admin/read 最小权限分级和多 actor 本地 token 管理；审计日志已覆盖受保护只读 API、已授权写 API、auth token create/revoke、`authScope` details 和常用检索过滤；后续仍可继续细化更多 scope 和 actor 级审计字段。
+- 当前 API token 已有 admin/read 最小权限分级和多 actor 本地 token 管理；审计日志已覆盖受保护只读 API、已授权写 API、auth token create/revoke、`authScope` / `authActor` / `authTokenId` details 和常用检索过滤；后续仍可继续细化更多 scope 和 token lifecycle 策略。
 - 路径保护已有根目录级 allowlist，并已对默认只读工具增加敏感路径审批；tool-call approval policy 已收敛为按工具/动作声明的基础策略矩阵，覆盖 `bash/edit/write` 默认阻断以及 `read/grep/find/ls` 敏感路径阻断；后续可继续扩展更细的工具参数和动作级策略。
 - 默认工具集偏只读，`bash`、`edit`、`write` 需要 UI 显式启用。
 - 当前环境下真实模型 stream 可能因为网络返回 `Connection error`；daemon 已将 SDK assistant error 映射为 SSE error，并可通过模型 smoke test 把真实调用结果保存为 run/events。

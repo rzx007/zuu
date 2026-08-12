@@ -38,7 +38,14 @@ const client = createZuuClient({
 
 const health = await client.health();
 const auth = await client.authStatus();
-const audit = await client.listAuditEvents({ action: "package.trust", outcome: "success", authScope: "admin", since: "2026-08-12T00:00:00.000Z", limit: 20 });
+const audit = await client.listAuditEvents({
+  action: "package.trust",
+  outcome: "success",
+  authScope: "admin",
+  authActor: "local",
+  since: "2026-08-12T00:00:00.000Z",
+  limit: 20,
+});
 const diagnostics = await client.diagnostics();
 const packages = await client.listPackages();
 ```
