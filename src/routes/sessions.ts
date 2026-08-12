@@ -11,18 +11,26 @@ import {
   parseOpenSession,
   parsePrompt,
   parseSwitchSession,
+  parseUpdateSession,
 } from "../request-validation";
 import { writePromptStreamEvent } from "./sse";
 import type { RouteDeps } from "./types";
 
 export function registerSessionRoutes({ app, daemon }: RouteDeps) {
+  function sessionFallbackStatus(error: unknown, fallbackStatus = 400) {
+    return error instanceof Error &&
+      (error.message.startsWith("Unknown session") || error.message.includes("does not belong to project"))
+      ? 404
+      : fallbackStatus;
+  }
+
   async function streamPromptResponse(c: Context, request: PromptRequest) {
     const events = daemon.prompt(request);
     let first: IteratorResult<PromptStreamEvent>;
     try {
       first = await events.next();
     } catch (error) {
-      const fallbackStatus = error instanceof Error && error.message.startsWith("Unknown session") ? 404 : 400;
+      const fallbackStatus = sessionFallbackStatus(error);
       return c.json(jsonError(error, fallbackStatus), toStatus(error, fallbackStatus));
     }
 
@@ -61,6 +69,32 @@ export function registerSessionRoutes({ app, daemon }: RouteDeps) {
       return c.json({ sessions: await daemon.listStoredSessions(c.req.query("cwd"), c.req.query("projectId")) });
     } catch (error) {
       return c.json(jsonError(error, 500), toStatus(error, 500));
+    }
+  });
+
+  app.get("/v1/sessions/:sessionId", (c) => {
+    try {
+      return c.json({ session: daemon.getSession(c.req.param("sessionId"), c.req.query("projectId")) });
+    } catch (error) {
+      return c.json(jsonError(error, 404), toStatus(error, 404));
+    }
+  });
+
+  app.patch("/v1/sessions/:sessionId", async (c) => {
+    try {
+      const body = parseUpdateSession(await readJson(c.req));
+      return c.json({ session: daemon.updateSession(c.req.param("sessionId"), body, c.req.query("projectId")) });
+    } catch (error) {
+      const fallbackStatus = sessionFallbackStatus(error);
+      return c.json(jsonError(error, fallbackStatus), toStatus(error, fallbackStatus));
+    }
+  });
+
+  app.delete("/v1/sessions/:sessionId", async (c) => {
+    try {
+      return c.json({ session: await daemon.deleteSession(c.req.param("sessionId"), c.req.query("projectId")) });
+    } catch (error) {
+      return c.json(jsonError(error, 404), toStatus(error, 404));
     }
   });
 

@@ -18,7 +18,9 @@ import type {
   StoredSessionSummary,
   SwitchSessionRequest,
   ThinkingLevel,
+  UpdateSessionRequest,
 } from "@zuu/client";
+import { ApiError } from "../http";
 import type { ApprovalRegistry } from "./approval-service";
 import { assertAllowedPath, getSessionDir } from "./environment";
 import { entryRole, entryText } from "./events";
@@ -137,6 +139,43 @@ export class SessionService {
     return [...this.runtimes.values()]
       .filter((item) => !projectId || item.projectId === projectId)
       .map((item) => this.summarizeSession(item.runtime.session));
+  }
+
+  getSession(sessionId: string, projectId?: string) {
+    const managed = this.getManagedRuntime(sessionId);
+    if (projectId) this.assertSessionProject(managed, sessionId, projectId);
+    return this.summarizeSession(managed.runtime.session);
+  }
+
+  updateSession(sessionId: string, request: UpdateSessionRequest, projectId?: string) {
+    const managed = this.getManagedRuntime(sessionId);
+    if (projectId) this.assertSessionProject(managed, sessionId, projectId);
+    if (request.name !== undefined) {
+      const name = request.name.trim();
+      if (name) managed.runtime.session.setSessionName(name);
+    }
+    if (request.tools !== undefined) {
+      managed.runtime.session.setActiveToolsByName(request.tools);
+    }
+    managed.updatedAt = new Date().toISOString();
+    return this.summarizeSession(managed.runtime.session);
+  }
+
+  async deleteSession(sessionId: string, projectId?: string) {
+    const managed = this.getManagedRuntime(sessionId);
+    if (projectId) this.assertSessionProject(managed, sessionId, projectId);
+    if (managed.runtime.session.isStreaming) {
+      throw new ApiError("Session is running; abort it before deleting", {
+        status: 409,
+        code: "session_busy",
+        details: { sessionId },
+      });
+    }
+
+    const session = this.summarizeSession(managed.runtime.session);
+    await managed.runtime.dispose();
+    this.deleteManagedRuntime(managed);
+    return session;
   }
 
   async listStoredSessions(cwd?: string, projectId?: string) {
@@ -264,6 +303,19 @@ export class SessionService {
     const managed = this.runtimes.get(sessionId);
     if (!managed) throw new Error(`Unknown session: ${sessionId}`);
     return managed;
+  }
+
+  private assertSessionProject(managed: ManagedRuntime, sessionId: string, projectId: string) {
+    this.options.projects.get(projectId);
+    if (managed.projectId !== projectId) {
+      throw new Error(`Session ${sessionId} does not belong to project ${projectId}`);
+    }
+  }
+
+  private deleteManagedRuntime(managed: ManagedRuntime) {
+    for (const [sessionId, item] of this.runtimes) {
+      if (item === managed) this.runtimes.delete(sessionId);
+    }
   }
 
   private summarizeStoredSession(session: SessionInfo, projectId?: string): StoredSessionSummary {

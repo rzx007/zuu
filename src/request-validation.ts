@@ -14,6 +14,7 @@ import type {
   StartWorkflowRequest,
   SwitchSessionRequest,
   ThinkingLevel,
+  UpdateSessionRequest,
   UpdateProjectRequest,
 } from "@zuu/client";
 import {
@@ -78,6 +79,14 @@ export function parseOpenSession(value: unknown): OpenSessionRequest {
     name: optionalString(value.name, "name"),
     model: parseModel(value.model),
     thinkingLevel: parseThinkingLevel(value.thinkingLevel),
+    tools: optionalStringArray(value.tools, "tools"),
+  };
+}
+
+export function parseUpdateSession(value: unknown): UpdateSessionRequest {
+  assertObject(value);
+  return {
+    name: optionalString(value.name, "name"),
     tools: optionalStringArray(value.tools, "tools"),
   };
 }

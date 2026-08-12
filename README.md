@@ -48,6 +48,9 @@ ZUU_PI_WORKFLOW_RUN=1 pnpm check:pi-workflow
 - `DELETE /v1/projects/:projectId`
 - `GET /v1/projects/:projectId/sessions`
 - `POST /v1/projects/:projectId/sessions`
+- `GET /v1/projects/:projectId/sessions/:sessionId`
+- `PATCH /v1/projects/:projectId/sessions/:sessionId`
+- `DELETE /v1/projects/:projectId/sessions/:sessionId`
 - `GET /v1/projects/:projectId/session-files`
 - `POST /v1/projects/:projectId/sessions/open`
 - `GET /v1/projects/:projectId/runs`
@@ -82,6 +85,9 @@ ZUU_PI_WORKFLOW_RUN=1 pnpm check:pi-workflow
 - `GET /v1/package-operations/:operationId`
 - `GET /v1/sessions`
 - `GET /v1/session-files`
+- `GET /v1/sessions/:sessionId`
+- `PATCH /v1/sessions/:sessionId`
+- `DELETE /v1/sessions/:sessionId`
 - `GET /v1/sessions/:sessionId/tree`
 - `GET /v1/runs`
 - `GET /v1/runs/:runId`

@@ -45,6 +45,11 @@ export interface SessionSummary {
   updatedAt: string;
 }
 
+export interface UpdateSessionRequest {
+  name?: string;
+  tools?: string[];
+}
+
 export interface RunSummary {
   id: string;
   sessionId: string;

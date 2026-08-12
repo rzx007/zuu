@@ -40,6 +40,7 @@ import type {
   StartWorkflowRequest,
   SwitchSessionRequest,
   UpdateProjectRequest,
+  UpdateSessionRequest,
 } from "@zuu/client";
 import { RunService } from "./agent-daemon/run-service";
 import { SessionService } from "./agent-daemon/session-service";
@@ -136,6 +137,18 @@ export class ZuuDaemon {
 
   listSessions(projectId?: string) {
     return this.sessionService.listSessions(projectId);
+  }
+
+  getSession(sessionId: string, projectId?: string) {
+    return this.sessionService.getSession(sessionId, projectId);
+  }
+
+  updateSession(sessionId: string, request: UpdateSessionRequest, projectId?: string) {
+    return this.sessionService.updateSession(sessionId, request, projectId);
+  }
+
+  deleteSession(sessionId: string, projectId?: string) {
+    return this.sessionService.deleteSession(sessionId, projectId);
   }
 
   async listStoredSessions(cwd?: string, projectId?: string) {

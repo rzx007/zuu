@@ -64,6 +64,11 @@ for await (const event of client.followUpSession(session.id, {
 }
 
 const projectRuns = await client.listProjectRuns(currentProjectId);
+const loadedSession = await client.getProjectSession(currentProjectId, session.id);
+const updatedSession = await client.updateProjectSession(currentProjectId, session.id, {
+  name: "当前项目会话",
+  tools: ["read", "grep", "find", "ls", "zuu_status"],
+});
 if (projectRuns.runs[0]?.status === "running" || projectRuns.runs[0]?.status === "waiting_approval") {
   await client.abortProjectRun(currentProjectId, projectRuns.runs[0].id);
 }

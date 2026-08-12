@@ -473,6 +473,12 @@ async function switchProject() {
   await Promise.all([loadRuns(), loadStoredSessions(), loadSessionTree(), loadApprovals(), loadWorkflowRuns(), loadSchedules()])
 }
 
+function applySessionTools(session: SessionSummary) {
+  for (const tool of toolChoices) {
+    selectedTools[tool] = session.activeTools.includes(tool)
+  }
+}
+
 async function createProject() {
   const cwd = newProjectCwd.value.trim()
   if (!cwd) return
@@ -487,6 +493,29 @@ async function createProject() {
   syncProjectForm()
   addMessage('event', `project created: ${response.project.name}`)
   await switchProject()
+}
+
+async function saveCurrentSession() {
+  const sessionId = currentSession.value?.id
+  if (!sessionId) return
+  const response = await client.updateProjectSession(currentProjectId(), sessionId, {
+    name: sessionName.value.trim() || undefined,
+    tools: activeTools.value,
+  })
+  setActiveSession(response.session)
+  applySessionTools(response.session)
+  addMessage('event', `session updated: ${response.session.name || response.session.id.slice(0, 8)}`)
+  await Promise.all([loadRuns(), loadSessionTree()])
+}
+
+async function closeCurrentSession() {
+  const sessionId = currentSession.value?.id
+  if (!sessionId) return
+  const response = await client.deleteProjectSession(currentProjectId(), sessionId)
+  addMessage('event', `session closed: ${response.session.name || response.session.id.slice(0, 8)}`)
+  currentSession.value = undefined
+  sessionTree.value = []
+  await Promise.all([loadRuns(), loadStoredSessions(), loadProjects()])
 }
 
 async function updateProject() {
@@ -978,6 +1007,10 @@ onUnmounted(() => {
               <input v-model="selectedTools[tool]" type="checkbox">
               <span>{{ tool }}</span>
             </label>
+          </div>
+          <div class="flex flex-wrap gap-2">
+            <Button variant="outline" size="sm" :disabled="!currentSession" @click="saveCurrentSession().catch((error) => addMessage('error', errorMessage(error)))">Save session</Button>
+            <Button variant="ghost" size="sm" :disabled="!currentSession || currentSession.isStreaming" @click="closeCurrentSession().catch((error) => addMessage('error', errorMessage(error)))">Close</Button>
           </div>
         </section>
 

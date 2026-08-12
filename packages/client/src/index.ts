@@ -39,6 +39,7 @@ import type {
   StoredSessionsResponse,
   SwitchSessionRequest,
   UpdateProjectRequest,
+  UpdateSessionRequest,
   WorkflowArtifactResponse,
   WorkflowRunResponse,
   WorkflowRunsResponse,
@@ -81,6 +82,9 @@ export interface ZuuClient {
   deleteProject(projectId: string): Promise<ProjectResponse>;
   listProjectSessions(projectId: string): Promise<SessionsResponse>;
   createProjectSession(projectId: string, input?: Omit<CreateSessionRequest, "projectId">): Promise<SessionResponse>;
+  getProjectSession(projectId: string, sessionId: string): Promise<SessionResponse>;
+  updateProjectSession(projectId: string, sessionId: string, input: UpdateSessionRequest): Promise<SessionResponse>;
+  deleteProjectSession(projectId: string, sessionId: string): Promise<SessionResponse>;
   listProjectStoredSessions(projectId: string): Promise<StoredSessionsResponse>;
   openProjectSession(projectId: string, input: Omit<OpenSessionRequest, "projectId">): Promise<SessionResponse>;
   listProjectRuns(projectId: string, sessionId?: string): Promise<RunsResponse>;
@@ -144,6 +148,9 @@ export interface ZuuClient {
   getApproval(approvalId: string): Promise<ApprovalResponse>;
   resolveApproval(approvalId: string, input: ResolveApprovalRequest): Promise<ApprovalResponse>;
   createSession(input?: CreateSessionRequest): Promise<SessionResponse>;
+  getSession(sessionId: string, projectId?: string): Promise<SessionResponse>;
+  updateSession(sessionId: string, input: UpdateSessionRequest, projectId?: string): Promise<SessionResponse>;
+  deleteSession(sessionId: string, projectId?: string): Promise<SessionResponse>;
   openSession(input: OpenSessionRequest): Promise<SessionResponse>;
   prompt(input: PromptRequest, options?: PromptStreamOptions): AsyncGenerator<PromptStreamEvent>;
   promptSession(
@@ -350,6 +357,33 @@ export function createZuuClient(options: ZuuClientOptions = {}): ZuuClient {
         method: "POST",
         body: JSON.stringify(input),
       }, apiToken),
+    getProjectSession: (projectId, sessionId) =>
+      requestJson<SessionResponse>(
+        fetchImpl,
+        baseUrl,
+        `/v1/projects/${encodeURIComponent(projectId)}/sessions/${encodeURIComponent(sessionId)}`,
+        undefined,
+        apiToken,
+      ),
+    updateProjectSession: (projectId, sessionId, input) =>
+      requestJson<SessionResponse>(
+        fetchImpl,
+        baseUrl,
+        `/v1/projects/${encodeURIComponent(projectId)}/sessions/${encodeURIComponent(sessionId)}`,
+        {
+          method: "PATCH",
+          body: JSON.stringify(input),
+        },
+        apiToken,
+      ),
+    deleteProjectSession: (projectId, sessionId) =>
+      requestJson<SessionResponse>(
+        fetchImpl,
+        baseUrl,
+        `/v1/projects/${encodeURIComponent(projectId)}/sessions/${encodeURIComponent(sessionId)}`,
+        { method: "DELETE" },
+        apiToken,
+      ),
     listProjectStoredSessions: (projectId) =>
       requestJson<StoredSessionsResponse>(
         fetchImpl,
@@ -707,6 +741,33 @@ export function createZuuClient(options: ZuuClientOptions = {}): ZuuClient {
         method: "POST",
         body: JSON.stringify(input),
       }, apiToken),
+    getSession: (sessionId, projectId) =>
+      requestJson<SessionResponse>(
+        fetchImpl,
+        baseUrl,
+        withQuery(`/v1/sessions/${encodeURIComponent(sessionId)}`, { projectId }),
+        undefined,
+        apiToken,
+      ),
+    updateSession: (sessionId, input, projectId) =>
+      requestJson<SessionResponse>(
+        fetchImpl,
+        baseUrl,
+        withQuery(`/v1/sessions/${encodeURIComponent(sessionId)}`, { projectId }),
+        {
+          method: "PATCH",
+          body: JSON.stringify(input),
+        },
+        apiToken,
+      ),
+    deleteSession: (sessionId, projectId) =>
+      requestJson<SessionResponse>(
+        fetchImpl,
+        baseUrl,
+        withQuery(`/v1/sessions/${encodeURIComponent(sessionId)}`, { projectId }),
+        { method: "DELETE" },
+        apiToken,
+      ),
     openSession: (input) =>
       requestJson<SessionResponse>(fetchImpl, baseUrl, "/v1/sessions/open", {
         method: "POST",

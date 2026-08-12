@@ -150,6 +150,36 @@ async function main() {
   if (!projectSessions.sessions.some((session) => session.id === projectSession.session.id)) {
     throw new Error("project-scoped sessions should include the project session");
   }
+  const loadedProjectSession = await client.getProjectSession(project.project.id, projectSession.session.id);
+  if (loadedProjectSession.session.id !== projectSession.session.id) {
+    throw new Error("project session lookup returned the wrong session");
+  }
+  const renamedProjectSession = await client.updateProjectSession(project.project.id, projectSession.session.id, {
+    name: "renamed project session",
+    tools: ["read", "zuu_status"],
+  });
+  if (
+    renamedProjectSession.session.name !== "renamed project session" ||
+    renamedProjectSession.session.activeTools.join(",") !== "read,zuu_status"
+  ) {
+    throw new Error("project session update response is invalid");
+  }
+  const globallyLoadedSession = await client.getSession(projectSession.session.id, project.project.id);
+  if (globallyLoadedSession.session.name !== "renamed project session") {
+    throw new Error("global session lookup returned the wrong session");
+  }
+  const globallyUpdatedSession = await client.updateSession(projectSession.session.id, { name: "global session rename" }, project.project.id);
+  if (globallyUpdatedSession.session.name !== "global session rename") {
+    throw new Error("global session update returned the wrong session");
+  }
+  const deletedProjectSession = await client.deleteProjectSession(project.project.id, projectSession.session.id);
+  if (deletedProjectSession.session.id !== projectSession.session.id) {
+    throw new Error("project session delete returned the wrong session");
+  }
+  const projectSessionsAfterDelete = await client.listProjectSessions(project.project.id);
+  if (projectSessionsAfterDelete.sessions.some((session) => session.id === projectSession.session.id)) {
+    throw new Error("deleted project session should be removed from active sessions");
+  }
   const globalProjectSessions = await client.listSessions(project.project.id);
   if (!globalProjectSessions.sessions.every((session) => session.projectId === project.project.id)) {
     throw new Error("global session list should support project filtering");
@@ -172,6 +202,10 @@ async function main() {
   await expectClientError(() => client.getProject(project.project.id), { status: 404, code: "not_found" });
   await expectClientError(() => client.deleteProject("default"), { status: 400, code: "validation_failed" });
   await expectClientError(() => client.createProject({ cwd: ".." }), { status: 400, code: "validation_failed" });
+  await expectClientError(() => client.getSession("missing"), { status: 404, code: "not_found" });
+  await expectClientError(() => client.updateSession("missing", { name: "missing" }), { status: 404, code: "not_found" });
+  await expectClientError(() => client.deleteSession("missing"), { status: 404, code: "not_found" });
+  await expectClientError(() => client.getProjectSession(defaultProject.id, "missing"), { status: 404, code: "not_found" });
   await expectClientError(() => client.listRunEvents("missing"), { status: 404, code: "not_found" });
   await expectClientError(() => client.abortRun("missing"), { status: 404, code: "not_found" });
   await expectClientError(() => client.listProjectRunEvents(defaultProject.id, "missing"), { status: 404, code: "not_found" });
