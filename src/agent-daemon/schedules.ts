@@ -12,6 +12,7 @@ const MAX_TIMER_DELAY_MS = 2_147_483_647;
 const MIN_INTERVAL_MS = 1_000;
 const CRON_SEARCH_LIMIT_MINUTES = 366 * 24 * 60;
 const SCHEDULE_RUN_STATUSES = new Set(["queued", "running", "completed", "failed", "skipped", "aborted"]);
+const SCHEDULE_OVERLAP_POLICIES = new Set(["skip"]);
 
 type PromptAction = Extract<ScheduleAction, { type: "prompt" }>;
 type WorkflowAction = Extract<ScheduleAction, { type: "workflow" }>;
@@ -32,6 +33,9 @@ function isSchedule(value: unknown): value is Schedule {
       "status" in value &&
       "trigger" in value &&
       "action" in value &&
+      "overlapPolicy" in value &&
+      typeof value.overlapPolicy === "string" &&
+      SCHEDULE_OVERLAP_POLICIES.has(value.overlapPolicy) &&
       "runs" in value &&
       Array.isArray(value.runs) &&
       value.runs.every(isScheduleRun) &&
@@ -132,6 +136,11 @@ function validateAction(action: ScheduleAction) {
   throw new Error("action.type must be prompt or workflow");
 }
 
+function validateOverlapPolicy(overlapPolicy: CreateScheduleRequest["overlapPolicy"]) {
+  if (overlapPolicy === undefined || overlapPolicy === "skip") return;
+  throw new Error("overlapPolicy queue and parallel are not supported yet; use skip");
+}
+
 function computeNextRunAt(trigger: ScheduleTrigger, after = Date.now()) {
   if (trigger.kind === "once") {
     const runAt = Date.parse(trigger.runAt ?? "");
@@ -187,6 +196,7 @@ export class ScheduleStore {
   create(request: CreateScheduleRequest) {
     validateTrigger(request.trigger);
     validateAction(request.action);
+    validateOverlapPolicy(request.overlapPolicy);
 
     const now = new Date().toISOString();
     const schedule: Schedule = {
@@ -195,6 +205,7 @@ export class ScheduleStore {
       status: "active",
       trigger: request.trigger,
       action: request.action,
+      overlapPolicy: request.overlapPolicy ?? "skip",
       createdAt: now,
       updatedAt: now,
       nextRunAt: computeNextRunAt(request.trigger),
@@ -231,7 +242,7 @@ export class ScheduleStore {
   async trigger(scheduleId: string, options: { automatic?: boolean } = {}) {
     const schedule = this.get(scheduleId);
     if (schedule.runs.some((run) => run.status === "running")) {
-      throw new Error("Schedule is already running");
+      return this.skipOverlap(schedule, options);
     }
 
     const previousNextRunAt = schedule.nextRunAt;
@@ -304,6 +315,30 @@ export class ScheduleStore {
     }
 
     schedule.nextRunAt = computeNextRunAt(schedule.trigger);
+  }
+
+  private skipOverlap(schedule: Schedule, options: { automatic?: boolean }) {
+    const previousNextRunAt = schedule.nextRunAt;
+    const now = new Date().toISOString();
+    this.clearTimer(schedule.id);
+    const run: ScheduleRun = {
+      id: crypto.randomUUID(),
+      scheduleId: schedule.id,
+      status: "skipped",
+      scheduledFor: options.automatic && previousNextRunAt ? previousNextRunAt : now,
+      finishedAt: now,
+      reason: "schedule_overlap",
+    };
+    schedule.runs = [run, ...schedule.runs].slice(0, SCHEDULE_RUN_HISTORY_LIMIT);
+    schedule.updatedAt = now;
+    if (options.automatic) {
+      this.updateNextRun(schedule);
+    } else {
+      this.restoreNextRun(schedule, previousNextRunAt);
+    }
+    this.persist();
+    this.arm(schedule);
+    return schedule;
   }
 
   private arm(schedule: Schedule) {

@@ -9,6 +9,7 @@ import { PackageTrustStore } from "../src/agent-daemon/package-trust";
 import { ProjectStore } from "../src/agent-daemon/projects";
 import { RunEventStore } from "../src/agent-daemon/run-events";
 import { loadRunHistory, saveRunHistory } from "../src/agent-daemon/run-history";
+import { ScheduleStore } from "../src/agent-daemon/schedules";
 import { createWorkflowBackend } from "../src/agent-daemon/workflows";
 import { createZuuClient, ZuuClientError } from "@zuu/client";
 import { createEventBus } from "@earendil-works/pi-coding-agent";
@@ -348,6 +349,9 @@ async function main() {
   if (schedule.schedule.action.projectId !== defaultProject.id) {
     throw new Error("schedule action should default to the default project");
   }
+  if (schedule.schedule.overlapPolicy !== "skip") {
+    throw new Error("schedule overlap policy should default to skip");
+  }
   const filteredSchedules = await client.listProjectSchedules(defaultProject.id);
   if (!filteredSchedules.schedules.some((item) => item.id === schedule.schedule.id)) {
     throw new Error("project-filtered schedules should include the default project schedule");
@@ -399,6 +403,17 @@ async function main() {
     throw new Error("cron schedule response is invalid");
   }
   await client.deleteProjectSchedule(defaultProject.id, cronSchedule.schedule.id);
+  let unsupportedOverlapFailed = false;
+  try {
+    await client.createProjectSchedule(defaultProject.id, {
+      trigger: { kind: "interval", everyMs: 60_000 },
+      action: { type: "workflow", workflowId: workflows.workflows[0].id },
+      overlapPolicy: "queue",
+    });
+  } catch {
+    unsupportedOverlapFailed = true;
+  }
+  if (!unsupportedOverlapFailed) throw new Error("unsupported overlap policy should fail");
   let cronTimezoneFailed = false;
   try {
     await client.createProjectSchedule(defaultProject.id, {
@@ -409,6 +424,50 @@ async function main() {
     cronTimezoneFailed = true;
   }
   if (!cronTimezoneFailed) throw new Error("cron timezone should fail until timezone orchestration is installed");
+
+  let releaseOverlapRun: (() => void) | undefined;
+  let markOverlapStarted: (() => void) | undefined;
+  const overlapStarted = new Promise<void>((resolve) => {
+    markOverlapStarted = resolve;
+  });
+  const overlapStore = new ScheduleStore(
+    join(mkdtempSync(join(tmpdir(), "zuu-schedule-overlap-check-")), "schedules.json"),
+    {
+      runPrompt: async () => {
+        throw new Error("overlap check should use workflow action");
+      },
+      runWorkflow: async () => {
+        markOverlapStarted?.();
+        await new Promise<void>((resolve) => {
+          releaseOverlapRun = resolve;
+        });
+        return { workflowRunId: "overlap-workflow-run" };
+      },
+    },
+  );
+  const overlapSchedule = overlapStore.create({
+    trigger: { kind: "interval", everyMs: 60_000 },
+    action: { type: "workflow", workflowId: workflows.workflows[0].id, projectId: defaultProject.id },
+  });
+  const firstOverlapTrigger = overlapStore.trigger(overlapSchedule.id);
+  await overlapStarted;
+  const skippedOverlapSchedule = await overlapStore.trigger(overlapSchedule.id);
+  const skippedOverlapRun = skippedOverlapSchedule.runs[0];
+  if (
+    skippedOverlapRun?.status !== "skipped" ||
+    skippedOverlapRun.reason !== "schedule_overlap" ||
+    !skippedOverlapRun.finishedAt ||
+    skippedOverlapSchedule.runs[1]?.status !== "running"
+  ) {
+    throw new Error("overlapping schedule trigger should be recorded as skipped");
+  }
+  releaseOverlapRun?.();
+  await firstOverlapTrigger;
+  const completedOverlapRun = overlapStore.getRun(skippedOverlapSchedule.runs[1].id);
+  if (completedOverlapRun.status !== "completed" || completedOverlapRun.workflowRunId !== "overlap-workflow-run") {
+    throw new Error("first overlapping schedule run should complete after the skipped run is recorded");
+  }
+  overlapStore.dispose();
 
   const approvals = await client.listApprovals();
   if (!Array.isArray(approvals.approvals)) throw new Error("approvals response is invalid");

@@ -352,6 +352,7 @@ export interface WorkflowArtifactResponse {
 export type ScheduleStatus = "active" | "paused";
 export type ScheduleTriggerKind = "once" | "interval" | "cron";
 export type ScheduleRunStatus = "queued" | "running" | "completed" | "failed" | "skipped" | "aborted";
+export type ScheduleOverlapPolicy = "skip" | "queue" | "parallel";
 
 export interface ScheduleTrigger {
   kind: ScheduleTriggerKind;
@@ -401,6 +402,7 @@ export interface Schedule {
   status: ScheduleStatus;
   trigger: ScheduleTrigger;
   action: ScheduleAction;
+  overlapPolicy: ScheduleOverlapPolicy;
   createdAt: string;
   updatedAt: string;
   nextRunAt?: string;
@@ -412,6 +414,7 @@ export interface CreateScheduleRequest {
   name?: string;
   trigger: ScheduleTrigger;
   action: ScheduleAction;
+  overlapPolicy?: ScheduleOverlapPolicy;
 }
 
 export interface CreateSessionRequest {

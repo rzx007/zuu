@@ -674,6 +674,7 @@ async function createSchedule() {
     name: scheduleName.value.trim() || undefined,
     trigger,
     action,
+    overlapPolicy: 'skip',
   })
   addMessage('event', `schedule created: ${result.schedule.name}`)
   await loadSchedules()
@@ -1064,6 +1065,7 @@ onUnmounted(() => {
               <div class="min-w-0">
                 <strong>{{ schedule.name }}</strong>
                 <span>{{ schedule.status }} / {{ scheduleTriggerLabel(schedule) }}</span>
+                <span>overlap {{ schedule.overlapPolicy }}</span>
                 <span>{{ scheduleActionLabel(schedule.action) }}</span>
                 <span v-if="schedule.nextRunAt">next {{ schedule.nextRunAt }}</span>
               </div>
@@ -1230,11 +1232,13 @@ onUnmounted(() => {
                     <Badge :variant="schedule.status === 'active' ? 'secondary' : 'outline'">{{ schedule.status }}</Badge>
                   </div>
                   <span>{{ scheduleTriggerLabel(schedule) }}</span>
+                  <span>overlap {{ schedule.overlapPolicy }}</span>
                   <span v-if="schedule.nextRunAt">next {{ schedule.nextRunAt }}</span>
                   <div v-if="schedule.runs[0]" class="workflow-progress">
                     <span>{{ schedule.runs[0].status }}</span>
                     <span>scheduled {{ schedule.runs[0].scheduledFor }}</span>
                     <span v-if="schedule.runs[0].finishedAt">finished {{ schedule.runs[0].finishedAt }}</span>
+                    <span v-if="schedule.runs[0].reason">reason {{ schedule.runs[0].reason }}</span>
                     <span v-if="schedule.runs[0].workflowRunId">workflow {{ schedule.runs[0].workflowRunId.slice(0, 8) }}</span>
                     <span v-if="schedule.runs[0].agentRunId">agent {{ schedule.runs[0].agentRunId.slice(0, 8) }}</span>
                   </div>
