@@ -149,6 +149,30 @@ export function registerProjectRoutes({ app, daemon }: RouteDeps) {
     }
   });
 
+  app.get("/v1/projects/:projectId/workflow-runs/:runId/stages", async (c) => {
+    try {
+      return c.json({ stages: await daemon.listWorkflowStages(c.req.param("runId"), c.req.param("projectId")) });
+    } catch (error) {
+      return c.json(jsonError(error, 404), toStatus(error, 404));
+    }
+  });
+
+  app.get("/v1/projects/:projectId/workflow-runs/:runId/tasks", async (c) => {
+    try {
+      return c.json({ tasks: await daemon.listWorkflowTasks(c.req.param("runId"), c.req.param("projectId")) });
+    } catch (error) {
+      return c.json(jsonError(error, 404), toStatus(error, 404));
+    }
+  });
+
+  app.get("/v1/projects/:projectId/artifacts/:artifactId", async (c) => {
+    try {
+      return c.json({ artifact: await daemon.getWorkflowArtifact(c.req.param("artifactId"), c.req.param("projectId")) });
+    } catch (error) {
+      return c.json(jsonError(error, 404), toStatus(error, 404));
+    }
+  });
+
   app.post("/v1/projects/:projectId/workflow-runs/:runId/abort", async (c) => {
     try {
       return c.json({ run: await daemon.abortWorkflowRun(c.req.param("runId"), c.req.param("projectId")) });

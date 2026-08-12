@@ -58,6 +58,9 @@ ZUU_PI_WORKFLOW_RUN=1 pnpm check:pi-workflow
 - `POST /v1/projects/:projectId/workflows/:workflowId/runs`
 - `GET /v1/projects/:projectId/workflow-runs`
 - `GET /v1/projects/:projectId/workflow-runs/:runId`
+- `GET /v1/projects/:projectId/workflow-runs/:runId/stages`
+- `GET /v1/projects/:projectId/workflow-runs/:runId/tasks`
+- `GET /v1/projects/:projectId/artifacts/:artifactId`
 - `POST /v1/projects/:projectId/workflow-runs/:runId/abort`
 - `GET /v1/projects/:projectId/schedules`
 - `POST /v1/projects/:projectId/schedules`
@@ -88,6 +91,9 @@ ZUU_PI_WORKFLOW_RUN=1 pnpm check:pi-workflow
 - `POST /v1/workflows/:workflowId/runs`
 - `GET /v1/workflow-runs`
 - `GET /v1/workflow-runs/:runId`
+- `GET /v1/workflow-runs/:runId/stages`
+- `GET /v1/workflow-runs/:runId/tasks`
+- `GET /v1/artifacts/:artifactId`
 - `POST /v1/workflow-runs/:runId/abort`
 - `GET /v1/schedules`
 - `POST /v1/schedules`

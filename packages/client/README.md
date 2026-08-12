@@ -57,6 +57,15 @@ const projectSessions = await client.listProjectSessions(currentProjectId);
 const storedSessions = await client.listProjectStoredSessions(currentProjectId);
 const workflows = await client.listProjectWorkflows(currentProjectId);
 const workflowRuns = await client.listProjectWorkflowRuns(currentProjectId);
+const workflowDetails = workflowRuns.runs[0]
+  ? {
+      stages: await client.listProjectWorkflowStages(currentProjectId, workflowRuns.runs[0].id),
+      tasks: await client.listProjectWorkflowTasks(currentProjectId, workflowRuns.runs[0].id),
+      artifact: workflowRuns.runs[0].artifacts[0]
+        ? await client.getProjectWorkflowArtifact(currentProjectId, workflowRuns.runs[0].artifacts[0].id)
+        : undefined,
+    }
+  : undefined;
 const schedules = await client.listProjectSchedules(currentProjectId);
 const scheduleRuns = schedules.schedules[0]
   ? await client.listProjectScheduleRuns(currentProjectId, schedules.schedules[0].id)

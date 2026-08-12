@@ -337,6 +337,18 @@ export interface WorkflowRunResponse {
   run: WorkflowRun;
 }
 
+export interface WorkflowStagesResponse {
+  stages: WorkflowStage[];
+}
+
+export interface WorkflowTasksResponse {
+  tasks: WorkflowTask[];
+}
+
+export interface WorkflowArtifactResponse {
+  artifact: WorkflowArtifact;
+}
+
 export type ScheduleStatus = "active" | "paused";
 export type ScheduleTriggerKind = "once" | "interval" | "cron";
 export type ScheduleRunStatus = "queued" | "running" | "completed" | "failed" | "skipped" | "aborted";

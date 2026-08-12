@@ -39,8 +39,11 @@ import type {
   StoredSessionsResponse,
   SwitchSessionRequest,
   UpdateProjectRequest,
+  WorkflowArtifactResponse,
   WorkflowRunResponse,
   WorkflowRunsResponse,
+  WorkflowStagesResponse,
+  WorkflowTasksResponse,
   WorkflowsResponse,
   ApiErrorResponse,
 } from "./protocol.js";
@@ -92,6 +95,9 @@ export interface ZuuClient {
   ): Promise<WorkflowRunResponse>;
   listProjectWorkflowRuns(projectId: string): Promise<WorkflowRunsResponse>;
   getProjectWorkflowRun(projectId: string, runId: string): Promise<WorkflowRunResponse>;
+  listProjectWorkflowStages(projectId: string, runId: string): Promise<WorkflowStagesResponse>;
+  listProjectWorkflowTasks(projectId: string, runId: string): Promise<WorkflowTasksResponse>;
+  getProjectWorkflowArtifact(projectId: string, artifactId: string): Promise<WorkflowArtifactResponse>;
   abortProjectWorkflowRun(projectId: string, runId: string): Promise<WorkflowRunResponse>;
   listProjectSchedules(projectId: string): Promise<SchedulesResponse>;
   createProjectSchedule(projectId: string, input: CreateScheduleRequest): Promise<ScheduleResponse>;
@@ -121,6 +127,9 @@ export interface ZuuClient {
   startWorkflow(workflowId: string, input?: StartWorkflowRequest): Promise<WorkflowRunResponse>;
   listWorkflowRuns(projectId?: string): Promise<WorkflowRunsResponse>;
   getWorkflowRun(runId: string): Promise<WorkflowRunResponse>;
+  listWorkflowStages(runId: string): Promise<WorkflowStagesResponse>;
+  listWorkflowTasks(runId: string): Promise<WorkflowTasksResponse>;
+  getWorkflowArtifact(artifactId: string): Promise<WorkflowArtifactResponse>;
   abortWorkflowRun(runId: string): Promise<WorkflowRunResponse>;
   listSchedules(projectId?: string): Promise<SchedulesResponse>;
   createSchedule(input: CreateScheduleRequest): Promise<ScheduleResponse>;
@@ -408,6 +417,30 @@ export function createZuuClient(options: ZuuClientOptions = {}): ZuuClient {
         undefined,
         apiToken,
       ),
+    listProjectWorkflowStages: (projectId, runId) =>
+      requestJson<WorkflowStagesResponse>(
+        fetchImpl,
+        baseUrl,
+        `/v1/projects/${encodeURIComponent(projectId)}/workflow-runs/${encodeURIComponent(runId)}/stages`,
+        undefined,
+        apiToken,
+      ),
+    listProjectWorkflowTasks: (projectId, runId) =>
+      requestJson<WorkflowTasksResponse>(
+        fetchImpl,
+        baseUrl,
+        `/v1/projects/${encodeURIComponent(projectId)}/workflow-runs/${encodeURIComponent(runId)}/tasks`,
+        undefined,
+        apiToken,
+      ),
+    getProjectWorkflowArtifact: (projectId, artifactId) =>
+      requestJson<WorkflowArtifactResponse>(
+        fetchImpl,
+        baseUrl,
+        `/v1/projects/${encodeURIComponent(projectId)}/artifacts/${encodeURIComponent(artifactId)}`,
+        undefined,
+        apiToken,
+      ),
     abortProjectWorkflowRun: (projectId, runId) =>
       requestJson<WorkflowRunResponse>(
         fetchImpl,
@@ -576,6 +609,30 @@ export function createZuuClient(options: ZuuClientOptions = {}): ZuuClient {
       ),
     getWorkflowRun: (runId) =>
       requestJson<WorkflowRunResponse>(fetchImpl, baseUrl, `/v1/workflow-runs/${encodeURIComponent(runId)}`, undefined, apiToken),
+    listWorkflowStages: (runId) =>
+      requestJson<WorkflowStagesResponse>(
+        fetchImpl,
+        baseUrl,
+        `/v1/workflow-runs/${encodeURIComponent(runId)}/stages`,
+        undefined,
+        apiToken,
+      ),
+    listWorkflowTasks: (runId) =>
+      requestJson<WorkflowTasksResponse>(
+        fetchImpl,
+        baseUrl,
+        `/v1/workflow-runs/${encodeURIComponent(runId)}/tasks`,
+        undefined,
+        apiToken,
+      ),
+    getWorkflowArtifact: (artifactId) =>
+      requestJson<WorkflowArtifactResponse>(
+        fetchImpl,
+        baseUrl,
+        `/v1/artifacts/${encodeURIComponent(artifactId)}`,
+        undefined,
+        apiToken,
+      ),
     abortWorkflowRun: (runId) =>
       requestJson<WorkflowRunResponse>(fetchImpl, baseUrl, `/v1/workflow-runs/${encodeURIComponent(runId)}/abort`, {
         method: "POST",

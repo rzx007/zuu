@@ -210,6 +210,18 @@ export class ZuuDaemon {
     return this.workflowService.getWorkflowRun(runId, projectId);
   }
 
+  async listWorkflowStages(runId: string, projectId?: string) {
+    return this.workflowService.listWorkflowStages(runId, projectId);
+  }
+
+  async listWorkflowTasks(runId: string, projectId?: string) {
+    return this.workflowService.listWorkflowTasks(runId, projectId);
+  }
+
+  async getWorkflowArtifact(artifactId: string, projectId?: string) {
+    return this.workflowService.getWorkflowArtifact(artifactId, projectId);
+  }
+
   async abortWorkflowRun(runId: string, projectId?: string) {
     return this.workflowService.abortWorkflowRun(runId, projectId);
   }

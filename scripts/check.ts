@@ -268,12 +268,42 @@ async function main() {
   if (loadedWorkflowRun.run.id !== workflowRun.run.id) {
     throw new Error("workflow run lookup returned the wrong run");
   }
+  const workflowStages = await client.listProjectWorkflowStages(defaultProject.id, workflowRun.run.id);
+  if (workflowStages.stages.length !== workflowRun.run.stages.length || workflowStages.stages[0]?.runId !== workflowRun.run.id) {
+    throw new Error("workflow stage list returned the wrong stages");
+  }
+  const workflowTasks = await client.listProjectWorkflowTasks(defaultProject.id, workflowRun.run.id);
+  if (workflowTasks.tasks.length !== workflowRun.run.tasks.length || workflowTasks.tasks[0]?.runId !== workflowRun.run.id) {
+    throw new Error("workflow task list returned the wrong tasks");
+  }
+  const workflowArtifact = workflowRun.run.artifacts[0];
+  if (!workflowArtifact) throw new Error("workflow run should include an artifact");
+  const loadedWorkflowArtifact = await client.getProjectWorkflowArtifact(defaultProject.id, workflowArtifact.id);
+  if (loadedWorkflowArtifact.artifact.id !== workflowArtifact.id || loadedWorkflowArtifact.artifact.runId !== workflowRun.run.id) {
+    throw new Error("workflow artifact lookup returned the wrong artifact");
+  }
+  const globalWorkflowStages = await client.listWorkflowStages(workflowRun.run.id);
+  if (globalWorkflowStages.stages[0]?.id !== workflowStages.stages[0]?.id) {
+    throw new Error("global workflow stage list returned the wrong stages");
+  }
+  const globalWorkflowTasks = await client.listWorkflowTasks(workflowRun.run.id);
+  if (globalWorkflowTasks.tasks[0]?.id !== workflowTasks.tasks[0]?.id) {
+    throw new Error("global workflow task list returned the wrong tasks");
+  }
+  const globalWorkflowArtifact = await client.getWorkflowArtifact(workflowArtifact.id);
+  if (globalWorkflowArtifact.artifact.id !== workflowArtifact.id) {
+    throw new Error("global workflow artifact lookup returned the wrong artifact");
+  }
   const abortedWorkflowRun = await client.abortProjectWorkflowRun(defaultProject.id, workflowRun.run.id);
   if (abortedWorkflowRun.run.id !== workflowRun.run.id) {
     throw new Error("workflow run abort returned the wrong run");
   }
   await expectClientError(() => client.getWorkflowRun("missing"), { status: 404, code: "not_found" });
   await expectClientError(() => client.getProjectWorkflowRun(defaultProject.id, "missing"), { status: 404, code: "not_found" });
+  await expectClientError(() => client.listWorkflowStages("missing"), { status: 404, code: "not_found" });
+  await expectClientError(() => client.listProjectWorkflowTasks(defaultProject.id, "missing"), { status: 404, code: "not_found" });
+  await expectClientError(() => client.getWorkflowArtifact("missing"), { status: 404, code: "not_found" });
+  await expectClientError(() => client.getProjectWorkflowArtifact(defaultProject.id, "missing"), { status: 404, code: "not_found" });
   let missingWorkflowFailed = false;
   try {
     await client.startProjectWorkflow(defaultProject.id, "missing");

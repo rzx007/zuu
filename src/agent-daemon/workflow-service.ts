@@ -44,6 +44,24 @@ export class WorkflowService {
     return run;
   }
 
+  async listWorkflowStages(runId: string, projectId?: string) {
+    const run = await this.getWorkflowRun(runId, projectId);
+    return run.stages;
+  }
+
+  async listWorkflowTasks(runId: string, projectId?: string) {
+    const run = await this.getWorkflowRun(runId, projectId);
+    return run.tasks;
+  }
+
+  async getWorkflowArtifact(artifactId: string, projectId?: string) {
+    if (projectId) this.options.projects.get(projectId);
+    const runs = await this.listWorkflowRuns(projectId);
+    const artifact = runs.flatMap((run) => run.artifacts).find((item) => item.id === artifactId);
+    if (!artifact) throw new Error(`Unknown workflow artifact: ${artifactId}`);
+    return artifact;
+  }
+
   async abortWorkflowRun(runId: string, projectId?: string) {
     await this.getWorkflowRun(runId, projectId);
     return this.createBackend().abort(runId);
