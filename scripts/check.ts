@@ -89,6 +89,10 @@ async function main() {
   if (!Array.isArray(readOnlyProjects.projects)) {
     throw new Error("read token should be able to call protected GET routes");
   }
+  const readScopedAuditEvents = await client.listAuditEvents({ action: "api.read", target: "GET /v1/projects", limit: 20 });
+  if (!readScopedAuditEvents.events.some((event) => event.target === "GET /v1/projects" && event.details?.authScope === "read")) {
+    throw new Error("read token API audit events should include authScope");
+  }
   await expectClientError(() => readOnlyClient.createProject({ cwd: process.cwd(), name: "read token write check" }), {
     status: 403,
     code: "forbidden",
@@ -1358,7 +1362,7 @@ async function main() {
   await client.addPackage({ source: packageAuditSource });
   await client.trustPackage({ source: packageAuditSource });
   const mutatingAuditEvents = await client.listAuditEvents({ action: "api.mutate", outcome: "success", target: "/v1/packages/trust", limit: 20 });
-  if (!mutatingAuditEvents.events.some((event) => event.target === "POST /v1/packages/trust")) {
+  if (!mutatingAuditEvents.events.some((event) => event.target === "POST /v1/packages/trust" && event.details?.authScope === "admin")) {
     throw new Error("successful mutating API calls should be recorded in audit events");
   }
   const latestAuditEvents = await client.listAuditEvents(20);

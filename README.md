@@ -147,7 +147,7 @@ Packages 面板会区分 `configured`、`installed`、`filtered`、`trusted` / `
 
 `GET /v1/auth/status` 会返回 token 来源、是否可轮换、token 预览和本地 token 文件路径；`POST /v1/auth/rotate` 只对本地 token 生效，并在响应中返回新的 `apiToken`，调用方应立即替换后续请求的 Bearer token。
 
-`GET /v1/audit-events` 会返回最近审计事件，并支持 `limit`、`action`、`outcome` 和 `target` 过滤。当前会为受保护的 `GET /v1/*` 只读操作记录 `api.read`，为已授权的 `POST/PATCH/DELETE /v1/*` 写操作记录 `api.mutate`；公开探针 `GET /v1/health` 和 daemon 级 SSE `GET /v1/events` 不进入审计，避免探活和长连接噪音。领域动作还会额外覆盖 auth rotate、approval resolve 和 package add/trust/install/update/remove 等；审计记录只写 method/path/status、source、decision、错误摘要等非密钥信息。
+`GET /v1/audit-events` 会返回最近审计事件，并支持 `limit`、`action`、`outcome` 和 `target` 过滤。当前会为受保护的 `GET /v1/*` 只读操作记录 `api.read`，为已授权的 `POST/PATCH/DELETE /v1/*` 写操作记录 `api.mutate`，并在 details 中写入 `authScope`；公开探针 `GET /v1/health` 和 daemon 级 SSE `GET /v1/events` 不进入审计，避免探活和长连接噪音。领域动作还会额外覆盖 auth rotate、approval resolve 和 package add/trust/install/update/remove 等；审计记录只写 method/path/status、authScope、source、decision、错误摘要等非密钥信息。
 
 `GET /v1/diagnostics` 会返回 SDK resource diagnostics；其中 `resources.packages` 只列出已信任且会参与加载的 package，`resources.blockedPackages` 列出因未信任而被阻止加载的 package，`resources.stores` 列出 JSON store 健康状态，包括本地 auth token store 和 audit event store。WebUI 的 Resources 面板会展示 extension/skill/prompt/theme 的加载错误、warning、name collision 和 store recovery 状态。
 

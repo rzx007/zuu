@@ -71,20 +71,25 @@ export class AuthService {
   }
 
   authorize(authorization: string | undefined, requiredScope: AuthScope = "admin"): AuthDecision {
-    const token = bearerToken(authorization);
-    if (!token) return { authorized: false, reason: "unauthorized" };
-
-    if (this.envToken) {
-      return token === this.envToken ? { authorized: true, scope: "admin" } : { authorized: false, reason: "unauthorized" };
-    }
-
-    const record = this.localRecord ?? this.loadOrCreateLocalToken();
-    this.localRecord = record;
-    if (token === record.adminToken) return { authorized: true, scope: "admin" };
-    if (token === record.readToken) {
+    const scope = this.scopeForAuthorization(authorization);
+    if (!scope) return { authorized: false, reason: "unauthorized" };
+    if (scope === "admin") return { authorized: true, scope };
+    if (scope === "read") {
       return requiredScope === "read" ? { authorized: true, scope: "read" } : { authorized: false, scope: "read", reason: "forbidden" };
     }
     return { authorized: false, reason: "unauthorized" };
+  }
+
+  scopeForAuthorization(authorization: string | undefined): AuthScope | undefined {
+    const token = bearerToken(authorization);
+    if (!token) return undefined;
+    if (this.envToken) return token === this.envToken ? "admin" : undefined;
+
+    const record = this.localRecord ?? this.loadOrCreateLocalToken();
+    this.localRecord = record;
+    if (token === record.adminToken) return "admin";
+    if (token === record.readToken) return "read";
+    return undefined;
   }
 
   status(): AuthStatus {
