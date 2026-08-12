@@ -6,6 +6,7 @@ import { ApprovalStore } from "../src/agent-daemon/approval-store";
 import { createApprovalExtension } from "../src/agent-daemon/approval-policy";
 import { PackageService } from "../src/agent-daemon/packages";
 import { PackageTrustStore } from "../src/agent-daemon/package-trust";
+import { PromptService } from "../src/agent-daemon/prompt-service";
 import { ProjectStore } from "../src/agent-daemon/projects";
 import { RunEventStore } from "../src/agent-daemon/run-events";
 import { loadRunHistory, saveRunHistory } from "../src/agent-daemon/run-history";
@@ -13,6 +14,7 @@ import { ScheduleStore } from "../src/agent-daemon/schedules";
 import { createWorkflowBackend } from "../src/agent-daemon/workflows";
 import { createZuuClient, ZuuClientError } from "@zuu/client";
 import { createEventBus } from "@earendil-works/pi-coding-agent";
+import { ApiError } from "../src/http";
 
 const fetchFromApp: typeof fetch = async (input, init) => {
   const request = input instanceof Request ? input : new Request(input, init);
@@ -42,6 +44,12 @@ async function expectClientError(
   }
 
   throw new Error("expected client call to fail");
+}
+
+async function drainStream(stream: AsyncGenerator<unknown>) {
+  for await (const _event of stream) {
+    // Exhaust the stream so client-side status and SSE parsing are exercised.
+  }
 }
 
 async function main() {
@@ -715,6 +723,122 @@ async function main() {
 
   const storedBefore = await client.listStoredSessions();
   if (!Array.isArray(storedBefore.sessions)) throw new Error("stored sessions response is invalid");
+
+  await expectClientError(() => drainStream(client.promptSession("missing", { prompt: "session prompt check" })), {
+    status: 404,
+    code: "not_found",
+  });
+  await expectClientError(() => drainStream(client.steerSession("missing", { prompt: "steer check" })), {
+    status: 404,
+    code: "not_found",
+  });
+  await expectClientError(() => drainStream(client.followUpSession("missing", { prompt: "follow-up check" })), {
+    status: 404,
+    code: "not_found",
+  });
+
+  const sessionPromptRequests: Array<{ path: string; body: unknown }> = [];
+  const sessionPromptClient = createZuuClient({
+    baseUrl: "http://zuu.local",
+    fetch: async (input, init) => {
+      const request = input instanceof Request ? input : new Request(input, init);
+      sessionPromptRequests.push({
+        path: new URL(request.url).pathname,
+        body: init?.body ? JSON.parse(String(init.body)) : undefined,
+      });
+      const event = {
+        id: "session-prompt-route:1",
+        createdAt: "2026-08-12T00:00:00.000Z",
+        runId: "session-prompt-route",
+        type: "done",
+      };
+      return new Response(
+        new ReadableStream({
+          start(controller) {
+            controller.enqueue(new TextEncoder().encode(`id: ${event.id}\nevent: done\ndata: ${JSON.stringify(event)}\n\n`));
+            controller.close();
+          },
+        }),
+        { headers: { "content-type": "text/event-stream" } },
+      );
+    },
+  });
+  await drainStream(sessionPromptClient.promptSession("session/check", { prompt: "prompt route" }));
+  await drainStream(sessionPromptClient.steerSession("session/check", { prompt: "steer route" }));
+  await drainStream(sessionPromptClient.followUpSession("session/check", { prompt: "follow-up route" }));
+  if (
+    sessionPromptRequests.map((request) => request.path).join(",") !==
+    "/v1/sessions/session%2Fcheck/prompts,/v1/sessions/session%2Fcheck/steer,/v1/sessions/session%2Fcheck/follow-ups"
+  ) {
+    throw new Error("session prompt client methods should target the session-scoped routes");
+  }
+
+  let observedStreamingBehavior: unknown;
+  let runEventSequence = 0;
+  const busySession = {
+    sessionId: "busy-session",
+    isStreaming: true,
+    prompt: async (_prompt: string, options?: { streamingBehavior?: string }) => {
+      observedStreamingBehavior = options?.streamingBehavior;
+    },
+    subscribe: () => () => {},
+    setActiveToolsByName: () => {},
+  };
+  const promptService = new PromptService({
+    sessions: {
+      getOrCreateSession: async () => busySession,
+      touchSession: () => {},
+      getProjectId: () => "default",
+      summarizeSession: () => ({
+        id: "busy-session",
+        projectId: "default",
+        cwd: process.cwd(),
+        thinkingLevel: "medium",
+        activeTools: [],
+        messageCount: 0,
+        isStreaming: true,
+        createdAt: "2026-08-12T00:00:00.000Z",
+        updatedAt: "2026-08-12T00:00:00.000Z",
+      }),
+    },
+    runs: {
+      startRun: () => ({
+        id: "busy-run",
+        sessionId: "busy-session",
+        projectId: "default",
+        source: "user",
+        status: "running",
+        prompt: "busy",
+        startedAt: "2026-08-12T00:00:00.000Z",
+      }),
+      createEventRecorder: (runId: string) => (event: { runId: string; type: string }) => ({
+        id: `${runId}:${++runEventSequence}`,
+        createdAt: "2026-08-12T00:00:00.000Z",
+        ...event,
+      }),
+      saveRun: () => {},
+    },
+    eventBus: { on: () => () => {} },
+    activeRunBySessionId: new Map<string, string>(),
+  } as never);
+  try {
+    await promptService.prompt({ sessionId: "busy-session", prompt: "busy" }).next();
+    throw new Error("busy session prompt should fail before streaming");
+  } catch (error) {
+    if (!(error instanceof ApiError) || error.status !== 409 || error.code !== "session_busy") {
+      throw new Error("busy session prompt should fail with session_busy");
+    }
+  }
+  for await (const event of promptService.prompt({
+    sessionId: "busy-session",
+    prompt: "steer",
+    streamingBehavior: "steer",
+  })) {
+    if (event.type === "done") break;
+  }
+  if (observedStreamingBehavior !== "steer") {
+    throw new Error("prompt service should pass streamingBehavior to the Pi SDK session");
+  }
 
   let pathGuardFailed = false;
   try {

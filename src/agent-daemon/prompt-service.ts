@@ -1,5 +1,6 @@
 import type { EventBus } from "@earendil-works/pi-coding-agent";
 import type { PromptRequest, PromptStreamEvent } from "@zuu/client";
+import { ApiError } from "../http";
 import { subscribeApprovalEvents } from "./approval-policy";
 import { compactAgentEvent } from "./events";
 import type { RunEventDraft } from "./run-events";
@@ -19,6 +20,13 @@ export class PromptService {
   async *prompt(request: PromptRequest): AsyncGenerator<PromptStreamEvent> {
     const session = await this.options.sessions.getOrCreateSession(request);
     this.options.sessions.touchSession(session.sessionId);
+    if (session.isStreaming && !request.streamingBehavior) {
+      throw new ApiError("Session is already running; use steer or followUp", {
+        status: 409,
+        code: "session_busy",
+        details: { sessionId: session.sessionId },
+      });
+    }
 
     if (request.tools) {
       session.setActiveToolsByName(request.tools);
@@ -69,7 +77,7 @@ export class PromptService {
     });
 
     session
-      .prompt(request.prompt)
+      .prompt(request.prompt, { streamingBehavior: request.streamingBehavior })
       .catch((error) => {
         promptError = error;
       })

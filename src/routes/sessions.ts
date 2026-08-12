@@ -1,4 +1,5 @@
 import type { PromptRequest, PromptStreamEvent } from "@zuu/client";
+import type { Context } from "hono";
 import { streamSSE } from "hono/streaming";
 import { jsonError, readJson, toStatus } from "../http";
 import {
@@ -15,6 +16,38 @@ import { writePromptStreamEvent } from "./sse";
 import type { RouteDeps } from "./types";
 
 export function registerSessionRoutes({ app, daemon }: RouteDeps) {
+  async function streamPromptResponse(c: Context, request: PromptRequest) {
+    const events = daemon.prompt(request);
+    let first: IteratorResult<PromptStreamEvent>;
+    try {
+      first = await events.next();
+    } catch (error) {
+      const fallbackStatus = error instanceof Error && error.message.startsWith("Unknown session") ? 404 : 400;
+      return c.json(jsonError(error, fallbackStatus), toStatus(error, fallbackStatus));
+    }
+
+    return streamSSE(c, async (stream) => {
+      try {
+        if (!first.done && !stream.aborted) {
+          await writePromptStreamEvent(stream, first.value);
+        }
+        for await (const event of events) {
+          if (stream.aborted) break;
+          await writePromptStreamEvent(stream, event);
+        }
+      } catch (error) {
+        const event: PromptStreamEvent = {
+          id: `unknown:${crypto.randomUUID()}`,
+          createdAt: new Date().toISOString(),
+          runId: "unknown",
+          type: "error",
+          message: error instanceof Error ? error.message : String(error),
+        };
+        await writePromptStreamEvent(stream, event);
+      }
+    });
+  }
+
   app.get("/v1/sessions", (c) => {
     try {
       return c.json({ sessions: daemon.listSessions(c.req.query("projectId")) });
@@ -67,23 +100,48 @@ export function registerSessionRoutes({ app, daemon }: RouteDeps) {
       return c.json(jsonError(error, 400), toStatus(error, 400));
     }
 
-    return streamSSE(c, async (stream) => {
-      try {
-        for await (const event of daemon.prompt(request)) {
-          if (stream.aborted) break;
-          await writePromptStreamEvent(stream, event);
-        }
-      } catch (error) {
-        const event: PromptStreamEvent = {
-          id: `unknown:${crypto.randomUUID()}`,
-          createdAt: new Date().toISOString(),
-          runId: "unknown",
-          type: "error",
-          message: error instanceof Error ? error.message : String(error),
-        };
-        await writePromptStreamEvent(stream, event);
-      }
-    });
+    return streamPromptResponse(c, request);
+  });
+
+  app.post("/v1/sessions/:sessionId/prompts", async (c) => {
+    let request: PromptRequest;
+    try {
+      request = { ...parsePrompt(await readJson(c.req)), sessionId: c.req.param("sessionId") };
+    } catch (error) {
+      return c.json(jsonError(error, 400), toStatus(error, 400));
+    }
+
+    return streamPromptResponse(c, request);
+  });
+
+  app.post("/v1/sessions/:sessionId/steer", async (c) => {
+    let request: PromptRequest;
+    try {
+      request = {
+        ...parsePrompt(await readJson(c.req)),
+        sessionId: c.req.param("sessionId"),
+        streamingBehavior: "steer",
+      };
+    } catch (error) {
+      return c.json(jsonError(error, 400), toStatus(error, 400));
+    }
+
+    return streamPromptResponse(c, request);
+  });
+
+  app.post("/v1/sessions/:sessionId/follow-ups", async (c) => {
+    let request: PromptRequest;
+    try {
+      request = {
+        ...parsePrompt(await readJson(c.req)),
+        sessionId: c.req.param("sessionId"),
+        streamingBehavior: "followUp",
+      };
+    } catch (error) {
+      return c.json(jsonError(error, 400), toStatus(error, 400));
+    }
+
+    return streamPromptResponse(c, request);
   });
 
   app.post("/v1/sessions/:sessionId/abort", async (c) => {

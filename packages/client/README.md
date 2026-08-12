@@ -49,6 +49,20 @@ for await (const event of client.prompt({
   console.log(event.type);
 }
 
+for await (const event of client.steerSession(session.id, {
+  projectId: currentProjectId,
+  prompt: "先暂停手头计划，优先检查 package API。",
+})) {
+  console.log(event.type);
+}
+
+for await (const event of client.followUpSession(session.id, {
+  projectId: currentProjectId,
+  prompt: "当前 run 结束后继续补齐中文文档。",
+})) {
+  console.log(event.type);
+}
+
 const projectRuns = await client.listProjectRuns(currentProjectId);
 if (projectRuns.runs[0]?.status === "running" || projectRuns.runs[0]?.status === "waiting_approval") {
   await client.abortProjectRun(currentProjectId, projectRuns.runs[0].id);

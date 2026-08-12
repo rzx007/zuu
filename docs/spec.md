@@ -426,6 +426,7 @@ Diagnostics 返回模型认证状态、Package 加载错误、Project 错误和 
 - `POST /v1/sessions/:sessionId/prompts`
 - `POST /v1/sessions/:sessionId/steer`
 - `POST /v1/sessions/:sessionId/follow-ups`
+- `POST /v1/prompt`
 - `POST /v1/runs/:runId/abort`
 - `GET /v1/runs/:runId`
 - `GET /v1/runs/:runId/events`
@@ -434,7 +435,9 @@ Prompt 请求：
 
 ```ts
 interface PromptRequest {
-  text: string;
+  prompt: string;
+  sessionId?: string;
+  projectId?: string;
   images?: ImageInput[];
   streamingBehavior?: "steer" | "followUp";
   idempotencyKey?: string;

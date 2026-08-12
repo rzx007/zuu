@@ -146,6 +146,21 @@ export interface ZuuClient {
   createSession(input?: CreateSessionRequest): Promise<SessionResponse>;
   openSession(input: OpenSessionRequest): Promise<SessionResponse>;
   prompt(input: PromptRequest, options?: PromptStreamOptions): AsyncGenerator<PromptStreamEvent>;
+  promptSession(
+    sessionId: string,
+    input: Omit<PromptRequest, "sessionId" | "streamingBehavior">,
+    options?: PromptStreamOptions,
+  ): AsyncGenerator<PromptStreamEvent>;
+  steerSession(
+    sessionId: string,
+    input: Omit<PromptRequest, "sessionId" | "streamingBehavior">,
+    options?: PromptStreamOptions,
+  ): AsyncGenerator<PromptStreamEvent>;
+  followUpSession(
+    sessionId: string,
+    input: Omit<PromptRequest, "sessionId" | "streamingBehavior">,
+    options?: PromptStreamOptions,
+  ): AsyncGenerator<PromptStreamEvent>;
   subscribeEvents(options?: EventStreamOptions): AsyncGenerator<PromptStreamEvent>;
   abort(sessionId: string): Promise<SessionResponse>;
   compact(sessionId: string, instructions?: string): Promise<SessionResponse>;
@@ -726,47 +741,62 @@ export function createZuuClient(options: ZuuClientOptions = {}): ZuuClient {
         method: "POST",
         body: JSON.stringify(input),
       }, apiToken),
-    async *prompt(input, options = {}) {
-      const response = await fetchImpl(joinUrl(baseUrl, "/v1/prompt"), {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          ...(apiToken ? { authorization: `Bearer ${apiToken}` } : {}),
-        },
-        body: JSON.stringify(input),
-        signal: options.signal,
-      });
-
-      if (!response.ok || !response.body) {
-        await parseJsonResponse(response);
-        return;
-      }
-
-      const reader = response.body.pipeThrough(new TextDecoderStream()).getReader();
-      let buffer = "";
-
-      try {
-        while (true) {
-          const { value, done } = await reader.read();
-          if (done) break;
-
-          const parsed = parseSseEvents(buffer + value);
-          buffer = parsed.rest;
-          for (const event of parsed.events) {
-            yield event;
-          }
-        }
-
-        const parsed = parseSseEvents(`${buffer}\n\n`);
-        for (const event of parsed.events) {
-          yield event;
-        }
-      } finally {
-        await reader.cancel().catch(() => {});
-      }
-    },
+    prompt: (input, options = {}) => streamPrompt(fetchImpl, baseUrl, apiToken, "/v1/prompt", input, options),
+    promptSession: (sessionId, input, options = {}) =>
+      streamPrompt(fetchImpl, baseUrl, apiToken, `/v1/sessions/${encodeURIComponent(sessionId)}/prompts`, input, options),
+    steerSession: (sessionId, input, options = {}) =>
+      streamPrompt(fetchImpl, baseUrl, apiToken, `/v1/sessions/${encodeURIComponent(sessionId)}/steer`, input, options),
+    followUpSession: (sessionId, input, options = {}) =>
+      streamPrompt(fetchImpl, baseUrl, apiToken, `/v1/sessions/${encodeURIComponent(sessionId)}/follow-ups`, input, options),
     subscribeEvents: (input = {}) => streamEvents(fetchImpl, baseUrl, apiToken, input),
   };
+}
+
+async function* streamPrompt(
+  fetchImpl: typeof fetch,
+  baseUrl: string,
+  apiToken: string | undefined,
+  path: string,
+  input: PromptRequest | Omit<PromptRequest, "sessionId" | "streamingBehavior">,
+  options: PromptStreamOptions,
+): AsyncGenerator<PromptStreamEvent> {
+  const response = await fetchImpl(joinUrl(baseUrl, path), {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      ...(apiToken ? { authorization: `Bearer ${apiToken}` } : {}),
+    },
+    body: JSON.stringify(input),
+    signal: options.signal,
+  });
+
+  if (!response.ok || !response.body) {
+    await parseJsonResponse(response);
+    return;
+  }
+
+  const reader = response.body.pipeThrough(new TextDecoderStream()).getReader();
+  let buffer = "";
+
+  try {
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+
+      const parsed = parseSseEvents(buffer + value);
+      buffer = parsed.rest;
+      for (const event of parsed.events) {
+        yield event;
+      }
+    }
+
+    const parsed = parseSseEvents(`${buffer}\n\n`);
+    for (const event of parsed.events) {
+      yield event;
+    }
+  } finally {
+    await reader.cancel().catch(() => {});
+  }
 }
 
 async function* streamEvents(

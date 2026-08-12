@@ -125,6 +125,7 @@ const activeTools = computed(() => toolChoices.filter((tool) => selectedTools[to
 const pendingApprovals = computed(() => approvals.value.filter((approval) => approval.status === 'pending'))
 const flatTree = computed(() => flattenTree(sessionTree.value))
 const statusText = computed(() => (isRunning.value ? 'running' : 'ready'))
+const canQueueSessionMessage = computed(() => Boolean(currentSession.value?.isStreaming))
 const configuredProviders = computed(() => diagnostics.value?.models.configuredProviders.join(', ') || 'none')
 const resourceDiagnostics = computed(() => diagnostics.value?.resources.resourceDiagnostics || [])
 const blockedPackages = computed(() => diagnostics.value?.resources.blockedPackages || [])
@@ -768,11 +769,8 @@ function schedulePackageOperationPoll() {
   }, 1500)
 }
 
-async function sendPrompt() {
-  const text = prompt.value.trim()
-  if (!text) return
-
-  const request: PromptRequest = {
+function createPromptRequest(text: string): PromptRequest {
+  return {
     prompt: text,
     projectId: currentProjectId(),
     sessionId: currentSession.value?.id,
@@ -781,42 +779,72 @@ async function sendPrompt() {
     tools: activeTools.value,
     model: provider.value && modelName.value ? { provider: provider.value, id: modelName.value } : undefined,
   }
+}
 
+async function consumePromptStream(stream: AsyncGenerator<PromptStreamEvent>, agentMessage: MessageItem) {
+  for await (const event of stream) {
+    if (event.type === 'session' && event.session) {
+      setActiveSession(event.session)
+      addMessage('event', `run start: ${event.runId}`)
+      await Promise.all([loadRuns(), loadStoredSessions(), loadSessionTree()])
+    } else if (event.type === 'text_delta') {
+      agentMessage.text += event.delta || ''
+    } else if (event.type === 'tool_start' && event.tool) {
+      addMessage('event', `tool start: ${event.tool.name}`)
+    } else if (event.type === 'tool_end' && event.tool) {
+      addMessage('event', `tool end: ${event.tool.name}${event.tool.isError ? ' (error)' : ''}`)
+    } else if (event.type === 'approval_requested' && event.approval) {
+      addMessage('event', `approval required: ${event.approval.title}`)
+      await Promise.all([loadApprovals(), loadRuns()])
+    } else if (event.type === 'approval_resolved' && event.approval) {
+      addMessage('event', `approval granted: ${event.approval.title}`)
+      await loadApprovals()
+    } else if (event.type === 'error') {
+      addMessage('error', event.message || 'Unknown agent error')
+      await loadRuns()
+    } else if (event.type === 'done') {
+      await Promise.all([loadRuns(), loadStoredSessions(), loadSessionTree(), loadApprovals()])
+    }
+  }
+}
+
+async function sendPrompt() {
+  const text = prompt.value.trim()
+  if (!text) return
+
+  const request = createPromptRequest(text)
   addMessage('user', text)
   const agentMessage = addMessage('agent')
   isRunning.value = true
   controller.value = new AbortController()
 
   try {
-    for await (const event of client.prompt(request, { signal: controller.value.signal })) {
-      if (event.type === 'session' && event.session) {
-        setActiveSession(event.session)
-        addMessage('event', `run start: ${event.runId}`)
-        await Promise.all([loadRuns(), loadStoredSessions(), loadSessionTree()])
-      } else if (event.type === 'text_delta') {
-        agentMessage.text += event.delta || ''
-      } else if (event.type === 'tool_start' && event.tool) {
-        addMessage('event', `tool start: ${event.tool.name}`)
-      } else if (event.type === 'tool_end' && event.tool) {
-        addMessage('event', `tool end: ${event.tool.name}${event.tool.isError ? ' (error)' : ''}`)
-      } else if (event.type === 'approval_requested' && event.approval) {
-        addMessage('event', `approval required: ${event.approval.title}`)
-        await Promise.all([loadApprovals(), loadRuns()])
-      } else if (event.type === 'approval_resolved' && event.approval) {
-        addMessage('event', `approval granted: ${event.approval.title}`)
-        await loadApprovals()
-      } else if (event.type === 'error') {
-        addMessage('error', event.message || 'Unknown agent error')
-        await loadRuns()
-      } else if (event.type === 'done') {
-        await Promise.all([loadRuns(), loadStoredSessions(), loadSessionTree(), loadApprovals()])
-      }
-    }
+    await consumePromptStream(client.prompt(request, { signal: controller.value.signal }), agentMessage)
   } catch (error) {
     if (!isAbortError(error)) addMessage('error', errorMessage(error))
   } finally {
     controller.value = undefined
     isRunning.value = false
+  }
+}
+
+async function queueSessionMessage(behavior: 'steer' | 'followUp') {
+  const text = prompt.value.trim()
+  const sessionId = currentSession.value?.id
+  if (!text || !sessionId) return
+
+  const { sessionId: _sessionId, streamingBehavior: _streamingBehavior, ...request } = createPromptRequest(text)
+  addMessage('user', behavior === 'steer' ? `[steer] ${text}` : `[follow-up] ${text}`)
+  const agentMessage = addMessage('agent')
+  const stream =
+    behavior === 'steer'
+      ? client.steerSession(sessionId, request)
+      : client.followUpSession(sessionId, request)
+
+  try {
+    await consumePromptStream(stream, agentMessage)
+  } catch (error) {
+    if (!isAbortError(error)) addMessage('error', errorMessage(error))
   }
 }
 
@@ -1323,6 +1351,8 @@ onUnmounted(() => {
             <Textarea v-model="prompt" class="min-h-24 resize-y" @keydown.ctrl.enter.prevent="sendPrompt" @keydown.meta.enter.prevent="sendPrompt" />
             <div class="flex items-end gap-2">
               <Button variant="outline" :disabled="!isRunning" @click="abortPrompt">Abort</Button>
+              <Button variant="outline" :disabled="!canQueueSessionMessage" @click="queueSessionMessage('steer')">Steer</Button>
+              <Button variant="outline" :disabled="!canQueueSessionMessage" @click="queueSessionMessage('followUp')">Follow up</Button>
               <Button :disabled="isRunning" @click="sendPrompt">Send</Button>
             </div>
           </div>

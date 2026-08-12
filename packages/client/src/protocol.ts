@@ -100,6 +100,7 @@ export interface PromptRequest {
   sessionId?: string;
   projectId?: string;
   source?: RunSummary["source"];
+  streamingBehavior?: "steer" | "followUp";
   name?: string;
   cwd?: string;
   sessionFile?: string;

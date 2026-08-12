@@ -30,6 +30,7 @@ const APPROVAL_DECISIONS = new Set(["allow_once", "allow_session", "deny"]);
 const FORK_POSITIONS = new Set(["before", "at"]);
 const RUN_SOURCES = new Set(["user", "schedule", "workflow", "api"]);
 const SCHEDULE_OVERLAP_POLICIES = new Set(["skip", "queue", "parallel"]);
+const STREAMING_BEHAVIORS = new Set(["steer", "followUp"]);
 const THINKING_LEVELS = new Set(["off", "minimal", "low", "medium", "high", "xhigh", "max"]);
 
 export function parsePackageMutation(value: unknown): PackageMutationRequest {
@@ -87,11 +88,16 @@ export function parsePrompt(value: unknown): PromptRequest {
   if (source !== undefined && !RUN_SOURCES.has(source)) {
     validationError("source must be user, schedule, workflow, or api", { field: "source" });
   }
+  const streamingBehavior = optionalString(value.streamingBehavior, "streamingBehavior");
+  if (streamingBehavior !== undefined && !STREAMING_BEHAVIORS.has(streamingBehavior)) {
+    validationError("streamingBehavior must be steer or followUp", { field: "streamingBehavior" });
+  }
   return {
     prompt: requireString(value.prompt, "prompt"),
     sessionId: optionalString(value.sessionId, "sessionId"),
     projectId: optionalString(value.projectId, "projectId"),
     source: source as PromptRequest["source"],
+    streamingBehavior: streamingBehavior as PromptRequest["streamingBehavior"],
     name: optionalString(value.name, "name"),
     cwd: optionalString(value.cwd, "cwd"),
     sessionFile: optionalString(value.sessionFile, "sessionFile"),
