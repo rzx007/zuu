@@ -37,6 +37,8 @@ ZUU_PI_WORKFLOW_RUN=1 pnpm check:pi-workflow
 
 ## API
 
+完整协议说明见 [docs/protocol-v1.md](docs/protocol-v1.md)。
+
 - `GET /v1/health`
 - `GET /v1/auth/status`
 - `POST /v1/auth/rotate`

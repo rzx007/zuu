@@ -729,6 +729,7 @@ UI end-to-end
 - `examples/pi-sdk-basic.ts`：低层 Pi SDK 直调 spike 示例，仅用于对照 `createAgentSession` 的最小用法；正式应用入口仍是 daemon、WebUI 和 `@zuu/client`。
 - `.zuu/pi-agent`：默认 Pi app state 目录，可通过 `ZUU_AGENT_DIR` 覆盖，避免嵌入式运行时写入 `~/.pi/agent`。
 - `README.md`：当前运行方式和 API 入口。
+- `docs/protocol-v1.md`：当前 `/v1` HTTP/SSE 协议说明，覆盖认证、错误模型、Project 主路径、Prompt SSE、daemon event stream、approval、package、workflow 和 schedule。
 
 已验证：
 

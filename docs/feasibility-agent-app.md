@@ -376,10 +376,10 @@ apps/
   settings.json            # Daemon 侧 packages（含 pi-crew 等）
 docs/
   feasibility-agent-app.md
-  protocol-v1.md           # （后续）HTTP/SSE 契约（含 /schedules）
+  protocol-v1.md           # HTTP/SSE 契约（含 /schedules）
 ```
 
-单仓初期已经拆出 `packages/client`；后续可继续把协议文档、workflow adapter 和 scheduler backend 拆成清晰边界。
+单仓初期已经拆出 `packages/client`，并已落地 `docs/protocol-v1.md` 作为当前 HTTP/SSE 契约入口；后续可继续把 workflow adapter 和 scheduler backend 拆成清晰边界。
 
 ---
 
