@@ -1,4 +1,4 @@
-import { mkdtempSync } from "node:fs";
+import { mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import app from "../src/index";
@@ -6,6 +6,7 @@ import { ApprovalStore } from "../src/agent-daemon/approval-store";
 import { createApprovalExtension } from "../src/agent-daemon/approval-policy";
 import { PackageService } from "../src/agent-daemon/packages";
 import { PackageTrustStore } from "../src/agent-daemon/package-trust";
+import { loadRunHistory, saveRunHistory } from "../src/agent-daemon/run-history";
 import { createWorkflowBackend } from "../src/agent-daemon/workflows";
 import { createZuuClient, ZuuClientError } from "@zuu/client";
 import { createEventBus } from "@earendil-works/pi-coding-agent";
@@ -50,6 +51,9 @@ async function main() {
   }
   if (!Array.isArray(diagnostics.resources.blockedPackages)) {
     throw new Error("blocked packages response is invalid");
+  }
+  if (!Array.isArray(diagnostics.resources.stores)) {
+    throw new Error("store diagnostics response is invalid");
   }
 
   let sawAuthHeader = false;
@@ -376,6 +380,37 @@ async function main() {
   if (untrustedPackage.status !== "untrusted" || trustStore.isTrusted("npm:check-package")) {
     throw new Error("package trust was not revoked");
   }
+
+  const corruptStoreDir = mkdtempSync(join(tmpdir(), "zuu-json-store-check-"));
+  const corruptRunsPath = join(corruptStoreDir, "runs.json");
+  writeFileSync(corruptRunsPath, "{not json", "utf8");
+  const recoveredRuns = loadRunHistory(corruptRunsPath);
+  if (recoveredRuns.length !== 0) {
+    throw new Error("corrupt run history should recover to an empty list");
+  }
+  const corruptBackups = readdirSync(corruptStoreDir).filter((name) => name.startsWith("runs.json.corrupt-"));
+  if (corruptBackups.length !== 1) {
+    throw new Error("corrupt run history should be backed up");
+  }
+  const recoveredPayload = JSON.parse(readFileSync(corruptRunsPath, "utf8")) as { version?: number; data?: unknown };
+  if (recoveredPayload.version !== 1 || !Array.isArray(recoveredPayload.data)) {
+    throw new Error("corrupt run history should be rewritten as a versioned store");
+  }
+  saveRunHistory(corruptRunsPath, [
+    {
+      id: "store-check-run",
+      sessionId: "store-check-session",
+      status: "done",
+      prompt: "store check",
+      startedAt: "2026-08-12T00:00:00.000Z",
+      endedAt: "2026-08-12T00:00:01.000Z",
+    },
+  ]);
+  const savedPayload = JSON.parse(readFileSync(corruptRunsPath, "utf8")) as { version?: number; data?: unknown };
+  if (savedPayload.version !== 1 || !Array.isArray(savedPayload.data) || savedPayload.data.length !== 1) {
+    throw new Error("run history should save through the versioned JSON store");
+  }
+
   const packageServiceAgentDir = mkdtempSync(join(tmpdir(), "zuu-package-service-check-"));
   const packageService = new PackageService(
     process.cwd(),

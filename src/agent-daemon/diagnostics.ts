@@ -2,7 +2,17 @@ import {
   DefaultResourceLoader,
   type ModelRuntime,
 } from "@earendil-works/pi-coding-agent";
-import { getPackageTrustStorePath, getZuuAgentDir, sdkVersion } from "./environment";
+import {
+  getApprovalStorePath,
+  getPackageOperationStorePath,
+  getPackageTrustStorePath,
+  getRunStorePath,
+  getScheduleStorePath,
+  getWorkflowStorePath,
+  getZuuAgentDir,
+  sdkVersion,
+} from "./environment";
+import { inspectJsonStore } from "./json-file-store";
 import { createTrustedSettingsView } from "./package-settings";
 import { PackageTrustStore } from "./package-trust";
 import type { Diagnostics, ResourceDiagnostic, WorkflowBackendInfo } from "@zuu/client";
@@ -40,7 +50,21 @@ export async function buildDiagnostics(
 
   const packages = packageView.trustedPackages;
   const blockedPackages = packageView.blockedPackages;
+  const stores = [
+    inspectJsonStore({ name: "runs", path: getRunStorePath(agentDir), defaultValue: [] }),
+    inspectJsonStore({ name: "approvals", path: getApprovalStorePath(agentDir), defaultValue: [] }),
+    inspectJsonStore({ name: "workflow-runs", path: getWorkflowStorePath(agentDir), defaultValue: [] }),
+    inspectJsonStore({ name: "schedules", path: getScheduleStorePath(agentDir), defaultValue: [] }),
+    inspectJsonStore({ name: "package-operations", path: getPackageOperationStorePath(agentDir), defaultValue: [] }),
+    inspectJsonStore({ name: "package-trust", path: getPackageTrustStorePath(agentDir), defaultValue: [] }),
+  ];
   const gaps: string[] = [];
+  if (stores.some((store) => store.recovered)) {
+    gaps.push("One or more JSON stores were recovered from corrupt data; inspect resource store diagnostics and backups.");
+  }
+  if (stores.some((store) => !store.ok)) {
+    gaps.push("One or more JSON stores are not healthy; inspect store diagnostics before relying on persisted state.");
+  }
   if (blockedPackages.length > 0) {
     gaps.push(`${blockedPackages.length} package source(s) are configured but blocked until trusted.`);
   }
@@ -71,7 +95,11 @@ export async function buildDiagnostics(
   }
 
   return {
-    ok: extensionResult.errors.length === 0 && !resourceDiagnostics.some((diagnostic) => diagnostic.type === "error") && available.length > 0,
+    ok:
+      extensionResult.errors.length === 0 &&
+      !resourceDiagnostics.some((diagnostic) => diagnostic.type === "error") &&
+      stores.every((store) => store.ok) &&
+      available.length > 0,
     cwd,
     runtime: {
       node: process.versions.node,
@@ -96,6 +124,7 @@ export async function buildDiagnostics(
       resourceDiagnostics,
       packages,
       blockedPackages,
+      stores,
       workflowBackend,
     },
     gaps,

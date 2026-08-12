@@ -388,9 +388,21 @@ export interface Diagnostics {
     resourceDiagnostics: ResourceDiagnostic[];
     packages: string[];
     blockedPackages: string[];
+    stores: StoreDiagnostic[];
     workflowBackend: WorkflowBackendInfo;
   };
   gaps: string[];
+}
+
+export interface StoreDiagnostic {
+  name: string;
+  path: string;
+  ok: boolean;
+  exists: boolean;
+  recordCount: number;
+  recovered: boolean;
+  backupPath?: string;
+  error?: string;
 }
 
 export interface ResourceCollision {

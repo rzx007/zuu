@@ -1,4 +1,3 @@
-import { readFileSync, writeFileSync } from "node:fs";
 import type {
   PackageOperation,
   PackageOperationAction,
@@ -7,6 +6,7 @@ import type {
   PackageProgressAction,
   PackageProgressEventType,
 } from "@zuu/client";
+import { JsonFileStore } from "./json-file-store";
 
 const PACKAGE_OPERATION_HISTORY_LIMIT = 100;
 const PACKAGE_OPERATION_EVENT_LIMIT = 200;
@@ -25,16 +25,20 @@ function isPackageOperation(value: unknown): value is PackageOperation {
 }
 
 function loadPackageOperations(path: string): PackageOperation[] {
-  try {
-    const parsed = JSON.parse(readFileSync(path, "utf8")) as unknown;
-    return Array.isArray(parsed) ? parsed.filter(isPackageOperation) : [];
-  } catch {
-    return [];
-  }
+  return createPackageOperationStore(path).load(Array.isArray).filter(isPackageOperation);
 }
 
 function savePackageOperations(path: string, operations: PackageOperation[]) {
-  writeFileSync(path, `${JSON.stringify(operations.slice(0, PACKAGE_OPERATION_HISTORY_LIMIT), null, 2)}\n`, "utf8");
+  createPackageOperationStore(path).save(operations.slice(0, PACKAGE_OPERATION_HISTORY_LIMIT));
+}
+
+function createPackageOperationStore(path: string) {
+  return new JsonFileStore<unknown[]>({
+    name: "package-operations",
+    path,
+    defaultValue: [],
+    countRecords: (value) => value.length,
+  });
 }
 
 export class PackageOperationStore {

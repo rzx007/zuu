@@ -1,5 +1,5 @@
-import { readFileSync, writeFileSync } from "node:fs";
 import type { PackageTrustRecord } from "@zuu/client";
+import { JsonFileStore } from "./json-file-store";
 
 function isPackageTrustRecord(value: unknown): value is PackageTrustRecord {
   return Boolean(
@@ -11,16 +11,20 @@ function isPackageTrustRecord(value: unknown): value is PackageTrustRecord {
 }
 
 function loadPackageTrust(path: string): PackageTrustRecord[] {
-  try {
-    const parsed = JSON.parse(readFileSync(path, "utf8")) as unknown;
-    return Array.isArray(parsed) ? parsed.filter(isPackageTrustRecord) : [];
-  } catch {
-    return [];
-  }
+  return createPackageTrustStore(path).load(Array.isArray).filter(isPackageTrustRecord);
 }
 
 function savePackageTrust(path: string, records: PackageTrustRecord[]) {
-  writeFileSync(path, `${JSON.stringify(records, null, 2)}\n`, "utf8");
+  createPackageTrustStore(path).save(records);
+}
+
+function createPackageTrustStore(path: string) {
+  return new JsonFileStore<unknown[]>({
+    name: "package-trust",
+    path,
+    defaultValue: [],
+    countRecords: (value) => value.length,
+  });
 }
 
 export class PackageTrustStore {

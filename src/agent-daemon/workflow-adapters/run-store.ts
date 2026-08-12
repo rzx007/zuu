@@ -1,5 +1,5 @@
-import { readFileSync, writeFileSync } from "node:fs";
 import type { WorkflowRun } from "@zuu/client";
+import { JsonFileStore } from "../json-file-store";
 
 const WORKFLOW_HISTORY_LIMIT = 200;
 
@@ -17,16 +17,20 @@ function isWorkflowRun(value: unknown): value is WorkflowRun {
 }
 
 function loadWorkflowRuns(path: string): WorkflowRun[] {
-  try {
-    const parsed = JSON.parse(readFileSync(path, "utf8")) as unknown;
-    return Array.isArray(parsed) ? parsed.filter(isWorkflowRun) : [];
-  } catch {
-    return [];
-  }
+  return createWorkflowRunStore(path).load(Array.isArray).filter(isWorkflowRun);
 }
 
 function saveWorkflowRuns(path: string, runs: WorkflowRun[]) {
-  writeFileSync(path, `${JSON.stringify(runs.slice(0, WORKFLOW_HISTORY_LIMIT), null, 2)}\n`, "utf8");
+  createWorkflowRunStore(path).save(runs.slice(0, WORKFLOW_HISTORY_LIMIT));
+}
+
+function createWorkflowRunStore(path: string) {
+  return new JsonFileStore<unknown[]>({
+    name: "workflow-runs",
+    path,
+    defaultValue: [],
+    countRecords: (value) => value.length,
+  });
 }
 
 export class WorkflowRunStore {

@@ -1,4 +1,3 @@
-import { readFileSync, writeFileSync } from "node:fs";
 import type {
   CreateScheduleRequest,
   Schedule,
@@ -6,6 +5,7 @@ import type {
   ScheduleRun,
   ScheduleTrigger,
 } from "@zuu/client";
+import { JsonFileStore } from "./json-file-store";
 
 const SCHEDULE_RUN_HISTORY_LIMIT = 50;
 const MAX_TIMER_DELAY_MS = 2_147_483_647;
@@ -33,16 +33,20 @@ function isSchedule(value: unknown): value is Schedule {
 }
 
 function loadSchedules(path: string): Schedule[] {
-  try {
-    const parsed = JSON.parse(readFileSync(path, "utf8")) as unknown;
-    return Array.isArray(parsed) ? parsed.filter(isSchedule) : [];
-  } catch {
-    return [];
-  }
+  return createSchedulesStore(path).load(Array.isArray).filter(isSchedule);
 }
 
 function saveSchedules(path: string, schedules: Schedule[]) {
-  writeFileSync(path, `${JSON.stringify(schedules, null, 2)}\n`, "utf8");
+  createSchedulesStore(path).save(schedules);
+}
+
+function createSchedulesStore(path: string) {
+  return new JsonFileStore<unknown[]>({
+    name: "schedules",
+    path,
+    defaultValue: [],
+    countRecords: (value) => value.length,
+  });
 }
 
 function assertObject(value: unknown, label: string): asserts value is Record<string, unknown> {

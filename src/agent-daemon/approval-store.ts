@@ -1,4 +1,3 @@
-import { readFileSync, writeFileSync } from "node:fs";
 import type {
   Approval,
   ApprovalDecision,
@@ -6,6 +5,7 @@ import type {
   CreateApprovalRequest,
   ResolveApprovalRequest,
 } from "@zuu/client";
+import { JsonFileStore } from "./json-file-store";
 
 const APPROVAL_HISTORY_LIMIT = 500;
 const APPROVAL_DECISIONS = new Set<ApprovalDecision>(["allow_once", "allow_session", "deny"]);
@@ -23,16 +23,20 @@ function isApproval(value: unknown): value is Approval {
 }
 
 function loadApprovals(path: string): Approval[] {
-  try {
-    const parsed = JSON.parse(readFileSync(path, "utf8")) as unknown;
-    return Array.isArray(parsed) ? parsed.filter(isApproval) : [];
-  } catch {
-    return [];
-  }
+  return createApprovalsStore(path).load(Array.isArray).filter(isApproval);
 }
 
 function saveApprovals(path: string, approvals: Approval[]) {
-  writeFileSync(path, `${JSON.stringify(approvals.slice(0, APPROVAL_HISTORY_LIMIT), null, 2)}\n`, "utf8");
+  createApprovalsStore(path).save(approvals.slice(0, APPROVAL_HISTORY_LIMIT));
+}
+
+function createApprovalsStore(path: string) {
+  return new JsonFileStore<unknown[]>({
+    name: "approvals",
+    path,
+    defaultValue: [],
+    countRecords: (value) => value.length,
+  });
 }
 
 function assertDecision(decision: unknown): asserts decision is ApprovalDecision {

@@ -96,6 +96,7 @@ const statusText = computed(() => (isRunning.value ? 'running' : 'ready'))
 const configuredProviders = computed(() => diagnostics.value?.models.configuredProviders.join(', ') || 'none')
 const resourceDiagnostics = computed(() => diagnostics.value?.resources.resourceDiagnostics || [])
 const blockedPackages = computed(() => diagnostics.value?.resources.blockedPackages || [])
+const storeDiagnostics = computed(() => diagnostics.value?.resources.stores || [])
 const selectedWorkflow = computed(() => workflows.value.find((workflow) => workflow.id === selectedWorkflowId.value))
 const runningPackageOperations = computed(() => packageOperations.value.filter((operation) => operation.status === 'running'))
 
@@ -553,6 +554,7 @@ onUnmounted(() => {
           </dl>
           <p v-if="resourceDiagnostics.length" class="text-destructive text-xs">{{ resourceDiagnostics.length }} resource diagnostics</p>
           <p v-if="blockedPackages.length" class="text-destructive text-xs">{{ blockedPackages.length }} blocked packages</p>
+          <p v-if="storeDiagnostics.some((store) => !store.ok)" class="text-destructive text-xs">Store recovery needs review</p>
           <p v-if="diagnostics?.gaps.length" class="text-destructive text-xs">{{ diagnostics.gaps.join(' / ') }}</p>
           <label class="field-label">
             API token
@@ -809,6 +811,19 @@ onUnmounted(() => {
                 </div>
               </div>
               <p v-else class="empty-text">No resource diagnostics.</p>
+              <div v-if="storeDiagnostics.length" class="list-stack overflow-auto">
+                <div v-for="store in storeDiagnostics" :key="store.path" class="workflow-row">
+                  <div class="flex items-center justify-between gap-2">
+                    <strong>{{ store.name }}</strong>
+                    <Badge :variant="store.ok ? 'secondary' : 'destructive'">{{ store.ok ? 'ok' : 'review' }}</Badge>
+                  </div>
+                  <span>{{ store.recordCount }} records / {{ store.exists ? 'exists' : 'missing' }}</span>
+                  <span>{{ store.path }}</span>
+                  <p v-if="store.recovered">recovered from corrupt JSON</p>
+                  <span v-if="store.backupPath">backup {{ store.backupPath }}</span>
+                  <p v-if="store.error">{{ store.error }}</p>
+                </div>
+              </div>
             </section>
 
             <section class="side-panel">
