@@ -4,7 +4,7 @@ import type {
   ProjectSummary,
   UpdateProjectRequest,
 } from "@zuu/client";
-import { notFound } from "../http";
+import { ApiError, notFound, validationError } from "../http";
 import { assertAllowedPath } from "./environment";
 import { JsonFileStore } from "./json-file-store";
 
@@ -122,7 +122,7 @@ export class ProjectStore {
     const project = this.get(projectId);
     if (request.name !== undefined) {
       const name = request.name.trim();
-      if (!name) throw new Error("name is required");
+      if (!name) validationError("name is required", { field: "name" });
       project.name = name;
     }
     if (request.cwd !== undefined) {
@@ -135,7 +135,11 @@ export class ProjectStore {
 
   delete(projectId: string) {
     if (projectId === DEFAULT_PROJECT_ID) {
-      throw new Error("default project cannot be deleted");
+      throw new ApiError("default project cannot be deleted", {
+        status: 409,
+        code: "default_project",
+        details: { projectId },
+      });
     }
     const project = this.get(projectId);
     this.projects.delete(projectId);

@@ -626,6 +626,11 @@ async function main() {
   if (renamedProject.project.name !== "renamed check project") {
     throw new Error("project update response is invalid");
   }
+  await expectClientError(() => client.updateProject(project.project.id, { name: " " }), {
+    status: 400,
+    code: "validation_failed",
+    details: hasErrorField("name"),
+  });
   const projectSession = await client.createProjectSession(project.project.id, {
     persist: false,
     name: "project check",
@@ -769,7 +774,7 @@ async function main() {
     throw new Error("project API service should delegate project calls");
   }
   await expectClientError(() => client.getProject(project.project.id), { status: 404, code: "not_found" });
-  await expectClientError(() => client.deleteProject("default"), { status: 400, code: "validation_failed" });
+  await expectClientError(() => client.deleteProject("default"), { status: 409, code: "default_project" });
   await expectClientError(() => client.createProject({ cwd: ".." }), { status: 400, code: "validation_failed" });
   await expectClientError(() => client.getSession("missing"), { status: 404, code: "not_found" });
   await expectClientError(() => client.updateSession("missing", { name: "missing" }), { status: 404, code: "not_found" });
