@@ -50,7 +50,7 @@ const diagnostics = await client.diagnostics();
 const packages = await client.listPackages();
 ```
 
-除 `GET /v1/health` 外，daemon API 都需要 Bearer token。未设置 `ZUU_API_TOKEN` 时，daemon 会在 `.zuu/pi-agent/auth-token.json` 生成本地 admin/read 双 token；read token 只能访问受保护 `GET /v1/*`，写操作需要 admin token。本地 token 可以轮换，环境变量 token 会作为 admin token 且只能在进程外变更。
+除 `GET /v1/health` 外，daemon API 都需要 Bearer token。未设置 `ZUU_API_TOKEN` 时，daemon 会在 `.zuu/pi-agent/auth-token.json` 生成本地 admin/read 双 token；read token 只能访问受保护 `GET /v1/*`，写操作需要 admin token。本地 token 可以轮换，也可以设置可选 `expiresAt`；过期 token 会拒绝鉴权，但仍会在 `authStatus()` 中标记 `expired` 以便审计。环境变量 token 会作为 admin token 且只能在进程外变更。
 
 ```ts
 const status = await client.authStatus();
@@ -59,7 +59,11 @@ if (status.auth.canRotate) {
   console.log(rotated.apiToken);
   console.log(rotated.readApiToken);
 
-  const created = await client.createAuthToken({ scope: "read", actor: "readonly-dashboard" });
+  const created = await client.createAuthToken({
+    scope: "read",
+    actor: "readonly-dashboard",
+    expiresAt: new Date(Date.now() + 24 * 60 * 60_000).toISOString(),
+  });
   console.log(created.apiToken);
   await client.revokeAuthToken(created.token.id);
 }

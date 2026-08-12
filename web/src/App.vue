@@ -83,6 +83,7 @@ const apiToken = ref(localStorage.getItem(tokenKey) || '')
 const authStatus = ref<AuthStatus>()
 const newAuthTokenActor = ref('webui')
 const newAuthTokenScope = ref<AuthScope>('read')
+const newAuthTokenExpiresAt = ref('')
 const auditEvents = ref<AuditEvent[]>([])
 const auditAction = ref<'' | AuditEventAction>('')
 const auditOutcome = ref<'' | AuditEventOutcome>('')
@@ -678,6 +679,7 @@ async function createAuthToken() {
   const result = await client.createAuthToken({
     actor: newAuthTokenActor.value.trim() || undefined,
     scope: newAuthTokenScope.value,
+    expiresAt: optionalDatetimeIso(newAuthTokenExpiresAt.value),
   })
   authStatus.value = result.auth
   await loadAuditEvents()
@@ -1322,6 +1324,7 @@ onUnmounted(() => {
               <option value="read">read</option>
               <option value="admin">admin</option>
             </select>
+            <input v-model="newAuthTokenExpiresAt" class="field-input min-w-0" type="datetime-local" aria-label="Token expires at">
             <Button size="sm" @click="createAuthToken().catch((error) => addMessage('error', errorMessage(error)))">Create token</Button>
           </div>
           <div v-if="authStatus?.tokens.length" class="list-stack">
@@ -1330,11 +1333,13 @@ onUnmounted(() => {
                 <div class="min-w-0">
                   <div class="flex flex-wrap items-center gap-2">
                     <Badge variant="outline">{{ token.scope }}</Badge>
+                    <Badge v-if="token.expired" variant="destructive">expired</Badge>
                     <span>{{ token.actor }}</span>
                   </div>
                   <p class="empty-text">{{ token.tokenPreview }} / {{ token.id }}</p>
                   <div class="workflow-progress">
                     <span>created {{ token.createdAt }}</span>
+                    <span v-if="token.expiresAt">expires {{ token.expiresAt }}</span>
                     <span v-if="token.rotatedAt">rotated {{ token.rotatedAt }}</span>
                     <span v-if="token.lastUsedAt">used {{ token.lastUsedAt }}</span>
                   </div>

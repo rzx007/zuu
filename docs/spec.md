@@ -389,6 +389,7 @@ Daemon 启动时必须：
 - `POST /v1/auth/rotate`
 - `POST /v1/auth/tokens`
 - `DELETE /v1/auth/tokens/:tokenId`
+- 本地 token 可设置可选 `expiresAt`；过期 token 必须拒绝授权，`GET /v1/auth/status` 仍需返回其 `expired` 状态供审计。
 - `GET /v1/audit-events`
 - `GET /v1/diagnostics`
 

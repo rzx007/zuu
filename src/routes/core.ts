@@ -175,5 +175,8 @@ function parseAuthCreateToken(value: unknown): AuthCreateTokenRequest {
   if (body.actor !== undefined && typeof body.actor !== "string") {
     throw new ApiError("actor must be a string", { status: 400, code: "validation_failed", details: { field: "actor" } });
   }
-  return { scope: body.scope, actor: body.actor };
+  if (body.expiresAt !== undefined && typeof body.expiresAt !== "string") {
+    throw new ApiError("expiresAt must be a string", { status: 400, code: "validation_failed", details: { field: "expiresAt" } });
+  }
+  return { scope: body.scope, actor: body.actor, expiresAt: body.expiresAt };
 }

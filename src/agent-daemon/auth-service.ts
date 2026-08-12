@@ -8,6 +8,7 @@ export type AuthScope = "admin" | "read";
 export interface AuthCreateTokenRequest {
   scope: AuthScope;
   actor?: string;
+  expiresAt?: string;
 }
 
 interface StoredAuthToken {
@@ -16,6 +17,7 @@ interface StoredAuthToken {
   scope: AuthScope;
   token: string;
   createdAt: string;
+  expiresAt?: string;
   rotatedAt?: string;
   lastUsedAt?: string;
 }
@@ -32,6 +34,8 @@ export interface AuthTokenStatus {
   scope: AuthScope;
   tokenPreview: string;
   createdAt: string;
+  expiresAt?: string;
+  expired: boolean;
   rotatedAt?: string;
   lastUsedAt?: string;
 }
@@ -127,7 +131,7 @@ export class AuthService {
     if (!token) return undefined;
     if (this.envToken) return token === this.envToken ? { scope: "admin", actor: "env", tokenId: "env-admin" } : undefined;
 
-    const stored = this.getLocalRecord().tokens.find((item) => item.token === token);
+    const stored = this.getLocalRecord().tokens.find((item) => item.token === token && !isTokenExpired(item));
     return stored ? { scope: stored.scope, actor: stored.actor, tokenId: stored.id } : undefined;
   }
 
@@ -145,6 +149,7 @@ export class AuthService {
             scope: "admin",
             tokenPreview: tokenPreview(this.envToken),
             createdAt: new Date(0).toISOString(),
+            expired: false,
           },
         ],
       };
@@ -191,6 +196,7 @@ export class AuthService {
     this.assertLocalAuthMutable("created");
     const scope = parseAuthScope(request.scope);
     const actor = normalizeActor(request.actor);
+    const expiresAt = normalizeFutureTimestamp(request.expiresAt, "expiresAt");
     const record = this.getLocalRecord();
     const token: StoredAuthToken = {
       id: randomUUID(),
@@ -198,6 +204,7 @@ export class AuthService {
       scope,
       token: generateToken(scope),
       createdAt: new Date().toISOString(),
+      expiresAt,
     };
     this.saveLocalToken({ ...record, tokens: [...record.tokens, token] });
     return {
@@ -322,6 +329,8 @@ function toTokenStatus(token: StoredAuthToken): AuthTokenStatus {
     scope: token.scope,
     tokenPreview: tokenPreview(token.token),
     createdAt: token.createdAt,
+    expiresAt: token.expiresAt,
+    expired: isTokenExpired(token),
     rotatedAt: token.rotatedAt,
     lastUsedAt: token.lastUsedAt,
   };
@@ -338,6 +347,22 @@ function normalizeActor(actor: string | undefined) {
     throw new ApiError("actor must be at most 64 characters", { status: 400, code: "validation_failed", details: { field: "actor" } });
   }
   return normalized;
+}
+
+function normalizeFutureTimestamp(value: string | undefined, field: "expiresAt") {
+  if (value === undefined || value.trim() === "") return undefined;
+  const timestamp = Date.parse(value);
+  if (Number.isNaN(timestamp)) {
+    throw new ApiError(`${field} is invalid`, { status: 400, code: "validation_failed", details: { field } });
+  }
+  if (timestamp <= Date.now()) {
+    throw new ApiError(`${field} must be in the future`, { status: 400, code: "validation_failed", details: { field } });
+  }
+  return new Date(timestamp).toISOString();
+}
+
+function isTokenExpired(token: Pick<StoredAuthToken, "expiresAt">) {
+  return Boolean(token.expiresAt && Date.parse(token.expiresAt) <= Date.now());
 }
 
 function isAuthTokenRecord(value: unknown): value is AuthTokenRecord {
@@ -367,6 +392,7 @@ function isStoredAuthToken(value: unknown): value is StoredAuthToken {
       typeof value.token === "string" &&
       "createdAt" in value &&
       typeof value.createdAt === "string" &&
+      (!("expiresAt" in value) || typeof value.expiresAt === "string") &&
       (!("rotatedAt" in value) || typeof value.rotatedAt === "string") &&
       (!("lastUsedAt" in value) || typeof value.lastUsedAt === "string"),
   );

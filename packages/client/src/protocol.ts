@@ -191,6 +191,8 @@ export interface AuthTokenStatus {
   scope: AuthScope;
   tokenPreview: string;
   createdAt: string;
+  expiresAt?: string;
+  expired: boolean;
   rotatedAt?: string;
   lastUsedAt?: string;
 }
@@ -218,6 +220,7 @@ export interface AuthRotateResponse extends AuthStatusResponse {
 export interface AuthCreateTokenRequest {
   scope: AuthScope;
   actor?: string;
+  expiresAt?: string;
 }
 
 export interface AuthCreateTokenResponse extends AuthStatusResponse {

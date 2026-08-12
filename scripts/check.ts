@@ -162,6 +162,20 @@ async function main() {
     status: 403,
     code: "forbidden",
   });
+  const expiringTokenExpiresAt = new Date(Date.now() + 60_000).toISOString();
+  const expiringToken = await client.createAuthToken({ scope: "read", actor: "expiring-reader", expiresAt: expiringTokenExpiresAt });
+  if (expiringToken.token.expiresAt !== expiringTokenExpiresAt || expiringToken.token.expired) {
+    throw new Error("auth token creation should preserve future expiresAt metadata");
+  }
+  await expectClientError(() => client.createAuthToken({ scope: "read", actor: "past-reader", expiresAt: new Date(Date.now() - 1000).toISOString() }), {
+    status: 400,
+    code: "validation_failed",
+  });
+  await expectClientError(() => client.createAuthToken({ scope: "read", actor: "bad-expiry", expiresAt: "not a date" }), {
+    status: 400,
+    code: "validation_failed",
+  });
+  await client.revokeAuthToken(expiringToken.token.id);
   const createdReadToken = await client.createAuthToken({ scope: "read", actor: "check-reader" });
   if (!createdReadToken.apiToken || createdReadToken.token.actor !== "check-reader" || createdReadToken.token.scope !== "read") {
     throw new Error("auth token creation should return the new token once");
@@ -351,6 +365,10 @@ async function main() {
   ) {
     throw new Error("local auth service should create additional actor-scoped token contexts");
   }
+  const serviceExpiringToken = localAuth.createToken({ scope: "read", actor: "service-expiring", expiresAt: new Date(Date.now() + 60_000).toISOString() });
+  if (!serviceExpiringToken.token.expiresAt || serviceExpiringToken.token.expired) {
+    throw new Error("local auth service should expose non-expired token expiry metadata");
+  }
   const revokedExtraReadToken = localAuth.revokeToken(extraReadToken.token.id);
   if (
     revokedExtraReadToken.revoked.id !== extraReadToken.token.id ||
@@ -360,6 +378,20 @@ async function main() {
   }
   const extraAdminToken = localAuth.createToken({ scope: "admin", actor: "admin-check" });
   localAuth.revokeToken(extraAdminToken.token.id);
+  const authTokenPath = join(authServiceDir, "auth-token.json");
+  const authTokenPayload = JSON.parse(readFileSync(authTokenPath, "utf8")) as { data: { tokens: Array<{ id: string; expiresAt?: string }> } };
+  authTokenPayload.data.tokens = authTokenPayload.data.tokens.map((token) =>
+    token.id === serviceExpiringToken.token.id ? { ...token, expiresAt: new Date(Date.now() - 1000).toISOString() } : token,
+  );
+  writeFileSync(authTokenPath, `${JSON.stringify(authTokenPayload, null, 2)}\n`, "utf8");
+  const expiredAuth = new AuthService(authTokenPath, "");
+  if (expiredAuth.contextForAuthorization(`Bearer ${serviceExpiringToken.apiToken}`) !== undefined) {
+    throw new Error("local auth service should reject expired tokens");
+  }
+  const expiredTokenStatus = expiredAuth.status().tokens.find((token) => token.id === serviceExpiringToken.token.id);
+  if (!expiredTokenStatus?.expired) {
+    throw new Error("local auth service should expose expired token status");
+  }
   try {
     localAuth.revokeToken("local-admin");
     throw new Error("last local admin token should not be revoked");
