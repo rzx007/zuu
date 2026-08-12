@@ -2,6 +2,7 @@ import type {
   CreateScheduleRequest,
   Schedule,
   ScheduleAction,
+  ScheduleRetryPolicy,
   ScheduleRun,
   ScheduleTrigger,
   UpdateScheduleRequest,
@@ -41,6 +42,7 @@ function isSchedule(value: unknown): value is Schedule {
       "misfirePolicy" in value &&
       typeof value.misfirePolicy === "string" &&
       SCHEDULE_MISFIRE_POLICIES.has(value.misfirePolicy) &&
+      (!("retryPolicy" in value) || value.retryPolicy === undefined || isScheduleRetryPolicy(value.retryPolicy)) &&
       "runs" in value &&
       Array.isArray(value.runs) &&
       value.runs.every(isScheduleRun) &&
@@ -48,6 +50,26 @@ function isSchedule(value: unknown): value is Schedule {
       typeof value.createdAt === "string" &&
       "updatedAt" in value &&
       typeof value.updatedAt === "string",
+  );
+}
+
+function isScheduleRetryPolicy(value: unknown): value is ScheduleRetryPolicy {
+  return Boolean(
+    value &&
+      typeof value === "object" &&
+      "maxAttempts" in value &&
+      typeof value.maxAttempts === "number" &&
+      Number.isInteger(value.maxAttempts) &&
+      value.maxAttempts >= 1 &&
+      value.maxAttempts <= 5 &&
+      "backoffMs" in value &&
+      typeof value.backoffMs === "number" &&
+      Number.isFinite(value.backoffMs) &&
+      value.backoffMs >= 0 &&
+      value.backoffMs <= 60_000 &&
+      (!("retryableCodes" in value) ||
+        value.retryableCodes === undefined ||
+        (Array.isArray(value.retryableCodes) && value.retryableCodes.every((code) => typeof code === "string"))),
   );
 }
 
@@ -151,6 +173,13 @@ function validateMisfirePolicy(misfirePolicy: CreateScheduleRequest["misfirePoli
   throw new Error("misfirePolicy must be skip or run_once");
 }
 
+function validateRetryPolicy(retryPolicy: CreateScheduleRequest["retryPolicy"] | UpdateScheduleRequest["retryPolicy"]) {
+  if (retryPolicy === undefined || retryPolicy === null) return;
+  if (!isScheduleRetryPolicy(retryPolicy)) {
+    throw new Error("retryPolicy.maxAttempts must be 1-5 and retryPolicy.backoffMs must be 0-60000");
+  }
+}
+
 function computeNextRunAt(trigger: ScheduleTrigger, after = Date.now()) {
   if (trigger.kind === "once") {
     const runAt = Date.parse(trigger.runAt ?? "");
@@ -208,6 +237,7 @@ export class ScheduleStore {
     validateAction(request.action);
     validateOverlapPolicy(request.overlapPolicy);
     validateMisfirePolicy(request.misfirePolicy);
+    validateRetryPolicy(request.retryPolicy);
 
     const now = new Date().toISOString();
     const schedule: Schedule = {
@@ -218,6 +248,7 @@ export class ScheduleStore {
       action: request.action,
       overlapPolicy: request.overlapPolicy ?? "skip",
       misfirePolicy: request.misfirePolicy ?? "skip",
+      retryPolicy: request.retryPolicy,
       createdAt: now,
       updatedAt: now,
       nextRunAt: computeNextRunAt(request.trigger),
@@ -236,6 +267,7 @@ export class ScheduleStore {
     if (request.action !== undefined) validateAction(request.action);
     validateOverlapPolicy(request.overlapPolicy);
     validateMisfirePolicy(request.misfirePolicy);
+    validateRetryPolicy(request.retryPolicy);
 
     const triggerChanged = request.trigger !== undefined;
     if (request.name !== undefined) schedule.name = request.name.trim() || defaultScheduleName(request.action ?? schedule.action);
@@ -243,6 +275,7 @@ export class ScheduleStore {
     if (request.action !== undefined) schedule.action = request.action;
     if (request.overlapPolicy !== undefined) schedule.overlapPolicy = request.overlapPolicy;
     if (request.misfirePolicy !== undefined) schedule.misfirePolicy = request.misfirePolicy;
+    if (request.retryPolicy !== undefined) schedule.retryPolicy = request.retryPolicy ?? undefined;
     schedule.updatedAt = new Date().toISOString();
 
     this.clearTimer(schedule.id);
@@ -463,14 +496,31 @@ export class ScheduleStore {
   }
 
   private async runScheduleAction(schedule: Schedule, run: ScheduleRun) {
-    if (schedule.action.type === "prompt") {
-      const result = await this.executor.runPrompt(schedule.action);
-      run.agentRunId = result.agentRunId;
-      return;
+    const maxAttempts = schedule.retryPolicy?.maxAttempts ?? 1;
+    const backoffMs = schedule.retryPolicy?.backoffMs ?? 0;
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+      run.attempts = attempt;
+      try {
+        if (schedule.action.type === "prompt") {
+          const result = await this.executor.runPrompt(schedule.action);
+          run.agentRunId = result.agentRunId;
+        } else {
+          const result = await this.executor.runWorkflow(schedule.action);
+          run.workflowRunId = result.workflowRunId;
+        }
+        delete run.error;
+        return;
+      } catch (error) {
+        run.error = error instanceof Error ? error.message : String(error);
+        if (attempt >= maxAttempts || !isRetryableScheduleError(schedule.retryPolicy, error)) {
+          throw error;
+        }
+        await delay(backoffMs);
+      }
     }
 
-    const result = await this.executor.runWorkflow(schedule.action);
-    run.workflowRunId = result.workflowRunId;
+    throw new Error("schedule retry policy did not produce an attempt");
   }
 
   private skipMisfire(schedule: Schedule) {
@@ -560,6 +610,21 @@ function compareScheduleRuns(a: ScheduleRun, b: ScheduleRun) {
 
 function defaultScheduleName(action: ScheduleAction) {
   return action.type === "workflow" ? `Workflow: ${action.workflowId}` : "Prompt schedule";
+}
+
+function isRetryableScheduleError(retryPolicy: ScheduleRetryPolicy | undefined, error: unknown) {
+  const retryableCodes = retryPolicy?.retryableCodes;
+  if (!retryableCodes?.length) return true;
+  const code = error && typeof error === "object" && "code" in error ? String(error.code) : undefined;
+  return Boolean(code && retryableCodes.includes(code));
+}
+
+function delay(ms: number) {
+  if (ms <= 0) return Promise.resolve();
+  return new Promise<void>((resolve) => {
+    const timer = setTimeout(resolve, ms);
+    timer.unref?.();
+  });
 }
 
 interface CronExpression {

@@ -281,6 +281,7 @@ interface Schedule {
   action: ScheduleAction;
   overlapPolicy: "skip" | "queue" | "parallel";
   misfirePolicy: "skip" | "run_once";
+  retryPolicy?: ScheduleRetryPolicy;
   maxRuntimeMs?: number;
   nextRunAt?: string;
   lastRunAt?: string;
@@ -308,6 +309,7 @@ interface ScheduleRun {
   agentRunId?: string;
   workflowRunId?: string;
   reason?: string;
+  attempts?: number;
 }
 ```
 

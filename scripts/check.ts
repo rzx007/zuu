@@ -401,15 +401,23 @@ async function main() {
     name: "updated workflow schedule",
     trigger: { kind: "interval", everyMs: 120_000 },
     misfirePolicy: "run_once",
+    retryPolicy: { maxAttempts: 2, backoffMs: 0 },
   });
   if (
     updatedSchedule.schedule.id !== schedule.schedule.id ||
     updatedSchedule.schedule.name !== "updated workflow schedule" ||
     updatedSchedule.schedule.trigger.everyMs !== 120_000 ||
     updatedSchedule.schedule.misfirePolicy !== "run_once" ||
+    updatedSchedule.schedule.retryPolicy?.maxAttempts !== 2 ||
     !updatedSchedule.schedule.nextRunAt
   ) {
     throw new Error("schedule update response is invalid");
+  }
+  const retryPolicyRemovedSchedule = await client.updateProjectSchedule(defaultProject.id, schedule.schedule.id, {
+    retryPolicy: null,
+  });
+  if (retryPolicyRemovedSchedule.schedule.retryPolicy) {
+    throw new Error("schedule retry policy should be removable");
   }
   const filteredSchedules = await client.listProjectSchedules(defaultProject.id);
   if (!filteredSchedules.schedules.some((item) => item.id === schedule.schedule.id)) {
@@ -500,6 +508,17 @@ async function main() {
     unsupportedMisfireFailed = true;
   }
   if (!unsupportedMisfireFailed) throw new Error("unsupported misfire policy should fail");
+  let unsupportedRetryPolicyFailed = false;
+  try {
+    await client.createProjectSchedule(defaultProject.id, {
+      trigger: { kind: "interval", everyMs: 60_000 },
+      action: { type: "workflow", workflowId: workflows.workflows[0].id },
+      retryPolicy: { maxAttempts: 0, backoffMs: 0 },
+    });
+  } catch {
+    unsupportedRetryPolicyFailed = true;
+  }
+  if (!unsupportedRetryPolicyFailed) throw new Error("unsupported retry policy should fail");
   let cronTimezoneFailed = false;
   try {
     await client.createProjectSchedule(defaultProject.id, {
@@ -658,6 +677,58 @@ async function main() {
     throw new Error("parallel schedule runs should both complete");
   }
   parallelOverlapStore.dispose();
+
+  let retryAttemptCount = 0;
+  const retryStore = new ScheduleStore(join(mkdtempSync(join(tmpdir(), "zuu-schedule-retry-check-")), "schedules.json"), {
+    runPrompt: async () => {
+      throw new Error("retry check should use workflow action");
+    },
+    runWorkflow: async () => {
+      retryAttemptCount += 1;
+      if (retryAttemptCount === 1) throw new Error("transient schedule failure");
+      return { workflowRunId: "retry-workflow-run" };
+    },
+  });
+  const retrySchedule = retryStore.create({
+    trigger: { kind: "interval", everyMs: 60_000 },
+    action: { type: "workflow", workflowId: workflows.workflows[0].id, projectId: defaultProject.id },
+    retryPolicy: { maxAttempts: 2, backoffMs: 0 },
+  });
+  const completedRetrySchedule = await retryStore.trigger(retrySchedule.id);
+  const completedRetryRun = completedRetrySchedule.runs[0];
+  if (
+    completedRetryRun?.status !== "completed" ||
+    completedRetryRun.attempts !== 2 ||
+    completedRetryRun.workflowRunId !== "retry-workflow-run" ||
+    completedRetryRun.error
+  ) {
+    throw new Error("schedule retry policy should retry transient failures and clear the final error");
+  }
+  retryStore.dispose();
+
+  let codedRetryAttemptCount = 0;
+  const codedRetryStore = new ScheduleStore(join(mkdtempSync(join(tmpdir(), "zuu-schedule-coded-retry-check-")), "schedules.json"), {
+    runPrompt: async () => {
+      throw new Error("coded retry check should use workflow action");
+    },
+    runWorkflow: async () => {
+      codedRetryAttemptCount += 1;
+      const error = new Error("fatal schedule failure") as Error & { code: string };
+      error.code = "fatal";
+      throw error;
+    },
+  });
+  const codedRetrySchedule = codedRetryStore.create({
+    trigger: { kind: "interval", everyMs: 60_000 },
+    action: { type: "workflow", workflowId: workflows.workflows[0].id, projectId: defaultProject.id },
+    retryPolicy: { maxAttempts: 3, backoffMs: 0, retryableCodes: ["transient"] },
+  });
+  const failedCodedRetrySchedule = await codedRetryStore.trigger(codedRetrySchedule.id);
+  const failedCodedRetryRun = failedCodedRetrySchedule.runs[0];
+  if (failedCodedRetryRun?.status !== "failed" || failedCodedRetryRun.attempts !== 1 || codedRetryAttemptCount !== 1) {
+    throw new Error("schedule retry policy should respect retryable error codes");
+  }
+  codedRetryStore.dispose();
 
   const missedRunAt = new Date(Date.now() - 60_000).toISOString();
   const misfireSkipPath = join(mkdtempSync(join(tmpdir(), "zuu-schedule-misfire-skip-check-")), "schedules.json");

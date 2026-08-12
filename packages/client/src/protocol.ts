@@ -361,6 +361,12 @@ export type ScheduleRunStatus = "queued" | "running" | "completed" | "failed" | 
 export type ScheduleOverlapPolicy = "skip" | "queue" | "parallel";
 export type ScheduleMisfirePolicy = "skip" | "run_once";
 
+export interface ScheduleRetryPolicy {
+  maxAttempts: number;
+  backoffMs: number;
+  retryableCodes?: string[];
+}
+
 export interface ScheduleTrigger {
   kind: ScheduleTriggerKind;
   runAt?: string;
@@ -401,6 +407,7 @@ export interface ScheduleRun {
   workflowRunId?: string;
   error?: string;
   reason?: string;
+  attempts?: number;
 }
 
 export interface Schedule {
@@ -411,6 +418,7 @@ export interface Schedule {
   action: ScheduleAction;
   overlapPolicy: ScheduleOverlapPolicy;
   misfirePolicy: ScheduleMisfirePolicy;
+  retryPolicy?: ScheduleRetryPolicy;
   createdAt: string;
   updatedAt: string;
   nextRunAt?: string;
@@ -424,6 +432,7 @@ export interface CreateScheduleRequest {
   action: ScheduleAction;
   overlapPolicy?: ScheduleOverlapPolicy;
   misfirePolicy?: ScheduleMisfirePolicy;
+  retryPolicy?: ScheduleRetryPolicy;
 }
 
 export interface UpdateScheduleRequest {
@@ -432,6 +441,7 @@ export interface UpdateScheduleRequest {
   action?: ScheduleAction;
   overlapPolicy?: ScheduleOverlapPolicy;
   misfirePolicy?: ScheduleMisfirePolicy;
+  retryPolicy?: ScheduleRetryPolicy | null;
 }
 
 export interface CreateSessionRequest {

@@ -102,6 +102,8 @@ const scheduleCron = ref('*/5 * * * *')
 const scheduleActionType = ref<'workflow' | 'prompt'>('workflow')
 const scheduleOverlapPolicy = ref<ScheduleOverlapPolicy>('skip')
 const scheduleMisfirePolicy = ref<'skip' | 'run_once'>('skip')
+const scheduleRetryAttempts = ref(1)
+const scheduleRetryBackoffMs = ref(0)
 const schedulePrompt = ref('Run a scheduled Zuu status check and summarize the result.')
 const editingScheduleId = ref('')
 const messages = ref<MessageItem[]>([])
@@ -711,6 +713,13 @@ async function createSchedule() {
     action,
     overlapPolicy: scheduleOverlapPolicy.value,
     misfirePolicy: scheduleMisfirePolicy.value,
+    retryPolicy:
+      scheduleRetryAttempts.value > 1
+        ? {
+            maxAttempts: Math.min(5, Math.max(1, Number(scheduleRetryAttempts.value) || 1)),
+            backoffMs: Math.min(60_000, Math.max(0, Number(scheduleRetryBackoffMs.value) || 0)),
+          }
+        : undefined,
   }
   const result = editingScheduleId.value
     ? await client.updateProjectSchedule(currentProjectId(), editingScheduleId.value, input)
@@ -734,6 +743,8 @@ function editSchedule(schedule: Schedule) {
   scheduleActionType.value = schedule.action.type
   scheduleOverlapPolicy.value = schedule.overlapPolicy
   scheduleMisfirePolicy.value = schedule.misfirePolicy
+  scheduleRetryAttempts.value = schedule.retryPolicy?.maxAttempts || 1
+  scheduleRetryBackoffMs.value = schedule.retryPolicy?.backoffMs || 0
   if (schedule.action.type === 'workflow') {
     selectedWorkflowId.value = schedule.action.workflowId
     schedulePrompt.value = schedule.action.prompt || ''
@@ -1152,6 +1163,16 @@ onUnmounted(() => {
               </select>
             </label>
           </div>
+          <div class="grid grid-cols-2 gap-2">
+            <label class="field-label">
+              Attempts
+              <input v-model.number="scheduleRetryAttempts" class="field-input" type="number" min="1" max="5">
+            </label>
+            <label class="field-label">
+              Backoff ms
+              <input v-model.number="scheduleRetryBackoffMs" class="field-input" type="number" min="0" max="60000" step="100">
+            </label>
+          </div>
           <label v-if="scheduleKind === 'once'" class="field-label">
             Run at
             <input v-model="scheduleRunAt" class="field-input" type="datetime-local">
@@ -1184,6 +1205,7 @@ onUnmounted(() => {
                 <span>{{ schedule.status }} / {{ scheduleTriggerLabel(schedule) }}</span>
                 <span>overlap {{ schedule.overlapPolicy }}</span>
                 <span>misfire {{ schedule.misfirePolicy }}</span>
+                <span v-if="schedule.retryPolicy">retry {{ schedule.retryPolicy.maxAttempts }}x</span>
                 <span>{{ scheduleActionLabel(schedule.action) }}</span>
                 <span v-if="schedule.nextRunAt">next {{ schedule.nextRunAt }}</span>
               </div>
@@ -1353,9 +1375,11 @@ onUnmounted(() => {
                   <span>{{ scheduleTriggerLabel(schedule) }}</span>
                   <span>overlap {{ schedule.overlapPolicy }}</span>
                   <span>misfire {{ schedule.misfirePolicy }}</span>
+                  <span v-if="schedule.retryPolicy">retry {{ schedule.retryPolicy.maxAttempts }}x / {{ schedule.retryPolicy.backoffMs }}ms</span>
                   <span v-if="schedule.nextRunAt">next {{ schedule.nextRunAt }}</span>
                   <div v-if="schedule.runs[0]" class="workflow-progress">
                     <span>{{ schedule.runs[0].status }}</span>
+                    <span v-if="schedule.runs[0].attempts">attempts {{ schedule.runs[0].attempts }}</span>
                     <span>scheduled {{ schedule.runs[0].scheduledFor }}</span>
                     <span v-if="schedule.runs[0].finishedAt">finished {{ schedule.runs[0].finishedAt }}</span>
                     <span v-if="schedule.runs[0].reason">reason {{ schedule.runs[0].reason }}</span>

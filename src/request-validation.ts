@@ -10,6 +10,7 @@ import type {
   PromptRequest,
   ResolveApprovalRequest,
   ScheduleAction,
+  ScheduleRetryPolicy,
   ScheduleTrigger,
   StartWorkflowRequest,
   SwitchSessionRequest,
@@ -142,6 +143,7 @@ export function parseCreateSchedule(value: unknown): CreateScheduleRequest {
     trigger: parseScheduleTrigger(value.trigger),
     action: parseScheduleAction(value.action),
     ...parseSchedulePolicies(value),
+    retryPolicy: parseScheduleRetryPolicy(value.retryPolicy),
   };
 }
 
@@ -152,6 +154,7 @@ export function parseUpdateSchedule(value: unknown): UpdateScheduleRequest {
     trigger: value.trigger === undefined ? undefined : parseScheduleTrigger(value.trigger),
     action: value.action === undefined ? undefined : parseScheduleAction(value.action),
     ...parseSchedulePolicies(value),
+    retryPolicy: value.retryPolicy === null ? null : parseScheduleRetryPolicy(value.retryPolicy),
   };
 }
 
@@ -167,6 +170,22 @@ function parseSchedulePolicies(value: Record<string, unknown>) {
   return {
     overlapPolicy: overlapPolicy as CreateScheduleRequest["overlapPolicy"],
     misfirePolicy: misfirePolicy as CreateScheduleRequest["misfirePolicy"],
+  };
+}
+
+function parseScheduleRetryPolicy(value: unknown): ScheduleRetryPolicy | undefined {
+  if (value === undefined) return undefined;
+  assertObject(value, "retryPolicy");
+  if (typeof value.maxAttempts !== "number" || !Number.isInteger(value.maxAttempts) || value.maxAttempts < 1 || value.maxAttempts > 5) {
+    validationError("retryPolicy.maxAttempts must be an integer from 1 to 5", { field: "retryPolicy.maxAttempts" });
+  }
+  if (typeof value.backoffMs !== "number" || !Number.isFinite(value.backoffMs) || value.backoffMs < 0 || value.backoffMs > 60_000) {
+    validationError("retryPolicy.backoffMs must be between 0 and 60000", { field: "retryPolicy.backoffMs" });
+  }
+  return {
+    maxAttempts: value.maxAttempts,
+    backoffMs: value.backoffMs,
+    retryableCodes: optionalStringArray(value.retryableCodes, "retryPolicy.retryableCodes"),
   };
 }
 
