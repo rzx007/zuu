@@ -4,7 +4,7 @@ import {
   type ModelRuntime,
 } from "@earendil-works/pi-coding-agent";
 import { getZuuAgentDir, packageSourceToString, sdkVersion } from "./environment";
-import type { Diagnostics } from "../protocol";
+import type { Diagnostics } from "@zuu/client";
 
 let sdkInfo: ReturnType<typeof sdkVersion> | undefined;
 

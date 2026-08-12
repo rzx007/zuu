@@ -40,7 +40,7 @@ import type {
   StoredSessionSummary,
   SwitchSessionRequest,
   ThinkingLevel,
-} from "./protocol";
+} from "@zuu/client";
 import { loadRunHistory, saveRunHistory } from "./agent-daemon/run-history";
 
 interface ManagedRuntime {

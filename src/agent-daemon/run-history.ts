@@ -1,5 +1,5 @@
 import { readFileSync, writeFileSync } from "node:fs";
-import type { RunSummary } from "../protocol";
+import type { RunSummary } from "@zuu/client";
 
 const RUN_HISTORY_LIMIT = 200;
 

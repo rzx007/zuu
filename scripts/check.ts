@@ -1,5 +1,5 @@
 import app from "../src/index";
-import { createZuuClient } from "../src/client";
+import { createZuuClient } from "@zuu/client";
 
 const fetchFromApp: typeof fetch = async (input, init) => {
   const request = input instanceof Request ? input : new Request(input, init);

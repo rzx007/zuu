@@ -14,7 +14,7 @@ import type {
   PackageMutationRequest,
   PromptRequest,
   SwitchSessionRequest,
-} from "./protocol";
+} from "@zuu/client";
 
 const app = new Hono();
 const daemon = new ZuuDaemon();
@@ -31,7 +31,7 @@ function isAuthorized(authorization: string | undefined) {
 }
 
 async function getClientJs() {
-  clientJsPromise ??= readFile(new URL("./client.ts", import.meta.url), "utf8").then((source) => {
+  clientJsPromise ??= readFile(new URL("../packages/client/src/index.ts", import.meta.url), "utf8").then((source) => {
     return ts.transpileModule(source, {
       compilerOptions: {
         module: ts.ModuleKind.ESNext,

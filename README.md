@@ -51,7 +51,7 @@ pnpm typecheck
 - `POST /api/sessions/:sessionId/fork`
 - `POST /api/sessions/:sessionId/import`
 
-浏览器 UI 通过 `/client.js` 加载 `src/client.ts` 转译出的同一套 client 实现；业务请求不再散落手写 `fetch` 和 SSE 解析逻辑。
+浏览器 UI 通过 `/client.js` 加载 `packages/client` 中 `@zuu/client` 的同一套 client 实现；业务请求不再散落手写 `fetch` 和 SSE 解析逻辑。
 
 默认情况下，Zuu 会把 Pi 应用状态存放在 `.zuu/pi-agent`，这样嵌入式应用不需要写入 `~/.pi/agent`。可以通过 `ZUU_AGENT_DIR` 覆盖。
 

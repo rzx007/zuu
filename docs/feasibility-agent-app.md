@@ -175,7 +175,7 @@ SDK 侧通过 `DefaultResourceLoader` + 项目 `.pi/settings.json` 的 `packages
 |---|---|
 | `pi-agent.ts` 脚本直调 Pi SDK | **仅 Daemon** 内嵌 Pi SDK |
 | `index.ts` 占位 Hello | Daemon HTTP 协议 |
-| 无 Client | `packages/client`（或 `src/client`）类型化 API |
+| 轻量 Client | `packages/client` 类型化 API，后续补独立构建与发布 |
 | 无 UI 边界 | Web/TUI 只 import Client |
 | 无 packages | Daemon 的 `.pi/settings.json` 加载 workflow 等 |
 
@@ -379,7 +379,7 @@ docs/
   protocol-v1.md           # （后续）HTTP/SSE 契约（含 /schedules）
 ```
 
-单仓初期也可先 `src/daemon` + `src/client`，再拆 packages。
+单仓初期已经拆出 `packages/client`；后续可继续把协议文档、workflow adapter 和 scheduler backend 拆成清晰边界。
 
 ---
 
@@ -423,7 +423,7 @@ Pi SDK 文档对于“嵌入一个单 Agent 会话”是合理的，已覆盖 `c
 8. **Windows 支持边界要前置**：workflow/subagent 相关 package 页面要求 Node.js `>=22.19.0`，支持 macOS/Linux，Windows 建议 WSL2，不应默认承诺原生 Windows 完整支持。
 9. **文档与示例存在轻微漂移**：最新 SDK 页面展示了 `customTools` + `defineTool`，但本地 `examples/sdk/05-tools.ts` 仍引导读者去看 extensions 示例，后续实现应以实际安装包类型和编译结果为准。
 
-本次垂直切片验证了其中第 1、2、3、7 点：Zuu 已改为项目内 `.zuu/pi-agent` 存储，诊断接口会暴露 workflow/scheduler 缺口，SSE 映射会将 assistant error 转为客户端错误事件，并且浏览器 UI 已通过轻量 `src/client.ts` 调用 daemon。
+本次垂直切片验证了其中第 1、2、3、7 点：Zuu 已改为项目内 `.zuu/pi-agent` 存储，诊断接口会暴露 workflow/scheduler 缺口，SSE 映射会将 assistant error 转为客户端错误事件，并且浏览器 UI 已通过 workspace 包 `@zuu/client` 调用 daemon。
 
 ---
 

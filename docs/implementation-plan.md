@@ -714,10 +714,9 @@ UI end-to-end
 本仓库已先行实现一个最小可运行切片，用于验证 Pi SDK 嵌入方式和文档假设：
 
 - `src/index.ts`：Hono daemon、浏览器 UI、health、diagnostics、model、package、active session、stored session、session tree、run、prompt、abort、compact、new、switch、fork、import API。
-- `src/agent-daemon.ts`：封装 `ModelRuntime`、`DefaultResourceLoader`、`SettingsManager`、`SessionManager`、`createAgentSessionServices`、`createAgentSessionFromServices`、`createAgentSessionRuntime`、自定义工具和 SSE 事件映射。
-- `src/client.ts`：轻量 Zuu client，封装 health、diagnostics、models、packages、active sessions、stored sessions、session tree、runs、prompt SSE、abort、compact 和 runtime lifecycle 操作。
-- `src/protocol.ts`：当前单包内的临时 DTO，后续应拆入 `@zuu/protocol`。
-- `/client.js`：由 `src/client.ts` 转译生成的浏览器端 client module，当前 WebUI 通过它调用 daemon。
+- `src/agent-daemon.ts`：封装 `ModelRuntime`、`DefaultResourceLoader`、`SettingsManager`、`SessionManager`、`createAgentSessionServices`、`createAgentSessionFromServices`、`createAgentSessionRuntime` 和 runtime lifecycle 编排；daemon 辅助逻辑统一放在 `src/agent-daemon/`。
+- `packages/client`：workspace 包 `@zuu/client`，封装协议 DTO、health、diagnostics、models、packages、active sessions、stored sessions、session tree、runs、prompt SSE、abort、compact 和 runtime lifecycle 操作。
+- `/client.js`：由 `packages/client/src/index.ts` 转译生成的浏览器端 client module，当前 WebUI 通过它调用 daemon。
 - `.zuu/pi-agent`：默认 Pi app state 目录，可通过 `ZUU_AGENT_DIR` 覆盖，避免嵌入式运行时写入 `~/.pi/agent`。
 - `README.md`：当前运行方式和 API 入口。
 
@@ -728,7 +727,7 @@ UI end-to-end
 - `GET /api/health` 正常。
 - `GET /api/diagnostics` 正常返回 SDK 版本、模型数量、skills、extensions、packages 和能力缺口。
 - `POST /api/prompt` 可以返回 SSE `session`、`error`、`agent_event` 和 `done` 事件。
-- `src/client.ts` 可从 Node.js 侧调用 health、diagnostics 和 prompt stream。
+- `@zuu/client` 可从 Node.js 侧调用 health、diagnostics 和 prompt stream。
 - prompt stream 已携带稳定 `runId`，并可通过 `GET /api/runs` 和 `GET /api/runs/:runId` 查询最近运行状态。
 - run registry 已持久化到 `.zuu/pi-agent/runs.json`，daemon 重启后可恢复最近运行摘要。
 - `AgentSessionRuntime` 的 `newSession`、`switchSession`、`fork` 和 `importFromJsonl` 已通过 daemon API 与 client 暴露。
@@ -742,7 +741,7 @@ UI end-to-end
 
 当前限制：
 
-- `src/client.ts` 还没有拆成真正的 workspace 包 `@zuu/client`。
+- `@zuu/client` 已是 workspace 包，但还没有独立构建产物、版本发布流程和第三方示例。
 - run registry 已有文件持久化，但还没有 SSE 重连 replay、事件明细存档或跨进程写入协调。
 - WebUI 已支持打开持久化 session、查看当前 session tree、按 entry fork，以及从本地 JSONL 路径 import。
 - Package API 只维护 source 列表，尚未接入 package 安装进度、信任确认和资源冲突 UI。
@@ -752,5 +751,5 @@ UI end-to-end
 - 当前环境下真实模型 stream 可能因为网络返回 `Connection error`；daemon 已将 SDK assistant error 映射为 SSE error。
 - Workflow/subagent/scheduler 尚未安装 packages，diagnostics 会明确报告缺口。
 
-后续计划应从此切片继续收敛，而不是另起炉灶：先把 `src/protocol.ts` 和 `src/client.ts` 拆成 workspace 包，再把 run registry 持久化，然后接审批、package 管理、workflow adapter 和 scheduler backend。
+后续计划应从此切片继续收敛，而不是另起炉灶：Client workspace 包、run registry 持久化和 package source 管理已经落地，接下来应优先收敛审批、workflow adapter 和 scheduler backend。
 

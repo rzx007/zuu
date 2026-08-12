@@ -20,6 +20,8 @@ import type {
   SwitchSessionRequest,
 } from "./protocol";
 
+export type * from "./protocol";
+
 export interface ZuuClientOptions {
   baseUrl?: string;
   fetch?: typeof fetch;
