@@ -67,6 +67,10 @@ async function expectClientError(
   throw new Error("expected client call to fail");
 }
 
+function hasErrorField(field: string) {
+  return (details: unknown) => Boolean(details && typeof details === "object" && "field" in details && details.field === field);
+}
+
 async function drainStream(stream: AsyncGenerator<unknown>) {
   for await (const _event of stream) {
     // Exhaust the stream so client-side status and SSE parsing are exercised.
@@ -1124,15 +1128,10 @@ async function main() {
   if (loadedSchedule.schedule.id !== schedule.schedule.id) {
     throw new Error("schedule lookup returned the wrong schedule");
   }
-  let unsupportedUpdateMisfireFailed = false;
-  try {
-    await client.updateProjectSchedule(defaultProject.id, schedule.schedule.id, {
-      misfirePolicy: "later" as never,
-    });
-  } catch {
-    unsupportedUpdateMisfireFailed = true;
-  }
-  if (!unsupportedUpdateMisfireFailed) throw new Error("unsupported update misfire policy should fail");
+  await expectClientError(
+    () => client.updateProjectSchedule(defaultProject.id, schedule.schedule.id, { misfirePolicy: "later" as never }),
+    { status: 400, code: "validation_failed", details: hasErrorField("misfirePolicy") },
+  );
   const deletedSchedule = await client.deleteProjectSchedule(defaultProject.id, schedule.schedule.id);
   if (deletedSchedule.schedule.id !== schedule.schedule.id) {
     throw new Error("delete schedule returned the wrong schedule");
@@ -1145,16 +1144,27 @@ async function main() {
     throw new Error("cron schedule response is invalid");
   }
   await client.deleteProjectSchedule(defaultProject.id, cronSchedule.schedule.id);
-  let missingCronTimezoneFailed = false;
-  try {
-    await client.createProjectSchedule(defaultProject.id, {
+  await expectClientError(
+    () => client.createProjectSchedule(defaultProject.id, {
       trigger: { kind: "cron", cron: "* * * * *" } as never,
       action: { type: "workflow", workflowId: workflows.workflows[0].id },
-    });
-  } catch {
-    missingCronTimezoneFailed = true;
-  }
-  if (!missingCronTimezoneFailed) throw new Error("cron schedule timezone should be required");
+    }),
+    { status: 400, code: "validation_failed", details: hasErrorField("trigger.timezone") },
+  );
+  await expectClientError(
+    () => client.createProjectSchedule(defaultProject.id, {
+      trigger: { kind: "once", runAt: "not-a-date" },
+      action: { type: "workflow", workflowId: workflows.workflows[0].id },
+    }),
+    { status: 400, code: "validation_failed", details: hasErrorField("trigger.runAt") },
+  );
+  await expectClientError(
+    () => client.createProjectSchedule(defaultProject.id, {
+      trigger: { kind: "interval", everyMs: 999 },
+      action: { type: "workflow", workflowId: workflows.workflows[0].id },
+    }),
+    { status: 400, code: "validation_failed", details: hasErrorField("trigger.everyMs") },
+  );
   const queuedPolicySchedule = await client.createProjectSchedule(defaultProject.id, {
     trigger: { kind: "interval", everyMs: 60_000 },
     action: { type: "workflow", workflowId: workflows.workflows[0].id },
@@ -1173,28 +1183,22 @@ async function main() {
     throw new Error("parallel overlap policy should be accepted");
   }
   await client.deleteProjectSchedule(defaultProject.id, parallelPolicySchedule.schedule.id);
-  let unsupportedMisfireFailed = false;
-  try {
-    await client.createProjectSchedule(defaultProject.id, {
+  await expectClientError(
+    () => client.createProjectSchedule(defaultProject.id, {
       trigger: { kind: "interval", everyMs: 60_000 },
       action: { type: "workflow", workflowId: workflows.workflows[0].id },
       misfirePolicy: "later" as never,
-    });
-  } catch {
-    unsupportedMisfireFailed = true;
-  }
-  if (!unsupportedMisfireFailed) throw new Error("unsupported misfire policy should fail");
-  let unsupportedRetryPolicyFailed = false;
-  try {
-    await client.createProjectSchedule(defaultProject.id, {
+    }),
+    { status: 400, code: "validation_failed", details: hasErrorField("misfirePolicy") },
+  );
+  await expectClientError(
+    () => client.createProjectSchedule(defaultProject.id, {
       trigger: { kind: "interval", everyMs: 60_000 },
       action: { type: "workflow", workflowId: workflows.workflows[0].id },
       retryPolicy: { maxAttempts: 0, backoffMs: 0 },
-    });
-  } catch {
-    unsupportedRetryPolicyFailed = true;
-  }
-  if (!unsupportedRetryPolicyFailed) throw new Error("unsupported retry policy should fail");
+    }),
+    { status: 400, code: "validation_failed", details: hasErrorField("retryPolicy.maxAttempts") },
+  );
   const shanghaiCronSchedule = await client.createProjectSchedule(defaultProject.id, {
     trigger: { kind: "cron", cron: "0 9 * * *", timezone: "Asia/Shanghai" },
     action: { type: "workflow", workflowId: workflows.workflows[0].id },
@@ -1216,16 +1220,13 @@ async function main() {
     throw new Error("cron timezone schedule should compute nextRunAt in the requested timezone");
   }
   await client.deleteProjectSchedule(defaultProject.id, shanghaiCronSchedule.schedule.id);
-  let invalidCronTimezoneFailed = false;
-  try {
-    await client.createProjectSchedule(defaultProject.id, {
+  await expectClientError(
+    () => client.createProjectSchedule(defaultProject.id, {
       trigger: { kind: "cron", cron: "* * * * *", timezone: "Not/AZone" },
       action: { type: "workflow", workflowId: workflows.workflows[0].id },
-    });
-  } catch {
-    invalidCronTimezoneFailed = true;
-  }
-  if (!invalidCronTimezoneFailed) throw new Error("invalid cron timezone should fail");
+    }),
+    { status: 400, code: "validation_failed", details: hasErrorField("trigger.timezone") },
+  );
 
   const scheduleApiCalls: string[] = [];
   const scheduleApi = new ScheduleApiService({
