@@ -8,6 +8,8 @@ import { ApprovalApiService } from "../src/agent-daemon/approval-api-service";
 import { ApprovalService } from "../src/agent-daemon/approval-service";
 import { ApprovalStore } from "../src/agent-daemon/approval-store";
 import { createApprovalExtension } from "../src/agent-daemon/approval-policy";
+import { ModelApiService } from "../src/agent-daemon/model-api-service";
+import { ModelService } from "../src/agent-daemon/model-service";
 import { PackageApiService } from "../src/agent-daemon/package-api-service";
 import { PackageService } from "../src/agent-daemon/packages";
 import { PackageTrustStore } from "../src/agent-daemon/package-trust";
@@ -1355,6 +1357,75 @@ async function main() {
     missingPackageOperationFailed = true;
   }
   if (!missingPackageOperationFailed) throw new Error("missing package operation should fail");
+  const modelDiagnosticsCalls: unknown[] = [];
+  const modelApiDeletedSessions: string[] = [];
+  const modelApi = new ModelApiService(
+    {
+      diagnostics: async (workflowBackend: unknown, activeModel: unknown) => {
+        modelDiagnosticsCalls.push({ workflowBackend, activeModel });
+        return { ok: true };
+      },
+      listModels: async () => ({ configuredProviders: ["check"], models: [{ provider: "check", id: "model" }] }),
+    } as unknown as ModelService,
+    {
+      workflowBackend: () => ({ kind: "fake", status: "ready", label: "Fake", packageInstalled: false }),
+      activeModel: () => "check:model",
+      prompt: async function* () {
+        yield {
+          id: "model-api-smoke:1",
+          createdAt: "2026-08-12T00:00:00.000Z",
+          runId: "model-api-smoke-run",
+          type: "session",
+          session: {
+            id: "model-api-smoke-session",
+            projectId: "default",
+            cwd: process.cwd(),
+            thinkingLevel: "medium",
+            activeTools: [],
+            messageCount: 0,
+            isStreaming: false,
+            createdAt: "2026-08-12T00:00:00.000Z",
+            updatedAt: "2026-08-12T00:00:00.000Z",
+          },
+        };
+        yield {
+          id: "model-api-smoke:2",
+          createdAt: "2026-08-12T00:00:01.000Z",
+          runId: "model-api-smoke-run",
+          type: "done",
+          run: {
+            id: "model-api-smoke-run",
+            sessionId: "model-api-smoke-session",
+            projectId: "default",
+            source: "api",
+            status: "completed",
+            prompt: "zuu-ok",
+            startedAt: "2026-08-12T00:00:00.000Z",
+            finishedAt: "2026-08-12T00:00:01.000Z",
+          },
+        };
+      },
+      abortSession: async () => {},
+      deleteSession: async (sessionId) => {
+        modelApiDeletedSessions.push(sessionId);
+      },
+    },
+  );
+  const modelApiDiagnostics = await modelApi.diagnostics();
+  if (
+    !(modelApiDiagnostics as { ok?: boolean }).ok ||
+    (modelDiagnosticsCalls[0] as { activeModel?: string }).activeModel !== "check:model"
+  ) {
+    throw new Error("model API diagnostics should include workflow backend and active model");
+  }
+  const modelApiModels = await modelApi.listModels();
+  if (modelApiModels.models[0]?.id !== "model") {
+    throw new Error("model API should delegate model listing");
+  }
+  const modelApiSmoke = await modelApi.smokeModel({ prompt: "zuu-ok" });
+  if (!modelApiSmoke.ok || modelApiSmoke.runId !== "model-api-smoke-run" || modelApiDeletedSessions[0] !== "model-api-smoke-session") {
+    throw new Error("model API smoke should run through prompt and clean up the temporary session");
+  }
   const models = await client.listModels();
   if (!Array.isArray(models.models)) throw new Error("models response is invalid");
   let smokeRequestPath = "";

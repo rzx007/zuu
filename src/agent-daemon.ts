@@ -17,6 +17,7 @@ import {
 import { ApprovalService } from "./agent-daemon/approval-service";
 import { ApprovalApiService } from "./agent-daemon/approval-api-service";
 import { ModelService } from "./agent-daemon/model-service";
+import { ModelApiService } from "./agent-daemon/model-api-service";
 import { ProjectService } from "./agent-daemon/project-service";
 import { ScheduleService } from "./agent-daemon/schedule-service";
 import { PackageApiService } from "./agent-daemon/package-api-service";
@@ -46,7 +47,6 @@ import type {
   UpdateScheduleRequest,
   UpdateSessionRequest,
 } from "@zuu/client";
-import { runModelSmoke } from "./agent-daemon/model-smoke";
 import { RunApiService } from "./agent-daemon/run-api-service";
 import { RunService } from "./agent-daemon/run-service";
 import { createDaemonScheduleExecutor, launchPromptAsRun } from "./agent-daemon/schedule-executor";
@@ -54,11 +54,19 @@ import { SessionService } from "./agent-daemon/session-service";
 
 export class ZuuDaemon {
   private readonly approvalApiService: ApprovalApiService;
+  private readonly modelApiService: ModelApiService;
   private readonly packageApiService: PackageApiService;
   private readonly runApiService: RunApiService;
 
   constructor(options: { audit?: AuditService } = {}) {
     this.approvalApiService = new ApprovalApiService(this.approvalService, options.audit);
+    this.modelApiService = new ModelApiService(this.modelService, {
+      workflowBackend: () => this.workflowService.getBackendInfo(),
+      activeModel: () => this.listSessions()[0]?.model,
+      prompt: (request) => this.prompt(request),
+      abortSession: (sessionId) => this.abort(sessionId),
+      deleteSession: (sessionId) => this.deleteSession(sessionId),
+    });
     this.packageApiService = new PackageApiService(this.packageService, options.audit);
     this.runApiService = new RunApiService(this.runService, this.sessionService);
   }
@@ -315,19 +323,15 @@ export class ZuuDaemon {
   }
 
   async diagnostics() {
-    return this.modelService.diagnostics(this.workflowService.getBackendInfo(), this.listSessions()[0]?.model);
+    return this.modelApiService.diagnostics();
   }
 
   async listModels() {
-    return this.modelService.listModels();
+    return this.modelApiService.listModels();
   }
 
   async smokeModel(request: ModelSmokeRequest = {}): Promise<ModelSmokeResponse> {
-    return runModelSmoke(request, {
-      prompt: (promptRequest) => this.prompt(promptRequest),
-      abortSession: (sessionId) => this.abort(sessionId),
-      deleteSession: (sessionId) => this.deleteSession(sessionId),
-    });
+    return this.modelApiService.smokeModel(request);
   }
 
   listPackages() {
