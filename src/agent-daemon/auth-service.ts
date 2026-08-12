@@ -17,6 +17,7 @@ interface StoredAuthToken {
   token: string;
   createdAt: string;
   rotatedAt?: string;
+  lastUsedAt?: string;
 }
 
 interface AuthTokenRecord {
@@ -32,6 +33,7 @@ export interface AuthTokenStatus {
   tokenPreview: string;
   createdAt: string;
   rotatedAt?: string;
+  lastUsedAt?: string;
 }
 
 export interface AuthStatus {
@@ -78,6 +80,7 @@ export interface AuthContext {
 
 const DEFAULT_TOKEN_RECORD: AuthTokenRecord = { createdAt: "", tokens: [] };
 const DEFAULT_ACTOR = "local";
+const TOKEN_USAGE_TOUCH_INTERVAL_MS = 30_000;
 
 export class AuthService {
   private readonly store: JsonFileStore<AuthTokenRecord>;
@@ -107,6 +110,7 @@ export class AuthService {
   authorize(authorization: string | undefined, requiredScope: AuthScope = "admin"): AuthDecision {
     const context = this.contextForAuthorization(authorization);
     if (!context) return { authorized: false, reason: "unauthorized" };
+    this.touchTokenUsage(context.tokenId);
     if (context.scope === "admin") return { authorized: true, ...context };
     if (context.scope === "read") {
       return requiredScope === "read" ? { authorized: true, ...context } : { authorized: false, ...context, reason: "forbidden" };
@@ -277,6 +281,20 @@ export class AuthService {
       });
     }
   }
+
+  private touchTokenUsage(tokenId: string) {
+    if (this.envToken) return;
+    const record = this.getLocalRecord();
+    const token = record.tokens.find((item) => item.id === tokenId);
+    if (!token) return;
+    const nowMs = Date.now();
+    if (token.lastUsedAt && Date.parse(token.lastUsedAt) > nowMs - TOKEN_USAGE_TOUCH_INTERVAL_MS) return;
+    const lastUsedAt = new Date(nowMs).toISOString();
+    this.saveLocalToken({
+      ...record,
+      tokens: record.tokens.map((item) => (item.id === tokenId ? { ...item, lastUsedAt } : item)),
+    });
+  }
 }
 
 function createStoredToken(id: string, actor: string, scope: AuthScope, createdAt: string): StoredAuthToken {
@@ -305,6 +323,7 @@ function toTokenStatus(token: StoredAuthToken): AuthTokenStatus {
     tokenPreview: tokenPreview(token.token),
     createdAt: token.createdAt,
     rotatedAt: token.rotatedAt,
+    lastUsedAt: token.lastUsedAt,
   };
 }
 
@@ -348,7 +367,8 @@ function isStoredAuthToken(value: unknown): value is StoredAuthToken {
       typeof value.token === "string" &&
       "createdAt" in value &&
       typeof value.createdAt === "string" &&
-      (!("rotatedAt" in value) || typeof value.rotatedAt === "string"),
+      (!("rotatedAt" in value) || typeof value.rotatedAt === "string") &&
+      (!("lastUsedAt" in value) || typeof value.lastUsedAt === "string"),
   );
 }
 

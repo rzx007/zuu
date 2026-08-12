@@ -1333,6 +1333,11 @@ onUnmounted(() => {
                     <span>{{ token.actor }}</span>
                   </div>
                   <p class="empty-text">{{ token.tokenPreview }} / {{ token.id }}</p>
+                  <div class="workflow-progress">
+                    <span>created {{ token.createdAt }}</span>
+                    <span v-if="token.rotatedAt">rotated {{ token.rotatedAt }}</span>
+                    <span v-if="token.lastUsedAt">used {{ token.lastUsedAt }}</span>
+                  </div>
                 </div>
                 <Button
                   v-if="authStatus.canRotate"

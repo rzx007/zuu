@@ -192,6 +192,7 @@ export interface AuthTokenStatus {
   tokenPreview: string;
   createdAt: string;
   rotatedAt?: string;
+  lastUsedAt?: string;
 }
 
 export interface AuthStatus {

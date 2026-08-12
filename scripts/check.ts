@@ -112,6 +112,9 @@ async function main() {
   }
   const localReadTokenStatus = auth.status().tokens.find((token) => token.actor === "local" && token.scope === "read");
   if (!localReadTokenStatus) throw new Error("local read token status should be available");
+  if (!localReadTokenStatus.lastUsedAt || Number.isNaN(Date.parse(localReadTokenStatus.lastUsedAt))) {
+    throw new Error("auth token status should record lastUsedAt after a successful authorized request");
+  }
   const readScopedAuditEvents = await client.listAuditEvents({ action: "api.read", target: "GET /v1/projects", limit: 20 });
   if (
     !readScopedAuditEvents.events.some(

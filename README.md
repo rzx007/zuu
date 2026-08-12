@@ -147,7 +147,7 @@ Packages 面板会区分 `configured`、`installed`、`filtered`、`trusted` / `
 
 安装、更新和删除都会创建后台 operation 并立即返回 `operation.id`；WebUI 通过 `GET /v1/package-operations` 轮询最近任务，展示 SDK progress callback 的事件、完成状态和失败原因。删除成功后会同步撤销对应 source 的信任记录。operation 记录默认持久化在 `.zuu/pi-agent/package-operations.json`，package trust 记录默认持久化在 `.zuu/pi-agent/package-trust.json`。
 
-`GET /v1/auth/status` 会返回 token 来源、是否可轮换、token 预览和本地 token 文件路径；`POST /v1/auth/rotate` 只对本地 token 生效，并在响应中返回新的 `apiToken`，调用方应立即替换后续请求的 Bearer token。
+`GET /v1/auth/status` 会返回 token 来源、是否可轮换、token 预览、本地 token 文件路径和每个 token 的 `lastUsedAt`；`POST /v1/auth/rotate` 只对本地 token 生效，并在响应中返回新的 `apiToken`，调用方应立即替换后续请求的 Bearer token。
 
 `GET /v1/audit-events` 会返回最近审计事件，并支持 `limit`、`action`、`outcome`、`target`、`authScope`、`authActor`、`authTokenId`、`since` 和 `until` 过滤。当前会为受保护的 `GET /v1/*` 只读操作记录 `api.read`，为已授权的 `POST/PATCH/DELETE /v1/*` 写操作记录 `api.mutate`，并在 details 中写入 `authScope`、`authActor` 和 `authTokenId`；公开探针 `GET /v1/health` 和 daemon 级 SSE `GET /v1/events` 不进入审计，避免探活和长连接噪音。领域动作还会额外覆盖 auth rotate、approval resolve 和 package add/trust/install/update/remove 等；审计记录只写 method/path/status、auth token 元数据、source、decision、错误摘要等非密钥信息。
 
