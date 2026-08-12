@@ -62,6 +62,14 @@ async function main() {
   const storedBefore = await client.listStoredSessions();
   if (!Array.isArray(storedBefore.sessions)) throw new Error("stored sessions response is invalid");
 
+  let pathGuardFailed = false;
+  try {
+    await client.createSession({ cwd: "..", persist: false });
+  } catch {
+    pathGuardFailed = true;
+  }
+  if (!pathGuardFailed) throw new Error("cwd outside allowed roots should fail");
+
   const { session } = await client.createSession({ persist: false, name: "check" });
   const tree = await client.getSessionTree(session.id);
   if (!Array.isArray(tree.tree)) throw new Error("session tree response is invalid");

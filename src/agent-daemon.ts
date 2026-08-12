@@ -1,4 +1,4 @@
-import { join } from "node:path";
+import { join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { Type } from "typebox";
@@ -40,6 +40,7 @@ import type {
 const DEFAULT_READ_ONLY_TOOLS = ["read", "grep", "find", "ls", "zuu_status"];
 const DEFAULT_AGENT_DIR = join(process.cwd(), ".zuu", "pi-agent");
 const RUN_HISTORY_LIMIT = 200;
+const DEFAULT_ALLOWED_ROOT = resolve(process.cwd());
 
 interface ManagedRuntime {
   runtime: AgentSessionRuntime;
@@ -78,6 +79,34 @@ function getSessionDir(agentDir: string) {
 
 function getRunStorePath(agentDir: string) {
   return join(agentDir, "runs.json");
+}
+
+function normalizePathForCompare(pathname: string) {
+  const resolved = resolve(pathname);
+  return process.platform === "win32" ? resolved.toLowerCase() : resolved;
+}
+
+function isWithinRoot(pathname: string, root: string) {
+  const normalizedPath = normalizePathForCompare(pathname);
+  const normalizedRoot = normalizePathForCompare(root);
+  const rootPrefix = normalizedRoot.endsWith(sep) ? normalizedRoot : `${normalizedRoot}${sep}`;
+  return normalizedPath === normalizedRoot || normalizedPath.startsWith(rootPrefix);
+}
+
+function getAllowedRoots() {
+  return [
+    DEFAULT_ALLOWED_ROOT,
+    ...(process.env.ZUU_ALLOWED_CWD ?? "")
+      .split(";")
+      .map((item) => item.trim())
+      .filter(Boolean),
+  ];
+}
+
+function assertAllowedPath(pathname: string, label: string) {
+  if (!getAllowedRoots().some((root) => isWithinRoot(pathname, root))) {
+    throw new Error(`${label} is outside allowed roots`);
+  }
 }
 
 function loadRunHistory(path: string): RunSummary[] {
@@ -301,7 +330,9 @@ export class ZuuDaemon {
   }
 
   private createSessionManager(options: CreateSessionOptions, cwd: string, sessionDir: string) {
+    assertAllowedPath(cwd, "cwd");
     if (options.sessionFile) {
+      assertAllowedPath(options.sessionFile, "sessionFile");
       return SessionManager.open(options.sessionFile, sessionDir, options.cwd);
     }
 
@@ -318,11 +349,13 @@ export class ZuuDaemon {
 
   async createSession(options: CreateSessionOptions = {}) {
     if (options.sessionFile) {
+      assertAllowedPath(options.sessionFile, "sessionFile");
       const existing = this.findRuntimeBySessionFile(options.sessionFile);
       if (existing) return existing.runtime.session;
     }
 
     const cwd = options.cwd ?? process.cwd();
+    assertAllowedPath(cwd, "cwd");
     const agentDir = getZuuAgentDir();
     const sessionDir = getSessionDir(agentDir);
     const sessionManager = this.createSessionManager(options, cwd, sessionDir);
@@ -371,6 +404,7 @@ export class ZuuDaemon {
   }
 
   async listStoredSessions(cwd?: string) {
+    if (cwd) assertAllowedPath(cwd, "cwd");
     const agentDir = getZuuAgentDir();
     const sessionDir = getSessionDir(agentDir);
     const sessions = cwd ? await SessionManager.list(cwd, sessionDir) : await SessionManager.listAll(sessionDir);
@@ -584,6 +618,8 @@ export class ZuuDaemon {
     }
 
     const managed = this.getManagedRuntime(sessionId);
+    if (options.cwdOverride) assertAllowedPath(options.cwdOverride, "cwdOverride");
+    assertAllowedPath(options.sessionFile, "sessionFile");
     const result = await managed.runtime.switchSession(options.sessionFile, { cwdOverride: options.cwdOverride });
     return this.summarizeRuntimeAction(managed, result);
   }
@@ -604,6 +640,8 @@ export class ZuuDaemon {
     }
 
     const managed = this.getManagedRuntime(sessionId);
+    assertAllowedPath(options.path, "path");
+    if (options.cwdOverride) assertAllowedPath(options.cwdOverride, "cwdOverride");
     const result = await managed.runtime.importFromJsonl(options.path, options.cwdOverride);
     return this.summarizeRuntimeAction(managed, result);
   }
