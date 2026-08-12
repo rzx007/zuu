@@ -23,10 +23,10 @@ import {
   restoreNextRun,
   updateNextRun,
 } from "./schedule-state";
+import { ScheduleTimerRegistry } from "./schedule-timers";
 import { computeNextRunAt } from "./schedule-timing";
 import { validateCreateScheduleRequest, validateUpdateScheduleRequest } from "./schedule-validation";
 
-const MAX_TIMER_DELAY_MS = 2_147_483_647;
 export type { ScheduleExecutor } from "./schedule-runner";
 
 export interface ScheduleStoreOptions {
@@ -36,21 +36,20 @@ export interface ScheduleStoreOptions {
 
 export class ScheduleStore {
   private readonly schedules: Map<string, Schedule>;
-  private readonly timers = new Map<string, NodeJS.Timeout>();
-  private readonly lease?: ScheduleLease;
-  private leaseHeld: boolean;
-  private leaseHeartbeatTimer: NodeJS.Timeout | undefined;
+  private readonly timers: ScheduleTimerRegistry;
 
   constructor(
     private readonly path: string,
     private readonly executor: ScheduleExecutor,
     options: ScheduleStoreOptions = {},
   ) {
-    this.lease = options.lease;
     this.schedules = new Map(loadSchedules(path).map((schedule) => [schedule.id, schedule]));
-    this.leaseHeld = this.lease ? this.lease.acquire() : true;
-    if (this.lease) this.startLeaseHeartbeat(options.leaseHeartbeatMs);
-    if (this.leaseHeld) this.rescheduleAll();
+    this.timers = new ScheduleTimerRegistry({
+      lease: options.lease,
+      leaseHeartbeatMs: options.leaseHeartbeatMs,
+      onLeaseAcquired: () => this.rescheduleAll(),
+    });
+    if (this.timers.canRunAutomaticTimers()) this.rescheduleAll();
   }
 
   list(projectId?: string) {
@@ -200,10 +199,7 @@ export class ScheduleStore {
   }
 
   dispose() {
-    this.clearAllTimers();
-    if (this.leaseHeartbeatTimer) clearInterval(this.leaseHeartbeatTimer);
-    this.leaseHeartbeatTimer = undefined;
-    this.lease?.release();
+    this.timers.dispose();
   }
 
   private skipOverlap(schedule: Schedule, options: ScheduleTriggerOptions) {
@@ -296,47 +292,13 @@ export class ScheduleStore {
   }
 
   private arm(schedule: Schedule) {
-    this.clearTimer(schedule.id);
-    if (!this.canRunAutomaticTimers()) return;
-    if (schedule.status !== "active" || !schedule.nextRunAt) return;
-
-    const delay = Math.max(0, Math.min(Date.parse(schedule.nextRunAt) - Date.now(), MAX_TIMER_DELAY_MS));
-    const timer = setTimeout(() => {
+    this.timers.arm(schedule, () => {
       void this.trigger(schedule.id, { automatic: true });
-    }, delay);
-    timer.unref?.();
-    this.timers.set(schedule.id, timer);
+    });
   }
 
   private clearTimer(scheduleId: string) {
-    const timer = this.timers.get(scheduleId);
-    if (timer) clearTimeout(timer);
-    this.timers.delete(scheduleId);
-  }
-
-  private clearAllTimers() {
-    for (const scheduleId of this.timers.keys()) {
-      this.clearTimer(scheduleId);
-    }
-  }
-
-  private canRunAutomaticTimers() {
-    return !this.lease || this.leaseHeld;
-  }
-
-  private startLeaseHeartbeat(heartbeatMs = 5_000) {
-    this.leaseHeartbeatTimer = setInterval(() => {
-      if (!this.lease) return;
-      if (this.leaseHeld) {
-        this.leaseHeld = this.lease.heartbeat();
-        if (!this.leaseHeld) this.clearAllTimers();
-        return;
-      }
-
-      this.leaseHeld = this.lease.acquire();
-      if (this.leaseHeld) this.rescheduleAll();
-    }, heartbeatMs);
-    this.leaseHeartbeatTimer.unref?.();
+    this.timers.clear(scheduleId);
   }
 
   private rescheduleAll() {
