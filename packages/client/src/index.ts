@@ -734,9 +734,7 @@ export function createZuuClient(options: ZuuClientOptions = {}): ZuuClient {
       requestJson<RunEventsResponse>(
         fetchImpl,
         baseUrl,
-        afterEventId
-          ? `/v1/runs/${encodeURIComponent(runId)}/events?afterEventId=${encodeURIComponent(afterEventId)}`
-          : `/v1/runs/${encodeURIComponent(runId)}/events`,
+        withQuery(`/v1/runs/${encodeURIComponent(runId)}/events`, { afterEventId }),
         undefined,
         apiToken,
       ),
@@ -832,7 +830,7 @@ export function createZuuClient(options: ZuuClientOptions = {}): ZuuClient {
       requestJson<ApprovalsResponse>(
         fetchImpl,
         baseUrl,
-        status ? `/v1/approvals?status=${encodeURIComponent(status)}` : "/v1/approvals",
+        withQuery("/v1/approvals", { status }),
         undefined,
         apiToken,
       ),
@@ -1012,11 +1010,11 @@ async function* openEventStream(
   apiToken: string | undefined,
   options: EventStreamOptions,
 ): AsyncGenerator<PromptStreamEvent> {
-  const params = new URLSearchParams();
-  if (options.runId) params.set("runId", options.runId);
-  if (options.sessionId) params.set("sessionId", options.sessionId);
-  if (options.afterEventId) params.set("afterEventId", options.afterEventId);
-  const path = params.size ? `/v1/events?${params}` : "/v1/events";
+  const path = withQuery("/v1/events", {
+    runId: options.runId,
+    sessionId: options.sessionId,
+    afterEventId: options.afterEventId,
+  });
   const response = await fetchImpl(joinUrl(baseUrl, path), {
     headers: {
       ...(apiToken ? { authorization: `Bearer ${apiToken}` } : {}),

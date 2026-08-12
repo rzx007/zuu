@@ -355,6 +355,26 @@ async function main() {
     until: "2026-08-13T00:00:00.000Z",
   });
   if (!sawAuditRoute) throw new Error("audit event client method should call the audit route");
+  const clientQueryUrls: string[] = [];
+  const queryClient = createZuuClient({
+    baseUrl: "http://zuu.local",
+    fetch: async (input, init) => {
+      const request = input instanceof Request ? input : new Request(input, init);
+      clientQueryUrls.push(request.url);
+      return Response.json({ events: [], approvals: [] });
+    },
+  });
+  await queryClient.listRunEvents("run:with/slash", "event:1/2");
+  await queryClient.listApprovals("pending");
+  if (
+    clientQueryUrls.join("|") !==
+    [
+      "http://zuu.local/v1/runs/run%3Awith%2Fslash/events?afterEventId=event%3A1%2F2",
+      "http://zuu.local/v1/approvals?status=pending",
+    ].join("|")
+  ) {
+    throw new Error("client query helpers should encode filtered routes consistently");
+  }
 
   const authServiceDir = mkdtempSync(join(tmpdir(), "zuu-auth-service-check-"));
   const localAuth = new AuthService(join(authServiceDir, "auth-token.json"), "");
@@ -717,12 +737,14 @@ async function main() {
   if (missingEventStream.status !== 404) throw new Error("missing event stream run should fail before streaming");
 
   let eventStreamRequestCount = 0;
+  const eventStreamUrls: string[] = [];
   const eventStreamLastEventIds: Array<string | null> = [];
   const eventStreamClient = createZuuClient({
     baseUrl: "http://zuu.local",
     fetch: async (input, init) => {
       const request = input instanceof Request ? input : new Request(input, init);
       eventStreamRequestCount += 1;
+      eventStreamUrls.push(request.url);
       eventStreamLastEventIds.push(request.headers.get("last-event-id"));
       const body =
         eventStreamRequestCount === 1
@@ -777,6 +799,8 @@ async function main() {
   }
   if (
     eventStreamRequestCount !== 2 ||
+    eventStreamUrls[0] !== "http://zuu.local/v1/events?afterEventId=event-check%3A0" ||
+    eventStreamUrls[1] !== "http://zuu.local/v1/events?afterEventId=event-check%3A1" ||
     eventStreamLastEventIds[0] !== "event-check:0" ||
     eventStreamLastEventIds[1] !== "event-check:1" ||
     eventStreamOpenCount !== 2 ||
