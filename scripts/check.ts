@@ -1884,6 +1884,25 @@ async function main() {
   if (safeRead !== undefined) {
     throw new Error("approval extension should allow non-sensitive read tools");
   }
+  const safeTokenDocRead = await toolCallHandlers[0]?.(
+    { type: "tool_call", toolName: "read", toolCallId: "tool-call-safe-token-doc-read", input: { path: "docs/token-lifecycle.md" } },
+    toolCallContext,
+  );
+  if (safeTokenDocRead !== undefined) {
+    throw new Error("approval extension should not treat ordinary token-named docs as sensitive paths");
+  }
+  const safeGrepPattern = await toolCallHandlers[0]?.(
+    {
+      type: "tool_call",
+      toolName: "grep",
+      toolCallId: "tool-call-safe-grep-pattern",
+      input: { pattern: "token", path: "src/index.ts" },
+    },
+    toolCallContext,
+  );
+  if (safeGrepPattern !== undefined) {
+    throw new Error("approval extension should not treat grep patterns as sensitive paths");
+  }
   const sensitiveReadResult = Promise.resolve(
     toolCallHandlers[0]?.(
       { type: "tool_call", toolName: "read", toolCallId: "tool-call-sensitive-read", input: { path: ".env" } },
