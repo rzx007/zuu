@@ -1,14 +1,9 @@
 import { fileURLToPath } from "node:url";
 import {
   createEventBus,
-  createAgentSessionFromServices,
   createAgentSessionRuntime,
-  createAgentSessionServices,
   SessionManager,
   type AgentSession,
-  type AgentSessionRuntime,
-  type CreateAgentSessionRuntimeFactory,
-  type DefaultResourceLoader,
   type EventBusController,
   type SessionInfo,
   type SessionTreeNode,
@@ -16,7 +11,6 @@ import {
 import {
   assertAllowedPath,
   createModelRuntime,
-  DEFAULT_READ_ONLY_TOOLS,
   getApprovalStorePath,
   getPackageOperationStorePath,
   getPackageTrustStorePath,
@@ -29,13 +23,12 @@ import {
   getZuuAgentDir,
 } from "./agent-daemon/environment";
 import { ApprovalStore, assertApprovalStatus } from "./agent-daemon/approval-store";
-import { createApprovalExtension, subscribeApprovalEvents } from "./agent-daemon/approval-policy";
+import { subscribeApprovalEvents } from "./agent-daemon/approval-policy";
 import { buildDiagnostics } from "./agent-daemon/diagnostics";
 import { compactAgentEvent, entryRole, entryText } from "./agent-daemon/events";
 import { ProjectStore } from "./agent-daemon/projects";
 import { ScheduleStore } from "./agent-daemon/schedules";
 import { PackageService } from "./agent-daemon/packages";
-import { createStatusTool } from "./agent-daemon/status-tool";
 import { createWorkflowBackend } from "./agent-daemon/workflows";
 import type {
   CreateScheduleRequest,
@@ -65,19 +58,15 @@ import type {
 } from "@zuu/client";
 import { loadRunHistory, saveRunHistory } from "./agent-daemon/run-history";
 import { matchesEventQuery, RunEventStore, type RunEventDraft } from "./agent-daemon/run-events";
-
-interface ManagedRuntime {
-  runtime: AgentSessionRuntime;
-  projectId: string;
-  cwd: string;
-  createdAt: string;
-  updatedAt: string;
-}
-
-type CreateSessionOptions = CreateSessionRequest;
+import {
+  bindManagedRuntime,
+  createManagedSessionManager,
+  createZuuRuntimeFactory,
+  type CreateSessionOptions,
+  type ManagedRuntime,
+} from "./agent-daemon/session-runtime";
 
 type EventListener = (event: PromptStreamEvent) => void;
-
 
 export class ZuuDaemon {
   private readonly runtimes = new Map<string, ManagedRuntime>();
@@ -121,68 +110,6 @@ export class ZuuDaemon {
     },
   });
 
-  private createRuntimeFactory(options: CreateSessionOptions): CreateAgentSessionRuntimeFactory {
-    return async ({ cwd, agentDir, sessionManager, sessionStartEvent }) => {
-      const settingsManager = this.packageService.createTrustedSettingsManager(cwd);
-      const modelRuntime = await this.modelRuntimePromise;
-      const services = await createAgentSessionServices({
-        cwd,
-        agentDir,
-        modelRuntime,
-        settingsManager,
-        resourceLoaderOptions: {
-          eventBus: this.eventBus,
-          extensionFactories: [
-            createApprovalExtension({
-              approvalStore: this.approvalStore,
-              getActiveRunId: (sessionId) => this.activeRunBySessionId.get(sessionId),
-            }),
-          ],
-          appendSystemPrompt: [
-            "You are running inside Zuu, a small daemon-hosted Pi SDK agent app.",
-            "Be explicit about files changed, commands run, and assumptions.",
-          ],
-        },
-      });
-      const model = options.model ? modelRuntime.getModel(options.model.provider, options.model.id) : undefined;
-      const statusTool = createStatusTool({
-        cwd,
-        startedAt: this.startedAt,
-        getSessionCount: () => this.runtimes.size,
-        settingsManager,
-        resourceLoader: services.resourceLoader as DefaultResourceLoader,
-      });
-      const result = await createAgentSessionFromServices({
-        services,
-        sessionManager,
-        sessionStartEvent,
-        model,
-        thinkingLevel: options.thinkingLevel,
-        customTools: [statusTool],
-        tools: options.tools ?? DEFAULT_READ_ONLY_TOOLS,
-      });
-
-      return {
-        ...result,
-        services,
-        diagnostics: services.diagnostics,
-      };
-    };
-  }
-
-  private bindRuntime(managed: ManagedRuntime) {
-    managed.runtime.setRebindSession(async (session) => {
-      for (const [sessionId, item] of this.runtimes) {
-        if (item === managed && sessionId !== session.sessionId) {
-          this.runtimes.delete(sessionId);
-        }
-      }
-      managed.cwd = managed.runtime.cwd;
-      managed.updatedAt = new Date().toISOString();
-      this.runtimes.set(session.sessionId, managed);
-    });
-  }
-
   listProjects() {
     return this.projectStore.list();
   }
@@ -210,20 +137,6 @@ export class ZuuDaemon {
     return this.projectStore.findByCwd(options.cwd) ?? this.projectStore.create({ cwd: options.cwd });
   }
 
-  private createSessionManager(options: CreateSessionOptions, cwd: string, sessionDir: string) {
-    assertAllowedPath(cwd, "cwd");
-    if (options.sessionFile) {
-      assertAllowedPath(options.sessionFile, "sessionFile");
-      return SessionManager.open(options.sessionFile, sessionDir, cwd);
-    }
-
-    if (options.continueRecent) {
-      return SessionManager.continueRecent(cwd, sessionDir);
-    }
-
-    return options.persist === false ? SessionManager.inMemory(cwd) : SessionManager.create(cwd, sessionDir);
-  }
-
   private findRuntimeBySessionFile(sessionFile: string) {
     return [...this.runtimes.values()].find((managed) => managed.runtime.session.sessionFile === sessionFile);
   }
@@ -245,14 +158,29 @@ export class ZuuDaemon {
     assertAllowedPath(cwd, "cwd");
     const agentDir = getZuuAgentDir();
     const sessionDir = getSessionDir(agentDir);
-    const sessionManager = this.createSessionManager(options, cwd, sessionDir);
+    const sessionManager = createManagedSessionManager(options, cwd, sessionDir);
     const runtimeCwd = sessionManager.getCwd();
 
-    const runtime = await createAgentSessionRuntime(this.createRuntimeFactory(options), {
-      cwd: runtimeCwd,
-      agentDir,
-      sessionManager,
-    });
+    const runtimeFactory = createZuuRuntimeFactory(
+      {
+        packageService: this.packageService,
+        modelRuntimePromise: this.modelRuntimePromise,
+        approvalStore: this.approvalStore,
+        activeRunBySessionId: this.activeRunBySessionId,
+        eventBus: this.eventBus,
+        startedAt: this.startedAt,
+        getSessionCount: () => this.runtimes.size,
+      },
+      options,
+    );
+    const runtime = await createAgentSessionRuntime(
+      runtimeFactory,
+      {
+        cwd: runtimeCwd,
+        agentDir,
+        sessionManager,
+      },
+    );
     const session = runtime.session;
 
     if (options.name) session.setSessionName(options.name);
@@ -265,7 +193,7 @@ export class ZuuDaemon {
       createdAt: now,
       updatedAt: now,
     };
-    this.bindRuntime(managed);
+    bindManagedRuntime(this.runtimes, managed);
     this.runtimes.set(session.sessionId, managed);
     return session;
   }
