@@ -756,7 +756,7 @@ UI end-to-end
 - 内置 Zuu approval policy 已通过 Pi inline extension 接入 `tool_call`，默认拦截 `bash`、`edit`、`write`，并会对 `read`、`grep`、`find`、`ls` 命中的 `.env`、SSH、auth token、credential、secret、key 等敏感路径触发文件系统审批；审批会通过 prompt SSE 发出 `approval_requested` 和 `approval_resolved`，交互式 run 的同一个 tool call 会有界等待 WebUI 处理，schedule 等非交互 run 会立即过期并 fail-closed；`allow_once` 可消费一次，`allow_session` 可对同 session 的同类工具/敏感路径 scope 放行。
 - 本地 access token 已支持首次启动生成 admin/read 双 token、Bearer token 中间件、文件权限 best-effort 收紧和在线轮换；`ZUU_API_TOKEN` 可覆盖本地 token 并作为 admin token，client 和 WebUI 都能发送 Bearer token。
 - 默认路径保护已限制 `cwd`、session 文件和 import 文件在当前项目根内；可通过 `ZUU_ALLOWED_CWD` 追加允许根目录。
-- Node server 已支持 SIGINT/SIGTERM graceful shutdown，会关闭 HTTP server 并 dispose active runtime。
+- Node server 默认只绑定 `127.0.0.1`，可通过 `ZUU_HOST`/`ZUU_PORT` 显式覆盖；非 loopback 监听会输出高风险警告。SIGINT/SIGTERM graceful shutdown 已支持，会关闭 HTTP server 并 dispose active runtime。
 
 当前限制：
 

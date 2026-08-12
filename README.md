@@ -9,7 +9,7 @@ pnpm install
 pnpm dev
 ```
 
-默认后端监听 `http://localhost:3001`。服务运行时是 Node.js，当前按 Node 24 使用。
+默认后端只监听 loopback：`http://127.0.0.1:3001`。可用 `ZUU_HOST` 和 `ZUU_PORT` 显式覆盖；如果设置成 `0.0.0.0`、公网地址或其它非 loopback host，daemon 会在启动日志输出高风险警告。服务运行时是 Node.js，当前按 Node 24 使用。
 
 项目脚本使用 Node 24 原生 `--env-file-if-exists=.env` 读取环境变量文件，不需要额外安装 `dotenv`。如果 `.env` 不存在，启动不会报错。
 

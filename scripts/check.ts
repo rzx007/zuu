@@ -1,7 +1,7 @@
 import { existsSync, mkdtempSync, readdirSync, readFileSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import app, { auth } from "../src/index";
+import app, { auth, resolveServerAddress } from "../src/index";
 import { AuthService } from "../src/agent-daemon/auth-service";
 import { AuditService } from "../src/agent-daemon/audit-service";
 import { ApprovalApiService } from "../src/agent-daemon/approval-api-service";
@@ -77,6 +77,25 @@ async function main() {
   const currentApiToken = auth.currentToken();
   const authHeaders = () => ({ authorization: `Bearer ${currentApiToken}` });
   const client = createZuuClient({ baseUrl: "http://zuu.local", fetch: fetchFromApp, apiToken: currentApiToken });
+  const defaultAddress = resolveServerAddress({ hostname: "127.0.0.1", port: 3001 });
+  if (!defaultAddress.loopback || defaultAddress.url !== "http://127.0.0.1:3001") {
+    throw new Error("server should default to loopback address formatting");
+  }
+  const ipv6LoopbackAddress = resolveServerAddress({ hostname: "::1", port: "8787" });
+  if (!ipv6LoopbackAddress.loopback || ipv6LoopbackAddress.url !== "http://[::1]:8787") {
+    throw new Error("server should format IPv6 loopback addresses safely");
+  }
+  const publicAddress = resolveServerAddress({ hostname: "0.0.0.0", port: 3001 });
+  if (publicAddress.loopback) {
+    throw new Error("server should flag non-loopback addresses");
+  }
+  let invalidPortFailed = false;
+  try {
+    resolveServerAddress({ hostname: "127.0.0.1", port: 70_000 });
+  } catch {
+    invalidPortFailed = true;
+  }
+  if (!invalidPortFailed) throw new Error("server should reject invalid ports");
   const health = await client.health();
   if (!health.ok) throw new Error("health check failed");
   if (health.status !== "ready" || health.protocolVersion !== "v1" || typeof health.uptimeMs !== "number" || !health.startedAt) {
