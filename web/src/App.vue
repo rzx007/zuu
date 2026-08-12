@@ -6,6 +6,7 @@ import {
   type ApprovalDecision,
   type CreateScheduleRequest,
   type Diagnostics,
+  type ModelSmokeResponse,
   type ModelSummary,
   type PackageOperation,
   type PackageSummary,
@@ -76,6 +77,7 @@ const packages = ref<PackageSummary[]>([])
 const packageOperations = ref<PackageOperation[]>([])
 const packageSource = ref('')
 const models = ref<ModelSummary[]>([])
+const modelSmoke = ref<ModelSmokeResponse>()
 const selectedModel = ref('')
 const provider = ref('')
 const modelName = ref('')
@@ -110,6 +112,7 @@ const editingScheduleId = ref('')
 const messages = ref<MessageItem[]>([])
 const isRunning = ref(false)
 const isRefreshing = ref(false)
+const isSmokingModel = ref(false)
 const controller = ref<AbortController>()
 const runEventCounts = reactive<Record<string, number>>({})
 const liveEvents = ref<LiveEventItem[]>([])
@@ -466,6 +469,38 @@ function chooseModel() {
   modelName.value = nextModel || ''
 }
 
+function selectedModelRequest() {
+  return provider.value && modelName.value ? { provider: provider.value, id: modelName.value } : undefined
+}
+
+function selectedModelLabel() {
+  const model = selectedModelRequest()
+  return model ? `${model.provider}/${model.id}` : undefined
+}
+
+async function smokeModel() {
+  isSmokingModel.value = true
+  modelSmoke.value = undefined
+  try {
+    const result = await client.smokeModel({
+      projectId: currentProjectId(),
+      model: selectedModelRequest(),
+      thinkingLevel: thinkingLevel.value,
+      timeoutMs: 60_000,
+    })
+    modelSmoke.value = result
+    addMessage(
+      result.ok ? 'event' : 'error',
+      result.ok
+        ? `model smoke ok: ${result.runId?.slice(0, 8) || 'no run'}`
+        : `model smoke failed: ${result.error || result.status}`,
+    )
+    await Promise.all([loadRuns(), loadDiagnostics()])
+  } finally {
+    isSmokingModel.value = false
+  }
+}
+
 async function switchProject() {
   localStorage.setItem(projectKey, currentProjectId())
   syncProjectForm()
@@ -654,7 +689,7 @@ async function startWorkflow() {
     prompt: workflowPrompt.value.trim() || undefined,
     inputs: {
       tools: activeTools.value,
-      model: provider.value && modelName.value ? `${provider.value}/${modelName.value}` : undefined,
+      model: selectedModelLabel(),
     },
   })
   addMessage('event', `workflow ${result.run.status}: ${result.run.workflowName} (${result.run.id.slice(0, 8)})`)
@@ -678,7 +713,7 @@ function scheduleAction(): ScheduleAction | undefined {
       prompt: schedulePrompt.value.trim() || undefined,
       inputs: {
         tools: activeTools.value,
-        model: provider.value && modelName.value ? `${provider.value}/${modelName.value}` : undefined,
+        model: selectedModelLabel(),
       },
     }
   }
@@ -691,7 +726,7 @@ function scheduleAction(): ScheduleAction | undefined {
     name: sessionName.value.trim() || undefined,
     thinkingLevel: thinkingLevel.value,
     tools: activeTools.value,
-    model: provider.value && modelName.value ? { provider: provider.value, id: modelName.value } : undefined,
+    model: selectedModelRequest(),
   }
 }
 
@@ -865,7 +900,7 @@ function createPromptRequest(text: string): PromptRequest {
     name: sessionName.value.trim() || undefined,
     thinkingLevel: thinkingLevel.value,
     tools: activeTools.value,
-    model: provider.value && modelName.value ? { provider: provider.value, id: modelName.value } : undefined,
+    model: selectedModelRequest(),
   }
 }
 
@@ -1052,6 +1087,17 @@ onUnmounted(() => {
               <input v-model="modelName" class="field-input" placeholder="deepseek-chat">
             </label>
           </div>
+          <div class="flex flex-wrap items-center gap-2">
+            <Button variant="outline" size="sm" :disabled="isSmokingModel" @click="smokeModel().catch((error) => addMessage('error', errorMessage(error)))">
+              {{ isSmokingModel ? 'Testing' : 'Smoke test' }}
+            </Button>
+            <Badge v-if="modelSmoke" :variant="modelSmoke.ok ? 'secondary' : 'destructive'">
+              {{ modelSmoke.ok ? 'ok' : modelSmoke.status }}
+            </Badge>
+          </div>
+          <p v-if="modelSmoke" :class="modelSmoke.ok ? 'empty-text' : 'text-destructive text-xs'">
+            {{ modelSmoke.ok ? `run ${modelSmoke.runId?.slice(0, 8) || 'n/a'} / ${modelSmoke.durationMs}ms` : modelSmoke.error || 'model smoke failed' }}
+          </p>
           <label class="field-label">
             Thinking
             <select v-model="thinkingLevel" class="field-input">

@@ -29,6 +29,20 @@ const diagnostics = await client.diagnostics();
 const packages = await client.listPackages();
 ```
 
+`listModels()` 用于读取当前可选模型；`smokeModel()` 会发起一次极小真实调用，用来区分“模型目录可见”和“provider stream 确实可用”。
+
+```ts
+const { models } = await client.listModels();
+const smoke = await client.smokeModel({
+  model: models[0] ? { provider: models[0].provider, id: models[0].id } : undefined,
+  timeoutMs: 60_000,
+});
+
+if (!smoke.ok) {
+  console.error(smoke.status, smoke.error);
+}
+```
+
 ## Project
 
 Daemon 默认提供 `default` 项目。新建项目后，优先把 `projectId` 传给 session、prompt、workflow 和 schedule，而不是在每次调用里重复传 `cwd`。

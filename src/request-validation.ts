@@ -7,6 +7,7 @@ import type {
   NewSessionRequest,
   OpenSessionRequest,
   PackageMutationRequest,
+  ModelSmokeRequest,
   PromptRequest,
   ResolveApprovalRequest,
   ScheduleAction,
@@ -118,6 +119,24 @@ export function parsePrompt(value: unknown): PromptRequest {
     thinkingLevel: parseThinkingLevel(value.thinkingLevel),
     tools: optionalStringArray(value.tools, "tools"),
     persist: optionalBoolean(value.persist, "persist"),
+  };
+}
+
+export function parseModelSmoke(value: unknown): ModelSmokeRequest {
+  assertObject(value);
+  const timeoutMs = value.timeoutMs;
+  if (
+    timeoutMs !== undefined &&
+    (typeof timeoutMs !== "number" || !Number.isInteger(timeoutMs) || timeoutMs < 1_000 || timeoutMs > 120_000)
+  ) {
+    validationError("timeoutMs must be an integer from 1000 to 120000", { field: "timeoutMs" });
+  }
+  return {
+    model: parseModel(value.model),
+    projectId: optionalString(value.projectId, "projectId"),
+    prompt: optionalString(value.prompt, "prompt"),
+    thinkingLevel: parseThinkingLevel(value.thinkingLevel),
+    timeoutMs,
   };
 }
 

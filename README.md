@@ -41,6 +41,7 @@ ZUU_PI_WORKFLOW_RUN=1 pnpm check:pi-workflow
 - `GET /v1/diagnostics`
 - `GET /v1/events`：以 SSE 方式订阅 daemon 级事件，支持 `runId`、`sessionId`、`afterEventId` 和 `Last-Event-ID`
 - `GET /v1/models`
+- `POST /v1/models/smoke`：用极小 prompt 验证真实 provider stream，返回 `ok/status/runId/error/durationMs`
 - `GET /v1/projects`
 - `POST /v1/projects`
 - `GET /v1/projects/:projectId`
@@ -142,6 +143,8 @@ Packages 面板会区分 `configured`、`installed`、`filtered`、`trusted` / `
 安装、更新和删除都会创建后台 operation 并立即返回 `operation.id`；WebUI 通过 `GET /v1/package-operations` 轮询最近任务，展示 SDK progress callback 的事件、完成状态和失败原因。删除成功后会同步撤销对应 source 的信任记录。operation 记录默认持久化在 `.zuu/pi-agent/package-operations.json`，package trust 记录默认持久化在 `.zuu/pi-agent/package-trust.json`。
 
 `GET /v1/diagnostics` 会返回 SDK resource diagnostics；其中 `resources.packages` 只列出已信任且会参与加载的 package，`resources.blockedPackages` 列出因未信任而被阻止加载的 package，`resources.stores` 列出 JSON store 健康状态。WebUI 的 Resources 面板会展示 extension/skill/prompt/theme 的加载错误、warning、name collision 和 store recovery 状态。
+
+`GET /v1/models` 只说明当前认证和模型目录看起来可用；需要确认 DeepSeek 等 provider 是否真的能流式返回时，使用 `POST /v1/models/smoke` 或 WebUI 模型区的 Smoke test。该接口会创建一个临时 in-memory session，发送极小 prompt，并返回 `ok/status/runId/error/durationMs`；失败也会写入 run/events，方便继续排查网络、代理或 provider 错误。
 
 API 错误统一返回 `error.message`、`error.status`、`error.retryable`、`error.code` 和可选 `error.details`。`@zuu/client` 会把非 2xx 响应映射成 `ZuuClientError`，调用方可以直接读取 `status`、`code`、`retryable` 和 `details`，不需要解析错误文案。
 

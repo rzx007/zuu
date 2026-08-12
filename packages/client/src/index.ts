@@ -23,6 +23,8 @@ import type {
   ProjectResponse,
   ProjectsResponse,
   ModelsResponse,
+  ModelSmokeRequest,
+  ModelSmokeResponse,
   RunResponse,
   RunEventsResponse,
   RunsResponse,
@@ -76,6 +78,7 @@ export interface ZuuClient {
   diagnostics(): Promise<Diagnostics>;
   listPackages(): Promise<PackagesResponse>;
   listModels(): Promise<ModelsResponse>;
+  smokeModel(input?: ModelSmokeRequest): Promise<ModelSmokeResponse>;
   listProjects(): Promise<ProjectsResponse>;
   createProject(input: CreateProjectRequest): Promise<ProjectResponse>;
   getProject(projectId: string): Promise<ProjectResponse>;
@@ -332,6 +335,11 @@ export function createZuuClient(options: ZuuClientOptions = {}): ZuuClient {
     diagnostics: () => requestJson<Diagnostics>(fetchImpl, baseUrl, "/v1/diagnostics", undefined, apiToken),
     listPackages: () => requestJson<PackagesResponse>(fetchImpl, baseUrl, "/v1/packages", undefined, apiToken),
     listModels: () => requestJson<ModelsResponse>(fetchImpl, baseUrl, "/v1/models", undefined, apiToken),
+    smokeModel: (input = {}) =>
+      requestJson<ModelSmokeResponse>(fetchImpl, baseUrl, "/v1/models/smoke", {
+        method: "POST",
+        body: JSON.stringify(input),
+      }, apiToken),
     listProjects: () => requestJson<ProjectsResponse>(fetchImpl, baseUrl, "/v1/projects", undefined, apiToken),
     createProject: (input) =>
       requestJson<ProjectResponse>(fetchImpl, baseUrl, "/v1/projects", {

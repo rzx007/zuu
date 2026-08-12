@@ -746,7 +746,7 @@ UI end-to-end
 - `GET /v1/session-files` 和 `POST /v1/sessions/open` 已支持列出和打开 Pi 持久化 session 文件。
 - `GET/PATCH/DELETE /v1/sessions/:sessionId` 已支持读取、更新和关闭 active session；更新当前支持 session name 和 active tools，关闭 streaming session 会返回 `409 session_busy`；`GET /v1/sessions/:sessionId/tree` 已支持读取当前 active session 的树形 entry 摘要，为 fork 选择器提供基础。
 - `GET/POST/DELETE /v1/packages` 已支持查看和维护结构化 Pi package 列表；`GET /v1/packages` 会返回 `configured`、`installed`、`filtered`、trust 状态、load 状态和安装路径，`POST /v1/packages/trust` 与 `DELETE /v1/packages/trust` 可维护 package source 信任记录，`POST /v1/packages/install` 和 `POST /v1/packages/update` 会在 source 已信任后创建后台 operation，调用 Pi package manager 安装或更新 source，并记录 SDK progress callback、完成状态和失败原因；`DELETE /v1/packages` 会创建后台删除 operation，删除成功后撤销对应 source 的信任记录；`GET /v1/package-operations` 与 `GET /v1/package-operations/:operationId` 可查询最近 package 任务。
-- `GET /v1/models` 已支持列出当前已认证可用模型，WebUI 可直接下拉选择。
+- `GET /v1/models` 已支持列出当前已认证可用模型，WebUI 可直接下拉选择；`POST /v1/models/smoke` 与 `@zuu/client.smokeModel()` 已支持用临时 in-memory session 发起极小真实调用，返回 `ok/status/runId/error/durationMs`，用于区分“模型目录可见”和“provider stream 确实可用”。
 - `GET /v1/approvals`、`GET /v1/approvals/:approvalId` 和 `POST /v1/approvals/:approvalId/resolve` 已支持审批列表、详情与处理，审批记录持久化到 `.zuu/pi-agent/approvals.json`。
 - `GET /v1/workflows`、`POST /v1/workflows/:workflowId/runs`、`GET /v1/workflow-runs`、`GET /v1/workflow-runs/:runId`、`GET /v1/workflow-runs/:runId/stages`、`GET /v1/workflow-runs/:runId/tasks`、`GET /v1/artifacts/:artifactId` 和 `POST /v1/workflow-runs/:runId/abort` 已支持最小 workflow 合约；Project 级 workflow run、stage、task 和 artifact 查询也已同步暴露；Workflow Run、Stage 和 Task 已使用 `queued/running/completed/failed/aborted` 状态和 `finishedAt` 完成时间；默认后端是 `FakeWorkflowBackend`，用于稳定 Definition/Run/Stage/Task/Artifact DTO 和 UI board，不启动真实 subagent。
 - `ZUU_WORKFLOW_BACKEND` 已支持选择 `fake` 或 `pi-package`；`pi-package` 会探测 `@agwab/pi-workflow` package source、安装路径和平台支持，ready 后通过 `/workflow run` 或 `/workflow dynamic` 发起真实 Pi extension 工作，并把 Zuu 侧 launch 结果包装成 `WorkflowRun`。真实 `pi-workflow` board/run-state 读取尚未绑定，因此阶段、任务和 artifact 目前仍是 launch 层记录。
@@ -760,13 +760,13 @@ UI end-to-end
 
 - `@zuu/client` 已是可独立构建的 workspace 包，具备 `dist` 产物、包入口、类型声明、包内中文 README 和第三方示例；尚未接入自动版本发布、changelog 和 npm publish 流程。
 - JSON store 已有原子写和损坏恢复，prompt run 事件已有最小存档、按 run 补拉、daemon 级 `/v1/events` replay/live stream 和 SDK 自动 SSE 重连，但还没有 SQLite migration 或跨进程写入协调。
-- WebUI 已迁移到 Vue + Vite，并支持打开持久化 session、查看当前 session tree、按 entry fork、从本地 JSONL 路径 import、处理 pending approvals、启动/查看 fake workflow runs、创建/暂停/恢复/触发/删除 schedule，以及通过 daemon 级 `subscribeEvents()` 实时展示事件并节流刷新 runs、approvals、session tree、schedule 和 workflow run 状态。
+- WebUI 已迁移到 Vue + Vite，并支持打开持久化 session、查看当前 session tree、按 entry fork、从本地 JSONL 路径 import、处理 pending approvals、启动/查看 fake workflow runs、创建/暂停/恢复/触发/删除 schedule、模型 smoke test，以及通过 daemon 级 `subscribeEvents()` 实时展示事件并节流刷新 runs、approvals、session tree、schedule 和 workflow run 状态。
 - Package API 已能展示安装状态、信任状态、加载状态、显式触发安装/更新/删除，并通过持久化 operation 记录暴露任务进度和失败原因；WebUI 已能 trust/revoke package source 并展示 SDK resource diagnostics/collision。未信任 package 会保留在配置清单中，但已从 Pi `ResourceLoader` 和 `pi-package` workflow backend 的加载链路中过滤，diagnostics 会通过 `blockedPackages` 暴露被阻止加载的 source。
 - Approval 已接入 Pi tool call 拦截和 SSE 事件，但当前策略是 fail-closed：危险工具被阻断后需要用户 resolve 并重试 prompt，尚未实现挂起并恢复同一个 tool call 的交互式等待。
 - 当前 API token 是单 token 配置，尚未实现 token 轮换、权限分级和审计日志。
 - 路径保护是根目录级 allowlist，尚未做到按工具/动作细粒度授权。
 - 默认工具集偏只读，`bash`、`edit`、`write` 需要 UI 显式启用。
-- 当前环境下真实模型 stream 可能因为网络返回 `Connection error`；daemon 已将 SDK assistant error 映射为 SSE error。
+- 当前环境下真实模型 stream 可能因为网络返回 `Connection error`；daemon 已将 SDK assistant error 映射为 SSE error，并可通过模型 smoke test 把真实调用结果保存为 run/events。
 - Workflow/subagent package 在当前环境尚未安装，diagnostics 会明确报告缺口；`pi-package` adapter 已有 launch 桥接，但当前 Windows 原生环境会按 `@agwab/pi-workflow` 包页面说明标记为不可用。Scheduler 已有最小内置后端、基础 5 字段 cron、IANA timezone、skip/queue/parallel overlap、skip/run_once misfire、有限 retry policy 和 best-effort schedule run abort，但真实跨进程持久调度队列仍未落地。
 
 后续计划应从此切片继续收敛，而不是另起炉灶：Client workspace 包、run registry 持久化、package source/trust/load 管理、package status/install/update/remove operations、approval tool-call 拦截、Vue WebUI approval 操作面、daemon event stream 面板、fake workflow 合约、pi-package launch adapter、pi-workflow runtime spike 和 Scheduler MVP 已经落地，接下来应优先在 WSL2/Linux 中安装并信任 `@agwab/pi-workflow` 跑通 `docs/spikes/pi-workflow-runtime.md`，再研究 `.pi/workflows` board/run-state 的只读映射，最后把 Scheduler 迁移到可跨进程协调的生产级调度后端。

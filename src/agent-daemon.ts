@@ -28,6 +28,8 @@ import type {
   EventStreamQuery,
   ForkSessionRequest,
   ImportSessionRequest,
+  ModelSmokeRequest,
+  ModelSmokeResponse,
   NewSessionRequest,
   OpenSessionRequest,
   ApprovalStatus,
@@ -43,6 +45,7 @@ import type {
   UpdateScheduleRequest,
   UpdateSessionRequest,
 } from "@zuu/client";
+import { runModelSmoke } from "./agent-daemon/model-smoke";
 import { RunService } from "./agent-daemon/run-service";
 import { SessionService } from "./agent-daemon/session-service";
 
@@ -337,6 +340,14 @@ export class ZuuDaemon {
 
   async listModels() {
     return this.modelService.listModels();
+  }
+
+  async smokeModel(request: ModelSmokeRequest = {}): Promise<ModelSmokeResponse> {
+    return runModelSmoke(request, {
+      prompt: (promptRequest) => this.prompt(promptRequest),
+      abortSession: (sessionId) => this.abort(sessionId),
+      deleteSession: (sessionId) => this.deleteSession(sessionId),
+    });
   }
 
   listPackages() {

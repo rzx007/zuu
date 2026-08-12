@@ -1055,6 +1055,43 @@ async function main() {
   if (!missingPackageOperationFailed) throw new Error("missing package operation should fail");
   const models = await client.listModels();
   if (!Array.isArray(models.models)) throw new Error("models response is invalid");
+  let smokeRequestPath = "";
+  let smokeRequestBody: unknown;
+  const smokeClient = createZuuClient({
+    baseUrl: "http://zuu.local",
+    fetch: async (input, init) => {
+      const request = input instanceof Request ? input : new Request(input, init);
+      smokeRequestPath = new URL(request.url).pathname;
+      smokeRequestBody = init?.body ? JSON.parse(String(init.body)) : undefined;
+      return Response.json({
+        ok: true,
+        status: "completed",
+        startedAt: "2026-08-12T00:00:00.000Z",
+        finishedAt: "2026-08-12T00:00:01.000Z",
+        durationMs: 1000,
+        eventCount: 2,
+        runId: "model-smoke-check",
+      });
+    },
+  });
+  const modelSmoke = await smokeClient.smokeModel({
+    model: { provider: "deepseek", id: "deepseek-chat" },
+    timeoutMs: 1000,
+  });
+  if (
+    !modelSmoke.ok ||
+    smokeRequestPath !== "/v1/models/smoke" ||
+    !smokeRequestBody ||
+    typeof smokeRequestBody !== "object" ||
+    !("model" in smokeRequestBody)
+  ) {
+    throw new Error("model smoke client method should call the smoke route with a model body");
+  }
+  await expectClientError(() => client.smokeModel({ timeoutMs: 999 }), {
+    status: 400,
+    code: "validation_failed",
+    details: (details) => Boolean(details && typeof details === "object" && "field" in details),
+  });
 
   await expectClientError(() => client.addPackage({ source: " " }), {
     status: 400,

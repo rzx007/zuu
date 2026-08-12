@@ -119,6 +119,29 @@ export interface PromptRequest {
   persist?: boolean;
 }
 
+export interface ModelSmokeRequest {
+  model?: PromptRequest["model"];
+  projectId?: string;
+  prompt?: string;
+  thinkingLevel?: ThinkingLevel;
+  timeoutMs?: number;
+}
+
+export interface ModelSmokeResponse {
+  ok: boolean;
+  status: RunSummary["status"] | "failed";
+  startedAt: string;
+  finishedAt: string;
+  durationMs: number;
+  eventCount: number;
+  model?: PromptRequest["model"];
+  run?: RunSummary;
+  runId?: string;
+  sessionId?: string;
+  textPreview?: string;
+  error?: string;
+}
+
 export interface PromptStreamEvent {
   id: string;
   createdAt: string;
