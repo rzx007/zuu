@@ -93,7 +93,11 @@ function getAllowedRoots() {
 
 export function assertAllowedPath(pathname: string, label: string) {
   if (!getAllowedRoots().some((root) => isWithinRoot(pathname, root))) {
-    throw new Error(`${label} is outside allowed roots`);
+    throw new ApiError(`${label} is outside allowed roots`, {
+      status: 400,
+      code: "validation_failed",
+      details: { field: label },
+    });
   }
 }
 

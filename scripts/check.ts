@@ -2747,13 +2747,11 @@ async function main() {
     throw new Error("prompt service should pass streamingBehavior to the Pi SDK session");
   }
 
-  let pathGuardFailed = false;
-  try {
-    await client.createSession({ cwd: "..", persist: false });
-  } catch {
-    pathGuardFailed = true;
-  }
-  if (!pathGuardFailed) throw new Error("cwd outside allowed roots should fail");
+  await expectClientError(() => client.createSession({ cwd: "..", persist: false }), {
+    status: 400,
+    code: "validation_failed",
+    details: hasErrorField("cwd"),
+  });
 
   const { session } = await client.createSession({ persist: false, name: "check" });
   const tree = await client.getSessionTree(session.id);
