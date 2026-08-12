@@ -73,7 +73,40 @@ async function drainStream(stream: AsyncGenerator<unknown>) {
   }
 }
 
+function assertReadmeApiListMatchesRoutes() {
+  const routeFiles = [
+    "src/routes/activity.ts",
+    "src/routes/approvals.ts",
+    "src/routes/core.ts",
+    "src/routes/packages.ts",
+    "src/routes/projects.ts",
+    "src/routes/sessions.ts",
+  ];
+  const actual = new Set<string>();
+  const routePattern = /app\.(get|post|patch|delete)\("([^"]+)"/g;
+  for (const file of routeFiles) {
+    const text = readFileSync(file, "utf8");
+    for (const match of text.matchAll(routePattern)) {
+      actual.add(`${match[1].toUpperCase()} ${match[2]}`);
+    }
+  }
+
+  const documented = new Set<string>();
+  const readme = readFileSync("README.md", "utf8");
+  const docPattern = /^- `(GET|POST|PATCH|DELETE) ([^`]+)`/gm;
+  for (const match of readme.matchAll(docPattern)) {
+    documented.add(`${match[1]} ${match[2]}`);
+  }
+
+  const missing = [...actual].filter((route) => !documented.has(route)).sort();
+  const stale = [...documented].filter((route) => !actual.has(route)).sort();
+  if (missing.length || stale.length) {
+    throw new Error(`README API list drifted; missing=${missing.join(", ") || "none"}; stale=${stale.join(", ") || "none"}`);
+  }
+}
+
 async function main() {
+  assertReadmeApiListMatchesRoutes();
   const currentApiToken = auth.currentToken();
   const authHeaders = () => ({ authorization: `Bearer ${currentApiToken}` });
   const client = createZuuClient({ baseUrl: "http://zuu.local", fetch: fetchFromApp, apiToken: currentApiToken });
