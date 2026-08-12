@@ -19,8 +19,8 @@ import type { ApprovalRegistry } from "./approval-service";
 import { assertAllowedPath, getSessionDir } from "./environment";
 import type { PackageService } from "./packages";
 import type { ProjectService } from "./project-service";
+import { SessionRuntimeRegistry } from "./session-registry";
 import {
-  bindManagedRuntime,
   createManagedSessionManager,
   createZuuRuntimeFactory,
   type CreateSessionOptions,
@@ -46,7 +46,7 @@ export interface SessionServiceOptions {
 }
 
 export class SessionService {
-  private readonly runtimes = new Map<string, ManagedRuntime>();
+  private readonly runtimes = new SessionRuntimeRegistry();
 
   constructor(private readonly options: SessionServiceOptions) {}
 
@@ -106,8 +106,7 @@ export class SessionService {
       createdAt: now,
       updatedAt: now,
     };
-    bindManagedRuntime(this.runtimes, managed);
-    this.runtimes.set(session.sessionId, managed);
+    this.runtimes.add(managed);
     return session;
   }
 
@@ -141,8 +140,8 @@ export class SessionService {
 
   listSessions(projectId?: string) {
     if (projectId) this.options.projects.get(projectId);
-    return [...this.runtimes.values()]
-      .filter((item) => !projectId || item.projectId === projectId)
+    return this.runtimes
+      .list(projectId)
       .map((item) => this.summarizeSession(item.runtime.session));
   }
 
@@ -199,7 +198,7 @@ export class SessionService {
   }
 
   touchSession(sessionId: string) {
-    this.getManagedRuntime(sessionId).updatedAt = new Date().toISOString();
+    this.runtimes.touch(sessionId);
   }
 
   summarizeSession(session: AgentSession): SessionSummary {
@@ -277,20 +276,15 @@ export class SessionService {
   }
 
   async dispose() {
-    for (const managed of this.runtimes.values()) {
-      await managed.runtime.dispose();
-    }
-    this.runtimes.clear();
+    await this.runtimes.dispose();
   }
 
   private findRuntimeBySessionFile(sessionFile: string) {
-    return [...this.runtimes.values()].find((managed) => managed.runtime.session.sessionFile === sessionFile);
+    return this.runtimes.findBySessionFile(sessionFile);
   }
 
   private getManagedRuntime(sessionId: string) {
-    const managed = this.runtimes.get(sessionId);
-    if (!managed) notFound(`Unknown session: ${sessionId}`, { sessionId });
-    return managed;
+    return this.runtimes.get(sessionId);
   }
 
   private assertSessionProject(managed: ManagedRuntime, sessionId: string, projectId: string) {
@@ -301,15 +295,13 @@ export class SessionService {
   }
 
   private deleteManagedRuntime(managed: ManagedRuntime) {
-    for (const [sessionId, item] of this.runtimes) {
-      if (item === managed) this.runtimes.delete(sessionId);
-    }
+    this.runtimes.delete(managed);
   }
 
   private summarizeStoredSession(session: Parameters<typeof summarizeStoredSession>[0], projectId?: string) {
     return summarizeStoredSession(session, {
       projectId,
-      isActive: [...this.runtimes.values()].some((runtime) => runtime.runtime.session.sessionFile === session.path),
+      isActive: this.runtimes.isSessionFileActive(session.path),
     });
   }
 
@@ -320,13 +312,9 @@ export class SessionService {
   }
 
   private sessionSummaryContext(session: AgentSession) {
-    const managed = this.runtimes.get(session.sessionId);
-    const now = new Date().toISOString();
-    return {
-      projectId: managed?.projectId ?? this.options.projects.get().id,
-      cwd: managed?.cwd ?? process.cwd(),
-      createdAt: managed?.createdAt ?? now,
-      updatedAt: managed?.updatedAt ?? now,
-    };
+    return this.runtimes.summaryContext(session, {
+      projectId: this.options.projects.get().id,
+      cwd: process.cwd(),
+    });
   }
 }
