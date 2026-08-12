@@ -670,6 +670,8 @@ Client 不自动：
 - 自动批准工具
 - 自动创建缺失 Project
 
+`@zuu/client` 对外发布时必须暴露构建后的 ESM 入口和 `.d.ts` 类型声明；第三方应用不得依赖 workspace 内的 `src/*.ts` 作为运行时入口。
+
 ## 10. Agent 与 Session 行为
 
 ### 10.1 Session Runtime

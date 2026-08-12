@@ -22,6 +22,7 @@ pnpm dev
 ## 校验
 
 ```sh
+pnpm build:client
 pnpm check
 pnpm typecheck
 pnpm build:web
@@ -87,6 +88,19 @@ Packages 面板会区分 `configured`、`installed`、`filtered`、`trusted` / `
 安装、更新和删除都会创建后台 operation 并立即返回 `operation.id`；WebUI 通过 `GET /api/package-operations` 轮询最近任务，展示 SDK progress callback 的事件、完成状态和失败原因。删除成功后会同步撤销对应 source 的信任记录。operation 记录默认持久化在 `.zuu/pi-agent/package-operations.json`，package trust 记录默认持久化在 `.zuu/pi-agent/package-trust.json`。
 
 `GET /api/diagnostics` 会返回 SDK resource diagnostics；其中 `resources.packages` 只列出已信任且会参与加载的 package，`resources.blockedPackages` 列出因未信任而被阻止加载的 package。WebUI 的 Resources 面板会展示 extension/skill/prompt/theme 的加载错误、warning 和 name collision。
+
+## Client SDK
+
+`packages/client` 是可独立构建的 `@zuu/client` 包，入口是 `dist/index.js`，类型声明是 `dist/index.d.ts`。根目录的 `dev`、`check`、`typecheck`、`build:web` 和 `start` 脚本会先运行 `pnpm build:client`，确保 daemon、WebUI 和第三方脚本消费的是同一个包入口。
+
+第三方调用示例：
+
+```sh
+pnpm example:client
+ZUU_EXAMPLE_PROMPT="介绍一下当前项目" pnpm example:client
+```
+
+更多用法见 [packages/client/README.md](packages/client/README.md)。
 
 ## 当前能力边界
 

@@ -4,8 +4,8 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "vue-tsc -b && vite build",
+    "dev": "pnpm --filter @zuu/client build && vite",
+    "build": "pnpm --filter @zuu/client build && vue-tsc -b && vite build",
     "preview": "vite preview"
   },
   "dependencies": {

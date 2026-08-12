@@ -3,13 +3,15 @@
   "type": "module",
   "packageManager": "pnpm@11.21.0",
   "scripts": {
+    "build:client": "pnpm --filter @zuu/client build",
     "build:web": "pnpm --filter web build",
-    "dev": "node --env-file-if-exists=.env --import tsx src/index.ts",
+    "dev": "pnpm build:client && node --env-file-if-exists=.env --import tsx src/index.ts",
     "dev:web": "pnpm --filter web dev -- --host 127.0.0.1",
-    "start": "node --env-file-if-exists=.env --import tsx src/index.ts",
-    "check": "node --env-file-if-exists=.env --import tsx scripts/check.ts",
-    "check:pi-workflow": "node --env-file-if-exists=.env --import tsx scripts/check-pi-workflow-runtime.ts",
-    "typecheck": "tsc --noEmit"
+    "start": "pnpm build:client && node --env-file-if-exists=.env --import tsx src/index.ts",
+    "check": "pnpm build:client && node --env-file-if-exists=.env --import tsx scripts/check.ts",
+    "check:pi-workflow": "pnpm build:client && node --env-file-if-exists=.env --import tsx scripts/check-pi-workflow-runtime.ts",
+    "example:client": "pnpm build:client && node --env-file-if-exists=.env --import tsx examples/client-basic.ts",
+    "typecheck": "pnpm build:client && tsc --noEmit"
   },
   "dependencies": {
     "@zuu/client": "workspace:*",

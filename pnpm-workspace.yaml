@@ -2,6 +2,8 @@ packages:
   - "packages/*"
   - "web/"
 
+verifyDepsBeforeRun: warn
+
 allowBuilds:
   '@google/genai': true
   esbuild: true

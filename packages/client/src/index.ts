@@ -33,9 +33,9 @@ import type {
   WorkflowRunResponse,
   WorkflowRunsResponse,
   WorkflowsResponse,
-} from "./protocol";
+} from "./protocol.js";
 
-export type * from "./protocol";
+export type * from "./protocol.js";
 
 export interface ZuuClientOptions {
   baseUrl?: string;
