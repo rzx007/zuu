@@ -730,6 +730,10 @@ async function main() {
               "event: text_delta",
               "data: {\"id\":\"event-check:1\",\"createdAt\":\"2026-08-12T00:00:00.000Z\",\"runId\":\"event-check\",\"type\":\"text_delta\",\"delta\":\"hello again\"}",
               "",
+              "id: event-check:unknown",
+              "event: future_event",
+              "data: {\"id\":\"event-check:unknown\",\"createdAt\":\"2026-08-12T00:00:00.500Z\",\"runId\":\"event-check\",\"type\":\"future_event\",\"extra\":true}",
+              "",
               "id: event-check:2",
               "event: done",
               "data: {\"id\":\"event-check:2\",\"createdAt\":\"2026-08-12T00:00:01.000Z\",\"runId\":\"event-check\",\"type\":\"done\"}",
@@ -769,7 +773,7 @@ async function main() {
     eventStreamReconnectCount !== 1 ||
     streamedEvents.map((event) => event.id).join(",") !== "event-check:1,event-check:2"
   ) {
-    throw new Error("event stream client should report open/reconnect, reconnect with Last-Event-ID, dedupe events, and ignore heartbeats");
+    throw new Error("event stream client should report open/reconnect, reconnect with Last-Event-ID, dedupe events, and ignore heartbeats or unknown events");
   }
 
   const workflows = await client.listProjectWorkflows(defaultProject.id);

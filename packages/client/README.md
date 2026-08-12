@@ -189,7 +189,7 @@ for await (const event of client.prompt({ prompt: "你好，介绍一下当前�
 
 ## 事件订阅
 
-`subscribeEvents()` 会先按 `afterEventId` replay 已存档事件，再持续接收 daemon live 事件。它默认保存最后事件 ID，断线后用 `Last-Event-ID` 自动重连，并去重重复事件。事件必须包含稳定 `id` 和 `createdAt`。
+`subscribeEvents()` 会先按 `afterEventId` replay 已存档事件，再持续接收 daemon live 事件。它默认保存最后事件 ID，断线后用 `Last-Event-ID` 自动重连，并去重重复事件。事件必须包含稳定 `id` 和 `createdAt`；未知事件类型会被忽略，未知字段会保留前向兼容。
 
 Agent Run 摘要包含 `source`、`status`、`startedAt` 和 `finishedAt`。`status` 使用 `queued`、`running`、`waiting_approval`、`completed`、`failed`、`aborted`。Workflow Run、Stage 和 Task 使用 `queued/running/completed/failed/aborted`。Cron Schedule trigger 必须显式传入 IANA `timezone`。Schedule Run 使用 `scheduledFor`、`startedAt`、`finishedAt`、`attempts` 和 `queued/running/completed/failed/skipped/aborted`；Package Operation 仍使用自己的领域状态。
 

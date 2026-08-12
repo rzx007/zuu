@@ -278,7 +278,20 @@ function isApiErrorResponse(value: unknown): value is ApiErrorResponse {
   );
 }
 
-function isPromptStreamEvent(value: unknown): value is PromptStreamEvent {
+const PROMPT_STREAM_EVENT_TYPES = new Set<PromptStreamEvent["type"]>([
+  "session",
+  "text_delta",
+  "tool_start",
+  "tool_update",
+  "tool_end",
+  "agent_event",
+  "approval_requested",
+  "approval_resolved",
+  "done",
+  "error",
+]);
+
+function hasPromptStreamEnvelope(value: unknown): value is Pick<PromptStreamEvent, "id" | "createdAt" | "runId"> & { type: string } {
   return Boolean(
     value &&
       typeof value === "object" &&
@@ -291,6 +304,10 @@ function isPromptStreamEvent(value: unknown): value is PromptStreamEvent {
       "type" in value &&
       typeof value.type === "string",
   );
+}
+
+function isPromptStreamEvent(value: unknown): value is PromptStreamEvent {
+  return hasPromptStreamEnvelope(value) && PROMPT_STREAM_EVENT_TYPES.has(value.type as PromptStreamEvent["type"]);
 }
 
 function isAbortError(error: unknown) {
@@ -342,10 +359,10 @@ function parseSseEvents(buffer: string) {
 
     if (data) {
       const event = JSON.parse(data) as unknown;
-      if (!id || !isPromptStreamEvent(event) || event.id !== id) {
+      if (!id || !hasPromptStreamEnvelope(event) || event.id !== id) {
         throw new Error("Invalid SSE event frame");
       }
-      events.push(event);
+      if (isPromptStreamEvent(event)) events.push(event);
     }
   }
 
