@@ -5,6 +5,7 @@ import { serve } from "@hono/node-server";
 import type { ServerType } from "@hono/node-server";
 import { serveStatic } from "@hono/node-server/serve-static";
 import { Hono } from "hono";
+import { createAuditMiddleware } from "./agent-daemon/audit-middleware";
 import { AuditService } from "./agent-daemon/audit-service";
 import { AuthService } from "./agent-daemon/auth-service";
 import { ZuuDaemon } from "./agent-daemon";
@@ -33,6 +34,8 @@ app.use("/v1/*", async (c, next) => {
 
   await next();
 });
+
+app.use("/v1/*", createAuditMiddleware(audit));
 
 app.all("/api/*", (c) => c.json(jsonError("Use /v1 instead of /api.", 404), 404));
 

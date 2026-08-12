@@ -199,6 +199,15 @@ async function main() {
   if (malformedJson.status !== 400) throw new Error("malformed JSON should be rejected");
   const malformedJsonBody = await malformedJson.json() as { error?: { code?: string } };
   if (malformedJsonBody.error?.code !== "invalid_json") throw new Error("malformed JSON response should include invalid_json");
+  const failedMutationAudit = await client.listAuditEvents({
+    action: "api.mutate",
+    outcome: "failure",
+    target: "POST /v1/packages",
+    limit: 10,
+  });
+  if (!failedMutationAudit.events.some((event) => event.target === "POST /v1/packages")) {
+    throw new Error("failed mutating API calls should be recorded in audit events");
+  }
 
   const { runs } = await client.listRuns();
   if (!Array.isArray(runs)) throw new Error("runs response is invalid");
@@ -1323,6 +1332,10 @@ async function main() {
   const packageAuditSource = `npm:zuu-check-audit-${crypto.randomUUID()}`;
   await client.addPackage({ source: packageAuditSource });
   await client.trustPackage({ source: packageAuditSource });
+  const mutatingAuditEvents = await client.listAuditEvents({ action: "api.mutate", outcome: "success", target: "/v1/packages/trust", limit: 20 });
+  if (!mutatingAuditEvents.events.some((event) => event.target === "POST /v1/packages/trust")) {
+    throw new Error("successful mutating API calls should be recorded in audit events");
+  }
   const latestAuditEvents = await client.listAuditEvents(20);
   if (!latestAuditEvents.events.some((event) => event.action === "package.trust" && event.target === packageAuditSource)) {
     throw new Error("package trust should be recorded in audit events");

@@ -1466,6 +1466,7 @@ onUnmounted(() => {
               <div class="grid grid-cols-2 gap-2">
                 <select v-model="auditAction" class="field-input">
                   <option value="">Any action</option>
+                  <option value="api.mutate">api.mutate</option>
                   <option value="auth.rotate">auth.rotate</option>
                   <option value="approval.resolve">approval.resolve</option>
                   <option value="package.add">package.add</option>

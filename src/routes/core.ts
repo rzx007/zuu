@@ -6,6 +6,7 @@ import { parseModelSmoke } from "../request-validation";
 import type { RouteDeps } from "./types";
 
 const AUDIT_ACTIONS = new Set([
+  "api.mutate",
   "auth.rotate",
   "approval.resolve",
   "package.add",
