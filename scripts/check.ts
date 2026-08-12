@@ -471,17 +471,24 @@ async function main() {
     throw new Error("cron schedule response is invalid");
   }
   await client.deleteProjectSchedule(defaultProject.id, cronSchedule.schedule.id);
-  let unsupportedOverlapFailed = false;
-  try {
-    await client.createProjectSchedule(defaultProject.id, {
-      trigger: { kind: "interval", everyMs: 60_000 },
-      action: { type: "workflow", workflowId: workflows.workflows[0].id },
-      overlapPolicy: "queue",
-    });
-  } catch {
-    unsupportedOverlapFailed = true;
+  const queuedPolicySchedule = await client.createProjectSchedule(defaultProject.id, {
+    trigger: { kind: "interval", everyMs: 60_000 },
+    action: { type: "workflow", workflowId: workflows.workflows[0].id },
+    overlapPolicy: "queue",
+  });
+  if (queuedPolicySchedule.schedule.overlapPolicy !== "queue") {
+    throw new Error("queue overlap policy should be accepted");
   }
-  if (!unsupportedOverlapFailed) throw new Error("unsupported overlap policy should fail");
+  await client.deleteProjectSchedule(defaultProject.id, queuedPolicySchedule.schedule.id);
+  const parallelPolicySchedule = await client.createProjectSchedule(defaultProject.id, {
+    trigger: { kind: "interval", everyMs: 60_000 },
+    action: { type: "workflow", workflowId: workflows.workflows[0].id },
+    overlapPolicy: "parallel",
+  });
+  if (parallelPolicySchedule.schedule.overlapPolicy !== "parallel") {
+    throw new Error("parallel overlap policy should be accepted");
+  }
+  await client.deleteProjectSchedule(defaultProject.id, parallelPolicySchedule.schedule.id);
   let unsupportedMisfireFailed = false;
   try {
     await client.createProjectSchedule(defaultProject.id, {
@@ -547,6 +554,110 @@ async function main() {
     throw new Error("first overlapping schedule run should complete after the skipped run is recorded");
   }
   overlapStore.dispose();
+
+  let releaseQueuedFirstRun: (() => void) | undefined;
+  let markQueuedFirstStarted: (() => void) | undefined;
+  let markQueuedSecondStarted: (() => void) | undefined;
+  let queuedRunCount = 0;
+  const queuedFirstStarted = new Promise<void>((resolve) => {
+    markQueuedFirstStarted = resolve;
+  });
+  const queuedSecondStarted = new Promise<void>((resolve) => {
+    markQueuedSecondStarted = resolve;
+  });
+  const queueOverlapStore = new ScheduleStore(
+    join(mkdtempSync(join(tmpdir(), "zuu-schedule-queue-overlap-check-")), "schedules.json"),
+    {
+      runPrompt: async () => {
+        throw new Error("queue overlap check should use workflow action");
+      },
+      runWorkflow: async () => {
+        queuedRunCount += 1;
+        if (queuedRunCount === 1) {
+          markQueuedFirstStarted?.();
+          await new Promise<void>((resolve) => {
+            releaseQueuedFirstRun = resolve;
+          });
+        } else {
+          markQueuedSecondStarted?.();
+        }
+        return { workflowRunId: `queue-overlap-workflow-${queuedRunCount}` };
+      },
+    },
+  );
+  const queueOverlapSchedule = queueOverlapStore.create({
+    trigger: { kind: "interval", everyMs: 60_000 },
+    action: { type: "workflow", workflowId: workflows.workflows[0].id, projectId: defaultProject.id },
+    overlapPolicy: "queue",
+  });
+  const firstQueuedTrigger = queueOverlapStore.trigger(queueOverlapSchedule.id);
+  await queuedFirstStarted;
+  const queuedSchedule = await queueOverlapStore.trigger(queueOverlapSchedule.id);
+  const queuedOverlapRun = queuedSchedule.runs[0];
+  if (
+    queuedOverlapRun?.status !== "queued" ||
+    queuedOverlapRun.reason !== "schedule_overlap" ||
+    queuedSchedule.runs[1]?.status !== "running"
+  ) {
+    throw new Error("queue overlap policy should record a queued run while a run is active");
+  }
+  releaseQueuedFirstRun?.();
+  await firstQueuedTrigger;
+  await queuedSecondStarted;
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  const completedQueuedRun = queueOverlapStore.getRun(queuedOverlapRun.id);
+  if (completedQueuedRun.status !== "completed" || completedQueuedRun.workflowRunId !== "queue-overlap-workflow-2") {
+    throw new Error("queued schedule run should execute after the active run finishes");
+  }
+  queueOverlapStore.dispose();
+
+  let parallelRunCount = 0;
+  const releaseParallelRuns: Array<() => void> = [];
+  let markParallelFirstStarted: (() => void) | undefined;
+  let markParallelBothStarted: (() => void) | undefined;
+  const parallelFirstStarted = new Promise<void>((resolve) => {
+    markParallelFirstStarted = resolve;
+  });
+  const parallelBothStarted = new Promise<void>((resolve) => {
+    markParallelBothStarted = resolve;
+  });
+  const parallelOverlapStore = new ScheduleStore(
+    join(mkdtempSync(join(tmpdir(), "zuu-schedule-parallel-overlap-check-")), "schedules.json"),
+    {
+      runPrompt: async () => {
+        throw new Error("parallel overlap check should use workflow action");
+      },
+      runWorkflow: async () => {
+        parallelRunCount += 1;
+        if (parallelRunCount === 1) markParallelFirstStarted?.();
+        if (parallelRunCount === 2) markParallelBothStarted?.();
+        const runNumber = parallelRunCount;
+        await new Promise<void>((resolve) => {
+          releaseParallelRuns.push(resolve);
+        });
+        return { workflowRunId: `parallel-overlap-workflow-${runNumber}` };
+      },
+    },
+  );
+  const parallelOverlapSchedule = parallelOverlapStore.create({
+    trigger: { kind: "interval", everyMs: 60_000 },
+    action: { type: "workflow", workflowId: workflows.workflows[0].id, projectId: defaultProject.id },
+    overlapPolicy: "parallel",
+  });
+  const firstParallelTrigger = parallelOverlapStore.trigger(parallelOverlapSchedule.id);
+  await parallelFirstStarted;
+  const secondParallelTrigger = parallelOverlapStore.trigger(parallelOverlapSchedule.id);
+  await parallelBothStarted;
+  if (parallelOverlapStore.get(parallelOverlapSchedule.id).runs.filter((run) => run.status === "running").length !== 2) {
+    throw new Error("parallel overlap policy should allow concurrent schedule runs");
+  }
+  releaseParallelRuns.forEach((release) => release());
+  await Promise.all([firstParallelTrigger, secondParallelTrigger]);
+  const completedParallelRuns = parallelOverlapStore.get(parallelOverlapSchedule.id).runs.filter((run) => run.status === "completed");
+  if (completedParallelRuns.length !== 2 || completedParallelRuns.some((run) => !run.workflowRunId)) {
+    throw new Error("parallel schedule runs should both complete");
+  }
+  parallelOverlapStore.dispose();
 
   const missedRunAt = new Date(Date.now() - 60_000).toISOString();
   const misfireSkipPath = join(mkdtempSync(join(tmpdir(), "zuu-schedule-misfire-skip-check-")), "schedules.json");

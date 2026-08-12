@@ -89,7 +89,7 @@ const schedules = await client.listProjectSchedules(currentProjectId);
 const createdSchedule = await client.createProjectSchedule(currentProjectId, {
   trigger: { kind: "interval", everyMs: 30 * 60_000 },
   action: { type: "workflow", workflowId: workflows.workflows[0].id },
-  overlapPolicy: "skip",
+  overlapPolicy: "queue",
   misfirePolicy: "skip",
 });
 await client.updateProjectSchedule(currentProjectId, createdSchedule.schedule.id, {

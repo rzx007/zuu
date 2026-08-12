@@ -13,7 +13,7 @@ const MAX_TIMER_DELAY_MS = 2_147_483_647;
 const MIN_INTERVAL_MS = 1_000;
 const CRON_SEARCH_LIMIT_MINUTES = 366 * 24 * 60;
 const SCHEDULE_RUN_STATUSES = new Set(["queued", "running", "completed", "failed", "skipped", "aborted"]);
-const SCHEDULE_OVERLAP_POLICIES = new Set(["skip"]);
+const SCHEDULE_OVERLAP_POLICIES = new Set(["skip", "queue", "parallel"]);
 const SCHEDULE_MISFIRE_POLICIES = new Set(["skip", "run_once"]);
 
 type PromptAction = Extract<ScheduleAction, { type: "prompt" }>;
@@ -142,8 +142,8 @@ function validateAction(action: ScheduleAction) {
 }
 
 function validateOverlapPolicy(overlapPolicy: CreateScheduleRequest["overlapPolicy"]) {
-  if (overlapPolicy === undefined || overlapPolicy === "skip") return;
-  throw new Error("overlapPolicy queue and parallel are not supported yet; use skip");
+  if (overlapPolicy === undefined || SCHEDULE_OVERLAP_POLICIES.has(overlapPolicy)) return;
+  throw new Error("overlapPolicy must be skip, queue, or parallel");
 }
 
 function validateMisfirePolicy(misfirePolicy: CreateScheduleRequest["misfirePolicy"]) {
@@ -278,12 +278,13 @@ export class ScheduleStore {
   async trigger(scheduleId: string, options: { automatic?: boolean } = {}) {
     const schedule = this.get(scheduleId);
     if (schedule.runs.some((run) => run.status === "running")) {
-      return this.skipOverlap(schedule, options);
+      if (schedule.overlapPolicy === "skip") return this.skipOverlap(schedule, options);
+      if (schedule.overlapPolicy === "queue") return this.queueOverlap(schedule, options);
     }
 
     const previousNextRunAt = schedule.nextRunAt;
     const startedAt = new Date().toISOString();
-    this.clearTimer(schedule.id);
+    if (!options.automatic) this.clearTimer(schedule.id);
     const run: ScheduleRun = {
       id: crypto.randomUUID(),
       scheduleId: schedule.id,
@@ -293,16 +294,14 @@ export class ScheduleStore {
     };
     schedule.runs = [run, ...schedule.runs].slice(0, SCHEDULE_RUN_HISTORY_LIMIT);
     schedule.updatedAt = startedAt;
+    if (options.automatic) {
+      this.updateNextRun(schedule);
+    }
     this.persist();
+    if (options.automatic) this.arm(schedule);
 
     try {
-      if (schedule.action.type === "prompt") {
-        const result = await this.executor.runPrompt(schedule.action);
-        run.agentRunId = result.agentRunId;
-      } else {
-        const result = await this.executor.runWorkflow(schedule.action);
-        run.workflowRunId = result.workflowRunId;
-      }
+      await this.runScheduleAction(schedule, run);
       run.status = "completed";
     } catch (error) {
       run.status = "failed";
@@ -312,13 +311,12 @@ export class ScheduleStore {
       run.finishedAt = now;
       schedule.lastRunAt = now;
       schedule.updatedAt = now;
-      if (options.automatic) {
-        this.updateNextRun(schedule);
-      } else {
+      if (!options.automatic) {
         this.restoreNextRun(schedule, previousNextRunAt);
       }
       this.persist();
-      this.arm(schedule);
+      if (!options.automatic) this.arm(schedule);
+      this.drainQueued(schedule);
     }
 
     return schedule;
@@ -375,6 +373,104 @@ export class ScheduleStore {
     this.persist();
     this.arm(schedule);
     return schedule;
+  }
+
+  private queueOverlap(schedule: Schedule, options: { automatic?: boolean }) {
+    if (schedule.runs.some((run) => run.status === "queued")) {
+      return this.skipQueueFull(schedule, options);
+    }
+
+    const previousNextRunAt = schedule.nextRunAt;
+    const now = new Date().toISOString();
+    this.clearTimer(schedule.id);
+    const run: ScheduleRun = {
+      id: crypto.randomUUID(),
+      scheduleId: schedule.id,
+      status: "queued",
+      scheduledFor: options.automatic && previousNextRunAt ? previousNextRunAt : now,
+      reason: "schedule_overlap",
+    };
+    schedule.runs = [run, ...schedule.runs].slice(0, SCHEDULE_RUN_HISTORY_LIMIT);
+    schedule.updatedAt = now;
+    if (options.automatic) {
+      this.updateNextRun(schedule);
+    } else {
+      this.restoreNextRun(schedule, previousNextRunAt);
+    }
+    this.persist();
+    this.arm(schedule);
+    return schedule;
+  }
+
+  private skipQueueFull(schedule: Schedule, options: { automatic?: boolean }) {
+    const previousNextRunAt = schedule.nextRunAt;
+    const now = new Date().toISOString();
+    this.clearTimer(schedule.id);
+    const run: ScheduleRun = {
+      id: crypto.randomUUID(),
+      scheduleId: schedule.id,
+      status: "skipped",
+      scheduledFor: options.automatic && previousNextRunAt ? previousNextRunAt : now,
+      finishedAt: now,
+      reason: "schedule_queue_full",
+    };
+    schedule.runs = [run, ...schedule.runs].slice(0, SCHEDULE_RUN_HISTORY_LIMIT);
+    schedule.updatedAt = now;
+    if (options.automatic) {
+      this.updateNextRun(schedule);
+    } else {
+      this.restoreNextRun(schedule, previousNextRunAt);
+    }
+    this.persist();
+    this.arm(schedule);
+    return schedule;
+  }
+
+  private drainQueued(schedule: Schedule) {
+    const queuedRun = [...schedule.runs]
+      .filter((run) => run.status === "queued")
+      .sort(compareScheduleRuns)
+      .at(-1);
+    if (!queuedRun || schedule.runs.some((run) => run.status === "running")) return;
+    void this.runQueued(schedule, queuedRun);
+  }
+
+  private async runQueued(schedule: Schedule, run: ScheduleRun) {
+    const previousNextRunAt = schedule.nextRunAt;
+    const startedAt = new Date().toISOString();
+    this.clearTimer(schedule.id);
+    run.status = "running";
+    run.startedAt = startedAt;
+    schedule.updatedAt = startedAt;
+    this.persist();
+
+    try {
+      await this.runScheduleAction(schedule, run);
+      run.status = "completed";
+    } catch (error) {
+      run.status = "failed";
+      run.error = error instanceof Error ? error.message : String(error);
+    } finally {
+      const now = new Date().toISOString();
+      run.finishedAt = now;
+      schedule.lastRunAt = now;
+      schedule.updatedAt = now;
+      this.restoreNextRun(schedule, previousNextRunAt);
+      this.persist();
+      this.arm(schedule);
+      this.drainQueued(schedule);
+    }
+  }
+
+  private async runScheduleAction(schedule: Schedule, run: ScheduleRun) {
+    if (schedule.action.type === "prompt") {
+      const result = await this.executor.runPrompt(schedule.action);
+      run.agentRunId = result.agentRunId;
+      return;
+    }
+
+    const result = await this.executor.runWorkflow(schedule.action);
+    run.workflowRunId = result.workflowRunId;
   }
 
   private skipMisfire(schedule: Schedule) {

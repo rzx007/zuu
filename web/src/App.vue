@@ -15,6 +15,7 @@ import {
   type RunSummary,
   type Schedule,
   type ScheduleAction,
+  type ScheduleOverlapPolicy,
   type SessionSummary,
   type SessionTreeEntry,
   type StoredSessionSummary,
@@ -99,6 +100,7 @@ const scheduleRunAt = ref(toDatetimeLocal(new Date(Date.now() + 10 * 60_000)))
 const scheduleEveryMinutes = ref(30)
 const scheduleCron = ref('*/5 * * * *')
 const scheduleActionType = ref<'workflow' | 'prompt'>('workflow')
+const scheduleOverlapPolicy = ref<ScheduleOverlapPolicy>('skip')
 const scheduleMisfirePolicy = ref<'skip' | 'run_once'>('skip')
 const schedulePrompt = ref('Run a scheduled Zuu status check and summarize the result.')
 const editingScheduleId = ref('')
@@ -707,7 +709,7 @@ async function createSchedule() {
     name: scheduleName.value.trim() || undefined,
     trigger,
     action,
-    overlapPolicy: 'skip',
+    overlapPolicy: scheduleOverlapPolicy.value,
     misfirePolicy: scheduleMisfirePolicy.value,
   }
   const result = editingScheduleId.value
@@ -730,6 +732,7 @@ function editSchedule(schedule: Schedule) {
     scheduleCron.value = schedule.trigger.cron || '*/5 * * * *'
   }
   scheduleActionType.value = schedule.action.type
+  scheduleOverlapPolicy.value = schedule.overlapPolicy
   scheduleMisfirePolicy.value = schedule.misfirePolicy
   if (schedule.action.type === 'workflow') {
     selectedWorkflowId.value = schedule.action.workflowId
@@ -1132,13 +1135,23 @@ onUnmounted(() => {
               </select>
             </label>
           </div>
-          <label class="field-label">
-            Misfire
-            <select v-model="scheduleMisfirePolicy" class="field-input">
-              <option value="skip">Skip missed</option>
-              <option value="run_once">Run once</option>
-            </select>
-          </label>
+          <div class="grid grid-cols-2 gap-2">
+            <label class="field-label">
+              Overlap
+              <select v-model="scheduleOverlapPolicy" class="field-input">
+                <option value="skip">Skip</option>
+                <option value="queue">Queue</option>
+                <option value="parallel">Parallel</option>
+              </select>
+            </label>
+            <label class="field-label">
+              Misfire
+              <select v-model="scheduleMisfirePolicy" class="field-input">
+                <option value="skip">Skip missed</option>
+                <option value="run_once">Run once</option>
+              </select>
+            </label>
+          </div>
           <label v-if="scheduleKind === 'once'" class="field-label">
             Run at
             <input v-model="scheduleRunAt" class="field-input" type="datetime-local">
