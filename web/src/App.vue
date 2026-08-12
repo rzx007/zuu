@@ -1455,7 +1455,7 @@ onUnmounted(() => {
           </div>
           <p v-else class="empty-text">No packages configured.</p>
           <div class="flex gap-2">
-            <input v-model="packageSource" class="field-input min-w-0" placeholder="npm:@agwab/pi-workflow" @keydown.enter="addPackage().catch((error) => addMessage('error', errorMessage(error)))">
+            <input v-model="packageSource" class="field-input min-w-0" placeholder="npm:@agwab/pi-workflow@0.84.1" @keydown.enter="addPackage().catch((error) => addMessage('error', errorMessage(error)))">
             <Button variant="outline" size="sm" @click="addPackage().catch((error) => addMessage('error', errorMessage(error)))">Add</Button>
           </div>
         </section>

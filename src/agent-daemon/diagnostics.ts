@@ -87,7 +87,7 @@ export async function buildDiagnostics(
     gaps.push(`${blockedPackages.length} package source(s) are configured but blocked until trusted.`);
   }
   if (!packages.some((item) => item.includes("@agwab/pi-workflow"))) {
-    gaps.push("Workflow/subagent orchestration is not installed; add npm:@agwab/pi-workflow for reusable workflows.");
+    gaps.push("Workflow/subagent orchestration is not installed; add a pinned npm:@agwab/pi-workflow@<reviewed-version> source for reusable workflows.");
   }
   if (workflowBackend.kind === "pi-package" && workflowBackend.status !== "ready") {
     gaps.push(workflowBackend.message ?? "Pi workflow backend is not ready.");

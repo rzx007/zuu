@@ -143,7 +143,7 @@ Project 已作为一等资源持久化在 `.zuu/pi-agent/projects.json`。Daemon
 
 当前轻量持久化文件统一使用版本化 JSON store：`projects.json`、`runs.json`、`run-events.json`、`approvals.json`、`workflow-runs.json`、`schedules.json`、`package-operations.json` 和 `package-trust.json` 都会先通过同路径 `.lock` 文件串行化写入，再写入临时文件并原子替换。启动时如果读到损坏 JSON，会把原文件备份为 `.corrupt-*.bak`，再恢复为空数据；`GET /v1/diagnostics` 的 `resources.stores` 会暴露每个 store 的路径、记录数、恢复状态、lock 状态和错误信息，stale lock 会让对应 store 进入 review 状态。Agent Run 摘要使用 `source`、`status`、`startedAt` 和 `finishedAt`，其中 `status` 为 `queued`、`running`、`waiting_approval`、`completed`、`failed` 或 `aborted`。
 
-Packages 面板会区分 `configured`、`installed`、`filtered`、`trusted` / `untrusted` 和 `enabled` / `blocked`，`GET /v1/packages` 返回结构化 package 列表。`POST /v1/packages` 只登记 package source；安装或更新前需要先通过 `POST /v1/packages/trust` 或 WebUI 的 Trust 按钮信任 source。未信任 package 会保留在配置清单中，但不会进入 Pi `ResourceLoader` 或 workflow backend 的加载链路。
+Packages 面板会区分 `configured`、`installed`、`filtered`、`trusted` / `untrusted` 和 `enabled` / `blocked`，`GET /v1/packages` 返回结构化 package 列表。`POST /v1/packages` 只登记 package source；`npm:` source 必须固定到精确版本，例如 `npm:@scope/name@1.2.3`；安装或更新前需要先通过 `POST /v1/packages/trust` 或 WebUI 的 Trust 按钮信任 source。未信任 package 会保留在配置清单中，但不会进入 Pi `ResourceLoader` 或 workflow backend 的加载链路。
 
 安装、更新和删除都会创建后台 operation 并立即返回 `operation.id`；WebUI 通过 `GET /v1/package-operations` 轮询最近任务，展示 SDK progress callback 的事件、完成状态和失败原因。删除成功后会同步撤销对应 source 的信任记录。operation 记录默认持久化在 `.zuu/pi-agent/package-operations.json`，package trust 记录默认持久化在 `.zuu/pi-agent/package-trust.json`。
 

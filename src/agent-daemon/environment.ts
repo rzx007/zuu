@@ -117,3 +117,23 @@ export function normalizePackageSource(source: string) {
   if (!trimmed) throw new Error("source is required");
   return trimmed;
 }
+
+export function assertPinnedPackageSource(source: string) {
+  if (!source.startsWith("npm:")) return;
+  const spec = source.slice("npm:".length).trim();
+  const versionStart = npmVersionStart(spec);
+  const version = versionStart >= 0 ? spec.slice(versionStart + 1) : "";
+  if (!EXACT_SEMVER.test(version)) {
+    throw new Error("npm package source must include an exact version, for example npm:@agwab/pi-workflow@0.84.1");
+  }
+}
+
+const EXACT_SEMVER = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?(\+[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$/;
+
+function npmVersionStart(spec: string) {
+  if (spec.startsWith("@")) {
+    const slash = spec.indexOf("/");
+    return slash >= 0 ? spec.indexOf("@", slash + 1) : -1;
+  }
+  return spec.lastIndexOf("@");
+}

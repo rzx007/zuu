@@ -41,7 +41,7 @@ pnpm dev
 打开 WebUI 的 Packages 面板，添加并信任：
 
 ```text
-npm:@agwab/pi-workflow
+npm:@agwab/pi-workflow@<reviewed-version>
 ```
 
 未信任 package 会显示为 `blocked`，不会进入 Pi `ResourceLoader` 或 `pi-package` workflow backend。信任后再点击 Install；后续升级使用 Update，删除会创建后台 operation 并在成功后撤销信任记录。
@@ -49,7 +49,7 @@ npm:@agwab/pi-workflow
 如果包没有被 Pi 自动安装，需要在同一环境中先使用 Pi CLI 安装：
 
 ```sh
-pi install -l npm:@agwab/pi-workflow
+pi install -l npm:@agwab/pi-workflow@<reviewed-version>
 ```
 
 ## 启动 Zuu

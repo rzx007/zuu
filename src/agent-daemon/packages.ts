@@ -10,7 +10,7 @@ import type {
   PackageSummary,
   PackagesResponse,
 } from "@zuu/client";
-import { normalizePackageSource, packageSourceToString } from "./environment";
+import { assertPinnedPackageSource, normalizePackageSource, packageSourceToString } from "./environment";
 import { createSettingsManager, createTrustedSettingsView } from "./package-settings";
 import { PackageOperationStore } from "./package-operations";
 import { PackageTrustStore } from "./package-trust";
@@ -37,6 +37,7 @@ export class PackageService {
 
   async add(request: PackageMutationRequest): Promise<PackagesResponse> {
     const source = normalizePackageSource(request.source);
+    assertPinnedPackageSource(source);
     const settingsManager = this.createSettingsManager();
     const packages = settingsManager.getPackages().map(packageSourceToString);
     if (!packages.includes(source)) {
@@ -48,6 +49,7 @@ export class PackageService {
 
   install(request: PackageMutationRequest): PackageInstallResponse {
     const source = normalizePackageSource(request.source);
+    assertPinnedPackageSource(source);
     this.assertTrusted(source);
     const operation = this.startOperation(source, "install");
     void this.runPackageOperation(operation.id, source, "install");
@@ -63,6 +65,7 @@ export class PackageService {
 
   update(request: PackageMutationRequest): PackageOperationStartResponse {
     const source = normalizePackageSource(request.source);
+    assertPinnedPackageSource(source);
     this.assertTrusted(source);
     const operation = this.startOperation(source, "update");
     void this.runPackageOperation(operation.id, source, "update");
@@ -71,6 +74,7 @@ export class PackageService {
 
   trustPackage(request: PackageMutationRequest): PackagesResponse {
     const source = normalizePackageSource(request.source);
+    assertPinnedPackageSource(source);
     this.trust.trust(source);
     return this.list();
   }

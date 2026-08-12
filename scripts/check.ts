@@ -954,7 +954,7 @@ async function main() {
   const piBackend = createWorkflowBackend({
     path: join(mkdtempSync(join(tmpdir(), "zuu-pi-workflow-check-")), "workflow-runs.json"),
     agentDir: mkdtempSync(join(tmpdir(), "zuu-pi-agent-check-")),
-    packages: ["npm:@agwab/pi-workflow"],
+    packages: ["npm:@agwab/pi-workflow@0.0.0"],
     requestedKind: "pi-package",
     launchPrompt: async () => {
       throw new Error("pi-package launch should not be reached when backend is unavailable");
@@ -2385,7 +2385,22 @@ async function main() {
     emptyPackageInstallFailed = true;
   }
   if (!emptyPackageInstallFailed) throw new Error("empty package install source should fail");
-  const untrustedSource = `npm:zuu-check-untrusted-${crypto.randomUUID()}`;
+  const unpinnedSource = `npm:zuu-check-unpinned-${crypto.randomUUID()}`;
+  let unpinnedPackageAddFailed = false;
+  try {
+    await client.addPackage({ source: unpinnedSource });
+  } catch {
+    unpinnedPackageAddFailed = true;
+  }
+  if (!unpinnedPackageAddFailed) throw new Error("unpinned npm package add should fail before settings mutation");
+  let unpinnedPackageTrustFailed = false;
+  try {
+    await client.trustPackage({ source: unpinnedSource });
+  } catch {
+    unpinnedPackageTrustFailed = true;
+  }
+  if (!unpinnedPackageTrustFailed) throw new Error("unpinned npm package trust should fail");
+  const untrustedSource = `npm:zuu-check-untrusted-${crypto.randomUUID()}@0.0.0`;
   let untrustedPackageInstallFailed = false;
   try {
     await client.installPackage({ source: untrustedSource });
@@ -2527,17 +2542,17 @@ async function main() {
     join(packageServiceAgentDir, "operations.json"),
     join(packageServiceAgentDir, "trust.json"),
   );
-  await packageService.add({ source: "npm:zuu-check-package" });
-  const blockedPackage = packageService.list().packages.find((item) => item.source === "npm:zuu-check-package");
+  await packageService.add({ source: "npm:zuu-check-package@0.0.0" });
+  const blockedPackage = packageService.list().packages.find((item) => item.source === "npm:zuu-check-package@0.0.0");
   if (blockedPackage?.loadStatus !== "blocked" || packageService.listTrustedPackageSources().length !== 0) {
     throw new Error("untrusted package should be blocked from the trusted settings view");
   }
-  packageService.trustPackage({ source: "npm:zuu-check-package" });
-  const enabledPackage = packageService.list().packages.find((item) => item.source === "npm:zuu-check-package");
-  if (enabledPackage?.loadStatus !== "enabled" || packageService.listTrustedPackageSources()[0] !== "npm:zuu-check-package") {
+  packageService.trustPackage({ source: "npm:zuu-check-package@0.0.0" });
+  const enabledPackage = packageService.list().packages.find((item) => item.source === "npm:zuu-check-package@0.0.0");
+  if (enabledPackage?.loadStatus !== "enabled" || packageService.listTrustedPackageSources()[0] !== "npm:zuu-check-package@0.0.0") {
     throw new Error("trusted package should be enabled in the trusted settings view");
   }
-  const packageAuditSource = `npm:zuu-check-audit-${crypto.randomUUID()}`;
+  const packageAuditSource = `npm:zuu-check-audit-${crypto.randomUUID()}@0.0.0`;
   await client.addPackage({ source: packageAuditSource });
   await client.trustPackage({ source: packageAuditSource });
   const mutatingAuditEvents = await client.listAuditEvents({ action: "api.mutate", outcome: "success", target: "/v1/packages/trust", limit: 20 });

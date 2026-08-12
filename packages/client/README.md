@@ -221,13 +221,14 @@ for await (const event of client.subscribeEvents({ runId, reconnect: false })) {
 
 ## Package 管理
 
-Package source 需要先登记和信任，才能安装或更新。未信任 package 会显示为 `blocked`，不会进入 Pi `ResourceLoader`。
+Package source 需要先登记和信任，才能安装或更新；`npm:` source 必须固定到精确版本。未信任 package 会显示为 `blocked`，不会进入 Pi `ResourceLoader`。
 
 ```ts
-await client.addPackage({ source: "npm:@agwab/pi-workflow" });
-await client.trustPackage({ source: "npm:@agwab/pi-workflow" });
+const workflowPackage = "npm:@agwab/pi-workflow@<reviewed-version>";
+await client.addPackage({ source: workflowPackage });
+await client.trustPackage({ source: workflowPackage });
 
-const { operation } = await client.installPackage({ source: "npm:@agwab/pi-workflow" });
+const { operation } = await client.installPackage({ source: workflowPackage });
 console.log(operation.id);
 ```
 

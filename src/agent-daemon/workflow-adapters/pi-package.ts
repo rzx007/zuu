@@ -199,7 +199,7 @@ export function createPiPackageInfo(probe: PiWorkflowPackageProbe): WorkflowBack
       status: "unavailable",
       label: "Pi package workflow",
       packageInstalled: false,
-      message: `The ${PI_WORKFLOW_PACKAGE} package is not configured. Add npm:${PI_WORKFLOW_PACKAGE} or use the fake backend.`,
+      message: `The ${PI_WORKFLOW_PACKAGE} package is not configured. Add a pinned npm:${PI_WORKFLOW_PACKAGE}@<reviewed-version> source or use the fake backend.`,
     };
   }
 
@@ -221,7 +221,7 @@ export function createPiPackageInfo(probe: PiWorkflowPackageProbe): WorkflowBack
       label: "Pi package workflow",
       packageInstalled: probe.packageInstalled,
       packageSource: probe.packageSource,
-      message: `${PI_WORKFLOW_PACKAGE} is configured but was not resolved to an installed package path. Run pi install npm:${PI_WORKFLOW_PACKAGE}, then restart Zuu.`,
+      message: `${PI_WORKFLOW_PACKAGE} is configured but was not resolved to an installed package path. Run pi install npm:${PI_WORKFLOW_PACKAGE}@<reviewed-version>, then restart Zuu.`,
     };
   }
 
