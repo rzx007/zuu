@@ -16,9 +16,11 @@ import { PackageTrustStore } from "../src/agent-daemon/package-trust";
 import { PromptService } from "../src/agent-daemon/prompt-service";
 import { RunApiService } from "../src/agent-daemon/run-api-service";
 import { RunService } from "../src/agent-daemon/run-service";
+import { ScheduleApiService } from "../src/agent-daemon/schedule-api-service";
 import { createDaemonScheduleExecutor, launchPromptAsRun } from "../src/agent-daemon/schedule-executor";
 import { ScheduleLease } from "../src/agent-daemon/schedule-lease";
 import { SessionApiService } from "../src/agent-daemon/session-api-service";
+import { ScheduleService } from "../src/agent-daemon/schedule-service";
 import { SessionService } from "../src/agent-daemon/session-service";
 import { ProjectStore } from "../src/agent-daemon/projects";
 import { RunEventStore } from "../src/agent-daemon/run-events";
@@ -986,6 +988,173 @@ async function main() {
     invalidCronTimezoneFailed = true;
   }
   if (!invalidCronTimezoneFailed) throw new Error("invalid cron timezone should fail");
+
+  const scheduleApiCalls: string[] = [];
+  const scheduleApi = new ScheduleApiService({
+    listSchedules: (projectId?: string) => {
+      scheduleApiCalls.push(`list:${projectId ?? ""}`);
+      return [];
+    },
+    createSchedule: (request: unknown, projectIdOverride?: string) => {
+      scheduleApiCalls.push(`create:${projectIdOverride}:${(request as { name?: string }).name}`);
+      return {
+        id: "schedule-api",
+        name: (request as { name?: string }).name ?? "Schedule",
+        status: "active",
+        trigger: { kind: "interval", everyMs: 60_000 },
+        action: { type: "workflow", workflowId: "workflow-check", projectId: projectIdOverride },
+        overlapPolicy: "skip",
+        misfirePolicy: "skip",
+        createdAt: "2026-08-12T00:00:00.000Z",
+        updatedAt: "2026-08-12T00:00:00.000Z",
+        runs: [],
+      };
+    },
+    updateSchedule: (scheduleId: string, request: unknown, projectIdOverride?: string) => {
+      scheduleApiCalls.push(`update:${scheduleId}:${projectIdOverride}:${(request as { name?: string }).name}`);
+      return {
+        id: scheduleId,
+        name: (request as { name?: string }).name ?? "Schedule",
+        status: "active",
+        trigger: { kind: "interval", everyMs: 60_000 },
+        action: { type: "workflow", workflowId: "workflow-check", projectId: projectIdOverride },
+        overlapPolicy: "skip",
+        misfirePolicy: "skip",
+        createdAt: "2026-08-12T00:00:00.000Z",
+        updatedAt: "2026-08-12T00:00:01.000Z",
+        runs: [],
+      };
+    },
+    getSchedule: (scheduleId: string, projectId?: string) => {
+      scheduleApiCalls.push(`get:${scheduleId}:${projectId ?? ""}`);
+      return {
+        id: scheduleId,
+        name: "Schedule",
+        status: "active",
+        trigger: { kind: "interval", everyMs: 60_000 },
+        action: { type: "workflow", workflowId: "workflow-check", projectId },
+        overlapPolicy: "skip",
+        misfirePolicy: "skip",
+        createdAt: "2026-08-12T00:00:00.000Z",
+        updatedAt: "2026-08-12T00:00:00.000Z",
+        runs: [],
+      };
+    },
+    listScheduleRuns: (scheduleId?: string, projectId?: string) => {
+      scheduleApiCalls.push(`runs:${scheduleId ?? ""}:${projectId ?? ""}`);
+      return [];
+    },
+    getScheduleRun: (runId: string, projectId?: string) => {
+      scheduleApiCalls.push(`run:${runId}:${projectId ?? ""}`);
+      return {
+        id: runId,
+        scheduleId: "schedule-api",
+        status: "completed",
+        scheduledFor: "2026-08-12T00:00:00.000Z",
+        startedAt: "2026-08-12T00:00:00.000Z",
+        finishedAt: "2026-08-12T00:00:01.000Z",
+      };
+    },
+    abortScheduleRun: (runId: string, projectId?: string) => {
+      scheduleApiCalls.push(`abort:${runId}:${projectId ?? ""}`);
+      return {
+        id: runId,
+        scheduleId: "schedule-api",
+        status: "aborted",
+        scheduledFor: "2026-08-12T00:00:00.000Z",
+        finishedAt: "2026-08-12T00:00:01.000Z",
+      };
+    },
+    pauseSchedule: (scheduleId: string, projectId?: string) => {
+      scheduleApiCalls.push(`pause:${scheduleId}:${projectId ?? ""}`);
+      return {
+        id: scheduleId,
+        name: "Schedule",
+        status: "paused",
+        trigger: { kind: "interval", everyMs: 60_000 },
+        action: { type: "workflow", workflowId: "workflow-check", projectId },
+        overlapPolicy: "skip",
+        misfirePolicy: "skip",
+        createdAt: "2026-08-12T00:00:00.000Z",
+        updatedAt: "2026-08-12T00:00:01.000Z",
+        runs: [],
+      };
+    },
+    resumeSchedule: (scheduleId: string, projectId?: string) => {
+      scheduleApiCalls.push(`resume:${scheduleId}:${projectId ?? ""}`);
+      return {
+        id: scheduleId,
+        name: "Schedule",
+        status: "active",
+        trigger: { kind: "interval", everyMs: 60_000 },
+        action: { type: "workflow", workflowId: "workflow-check", projectId },
+        overlapPolicy: "skip",
+        misfirePolicy: "skip",
+        createdAt: "2026-08-12T00:00:00.000Z",
+        updatedAt: "2026-08-12T00:00:01.000Z",
+        runs: [],
+      };
+    },
+    triggerSchedule: async (scheduleId: string, projectId?: string) => {
+      scheduleApiCalls.push(`trigger:${scheduleId}:${projectId ?? ""}`);
+      return {
+        id: scheduleId,
+        name: "Schedule",
+        status: "active",
+        trigger: { kind: "interval", everyMs: 60_000 },
+        action: { type: "workflow", workflowId: "workflow-check", projectId },
+        overlapPolicy: "skip",
+        misfirePolicy: "skip",
+        createdAt: "2026-08-12T00:00:00.000Z",
+        updatedAt: "2026-08-12T00:00:01.000Z",
+        runs: [],
+      };
+    },
+    deleteSchedule: (scheduleId: string, projectId?: string) => {
+      scheduleApiCalls.push(`delete:${scheduleId}:${projectId ?? ""}`);
+      return {
+        id: scheduleId,
+        name: "Schedule",
+        status: "active",
+        trigger: { kind: "interval", everyMs: 60_000 },
+        action: { type: "workflow", workflowId: "workflow-check", projectId },
+        overlapPolicy: "skip",
+        misfirePolicy: "skip",
+        createdAt: "2026-08-12T00:00:00.000Z",
+        updatedAt: "2026-08-12T00:00:01.000Z",
+        runs: [],
+      };
+    },
+  } as unknown as ScheduleService);
+  scheduleApi.listSchedules("project-check");
+  scheduleApi.createSchedule({ name: "api schedule", trigger: { kind: "interval", everyMs: 60_000 }, action: { type: "workflow", workflowId: "workflow-check" } }, "project-check");
+  scheduleApi.updateSchedule("schedule-api", { name: "updated api schedule" }, "project-check");
+  scheduleApi.getSchedule("schedule-api", "project-check");
+  scheduleApi.listScheduleRuns("schedule-api", "project-check");
+  scheduleApi.getScheduleRun("schedule-run-api", "project-check");
+  scheduleApi.abortScheduleRun("schedule-run-api", "project-check");
+  scheduleApi.pauseSchedule("schedule-api", "project-check");
+  scheduleApi.resumeSchedule("schedule-api", "project-check");
+  await scheduleApi.triggerSchedule("schedule-api", "project-check");
+  scheduleApi.deleteSchedule("schedule-api", "project-check");
+  if (
+    scheduleApiCalls.join("|") !==
+    [
+      "list:project-check",
+      "create:project-check:api schedule",
+      "update:schedule-api:project-check:updated api schedule",
+      "get:schedule-api:project-check",
+      "runs:schedule-api:project-check",
+      "run:schedule-run-api:project-check",
+      "abort:schedule-run-api:project-check",
+      "pause:schedule-api:project-check",
+      "resume:schedule-api:project-check",
+      "trigger:schedule-api:project-check",
+      "delete:schedule-api:project-check",
+    ].join("|")
+  ) {
+    throw new Error("schedule API service should delegate schedule calls with project scoping");
+  }
 
   const schedulePromptRequests: unknown[] = [];
   const scheduleWorkflowRequests: Array<{ workflowId: string; request: unknown }> = [];

@@ -20,6 +20,7 @@ import { ApprovalApiService } from "./agent-daemon/approval-api-service";
 import { ModelService } from "./agent-daemon/model-service";
 import { ModelApiService } from "./agent-daemon/model-api-service";
 import { ProjectService } from "./agent-daemon/project-service";
+import { ScheduleApiService } from "./agent-daemon/schedule-api-service";
 import { ScheduleService } from "./agent-daemon/schedule-service";
 import { PackageApiService } from "./agent-daemon/package-api-service";
 import { PackageService } from "./agent-daemon/packages";
@@ -60,6 +61,7 @@ export class ZuuDaemon {
   private readonly modelApiService: ModelApiService;
   private readonly packageApiService: PackageApiService;
   private readonly runApiService: RunApiService;
+  private readonly scheduleApiService: ScheduleApiService;
   private readonly sessionApiService: SessionApiService;
   private readonly workflowApiService: WorkflowApiService;
 
@@ -74,6 +76,7 @@ export class ZuuDaemon {
     });
     this.packageApiService = new PackageApiService(this.packageService, options.audit);
     this.runApiService = new RunApiService(this.runService, this.sessionService);
+    this.scheduleApiService = new ScheduleApiService(this.scheduleService);
     this.sessionApiService = new SessionApiService(this.sessionService, this.runService);
     this.workflowApiService = new WorkflowApiService(this.workflowService);
   }
@@ -249,47 +252,47 @@ export class ZuuDaemon {
   }
 
   listSchedules(projectId?: string) {
-    return this.scheduleService.listSchedules(projectId);
+    return this.scheduleApiService.listSchedules(projectId);
   }
 
   createSchedule(request: CreateScheduleRequest, projectIdOverride?: string) {
-    return this.scheduleService.createSchedule(request, projectIdOverride);
+    return this.scheduleApiService.createSchedule(request, projectIdOverride);
   }
 
   updateSchedule(scheduleId: string, request: UpdateScheduleRequest, projectIdOverride?: string) {
-    return this.scheduleService.updateSchedule(scheduleId, request, projectIdOverride);
+    return this.scheduleApiService.updateSchedule(scheduleId, request, projectIdOverride);
   }
 
   getSchedule(scheduleId: string, projectId?: string) {
-    return this.scheduleService.getSchedule(scheduleId, projectId);
+    return this.scheduleApiService.getSchedule(scheduleId, projectId);
   }
 
   listScheduleRuns(scheduleId?: string, projectId?: string) {
-    return this.scheduleService.listScheduleRuns(scheduleId, projectId);
+    return this.scheduleApiService.listScheduleRuns(scheduleId, projectId);
   }
 
   getScheduleRun(runId: string, projectId?: string) {
-    return this.scheduleService.getScheduleRun(runId, projectId);
+    return this.scheduleApiService.getScheduleRun(runId, projectId);
   }
 
   abortScheduleRun(runId: string, projectId?: string) {
-    return this.scheduleService.abortScheduleRun(runId, projectId);
+    return this.scheduleApiService.abortScheduleRun(runId, projectId);
   }
 
   pauseSchedule(scheduleId: string, projectId?: string) {
-    return this.scheduleService.pauseSchedule(scheduleId, projectId);
+    return this.scheduleApiService.pauseSchedule(scheduleId, projectId);
   }
 
   resumeSchedule(scheduleId: string, projectId?: string) {
-    return this.scheduleService.resumeSchedule(scheduleId, projectId);
+    return this.scheduleApiService.resumeSchedule(scheduleId, projectId);
   }
 
   triggerSchedule(scheduleId: string, projectId?: string) {
-    return this.scheduleService.triggerSchedule(scheduleId, projectId);
+    return this.scheduleApiService.triggerSchedule(scheduleId, projectId);
   }
 
   deleteSchedule(scheduleId: string, projectId?: string) {
-    return this.scheduleService.deleteSchedule(scheduleId, projectId);
+    return this.scheduleApiService.deleteSchedule(scheduleId, projectId);
   }
 
   summarizeSessionTree(sessionId: string) {
