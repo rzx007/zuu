@@ -8,7 +8,7 @@
     "dev": "pnpm build:client && node --env-file-if-exists=.env --import tsx src/index.ts",
     "dev:web": "pnpm --filter web dev -- --host 127.0.0.1",
     "start": "pnpm build:client && node --env-file-if-exists=.env --import tsx src/index.ts",
-    "check": "pnpm build:client && node --env-file-if-exists=.env --import tsx scripts/check.ts && node --import tsx scripts/check-client-release.ts",
+    "check": "pnpm build:client && node --env-file-if-exists=.env --import tsx scripts/check.ts && node --import tsx scripts/check-client-release.ts && pnpm build:web",
     "client:release:check": "pnpm build:client && node --import tsx scripts/check-client-release.ts",
     "client:release:prepare": "node --import tsx scripts/prepare-client-release.ts",
     "check:pi-workflow": "pnpm build:client && node --env-file-if-exists=.env --import tsx scripts/check-pi-workflow-runtime.ts",
