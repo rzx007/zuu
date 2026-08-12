@@ -60,6 +60,10 @@ export class PromptService {
       }
     });
     const unsubscribeApprovalEvents = subscribeApprovalEvents(this.options.eventBus, runId, (event) => {
+      if (event.type === "approval_requested" && run.status === "running") {
+        run.status = "waiting_approval";
+        this.options.runs.saveRun(run);
+      }
       queue.push(event);
       wake();
     });
@@ -89,16 +93,17 @@ export class PromptService {
 
       if (promptError) {
         const message = promptError instanceof Error ? promptError.message : String(promptError);
-        run.status = run.status === "aborted" ? "aborted" : "error";
-        run.endedAt = new Date().toISOString();
+        run.status = run.status === "aborted" ? "aborted" : "failed";
+        run.finishedAt = new Date().toISOString();
+        run.error = message;
         this.options.runs.saveRun(run);
         yield recordAndPublish({ runId, type: "error", message, run });
         return;
       }
 
       this.options.sessions.touchSession(session.sessionId);
-      run.status = run.status === "aborted" ? "aborted" : sawError ? "error" : "done";
-      run.endedAt = new Date().toISOString();
+      run.status = run.status === "aborted" ? "aborted" : sawError ? "failed" : "completed";
+      run.finishedAt = new Date().toISOString();
       this.options.runs.saveRun(run);
       yield recordAndPublish({
         runId,

@@ -49,10 +49,12 @@ export interface RunSummary {
   id: string;
   sessionId: string;
   projectId: string;
-  status: "running" | "done" | "error" | "aborted";
+  source: "user" | "schedule" | "workflow" | "api";
+  status: "queued" | "running" | "waiting_approval" | "completed" | "failed" | "aborted";
   prompt: string;
   startedAt: string;
-  endedAt?: string;
+  finishedAt?: string;
+  error?: string;
 }
 
 export type ApprovalKind = "tool" | "command" | "filesystem" | "network" | "package";
@@ -97,6 +99,7 @@ export interface PromptRequest {
   prompt: string;
   sessionId?: string;
   projectId?: string;
+  source?: RunSummary["source"];
   name?: string;
   cwd?: string;
   sessionFile?: string;

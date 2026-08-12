@@ -28,6 +28,7 @@ import {
 
 const APPROVAL_DECISIONS = new Set(["allow_once", "allow_session", "deny"]);
 const FORK_POSITIONS = new Set(["before", "at"]);
+const RUN_SOURCES = new Set(["user", "schedule", "workflow", "api"]);
 const THINKING_LEVELS = new Set(["off", "minimal", "low", "medium", "high", "xhigh", "max"]);
 
 export function parsePackageMutation(value: unknown): PackageMutationRequest {
@@ -81,10 +82,15 @@ export function parseOpenSession(value: unknown): OpenSessionRequest {
 
 export function parsePrompt(value: unknown): PromptRequest {
   assertObject(value);
+  const source = optionalString(value.source, "source");
+  if (source !== undefined && !RUN_SOURCES.has(source)) {
+    validationError("source must be user, schedule, workflow, or api", { field: "source" });
+  }
   return {
     prompt: requireString(value.prompt, "prompt"),
     sessionId: optionalString(value.sessionId, "sessionId"),
     projectId: optionalString(value.projectId, "projectId"),
+    source: source as PromptRequest["source"],
     name: optionalString(value.name, "name"),
     cwd: optionalString(value.cwd, "cwd"),
     sessionFile: optionalString(value.sessionFile, "sessionFile"),

@@ -87,7 +87,7 @@ export class ZuuDaemon {
       runPrompt: async (action) => {
         const { type: _type, ...request } = action;
         let agentRunId: string | undefined;
-        for await (const event of this.prompt(request)) {
+        for await (const event of this.prompt({ ...request, source: "schedule" })) {
           agentRunId = event.run?.id ?? event.runId ?? agentRunId;
         }
         return { agentRunId };

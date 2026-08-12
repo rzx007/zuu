@@ -739,7 +739,7 @@ UI end-to-end
 - `GET /v1/diagnostics` 正常返回 SDK 版本、模型数量、skills、extensions、resource diagnostics、trusted packages、blocked packages、JSON store 健康状态和能力缺口。
 - `POST /v1/prompt` 可以返回带稳定事件 ID 和 `createdAt` 的 SSE `session`、`error`、`agent_event` 和 `done` 事件；`GET /v1/events` 支持按 `runId`/`sessionId` 过滤，并通过 `afterEventId` 或 `Last-Event-ID` 先 replay 再订阅 live 事件。
 - `@zuu/client` 可从 Node.js 侧调用 health、diagnostics 和 prompt stream，并可通过 `pnpm example:client` 运行第三方消费示例。
-- prompt stream 已携带稳定 `runId`，并可通过 `GET /v1/runs` 和 `GET /v1/runs/:runId` 查询最近运行状态。
+- prompt stream 已携带稳定 `runId`，并可通过 `GET /v1/runs` 和 `GET /v1/runs/:runId` 查询最近运行状态；Agent Run 摘要已使用 `source`、`queued/running/waiting_approval/completed/failed/aborted` 和 `finishedAt`。
 - Project registry 已持久化到 `.zuu/pi-agent/projects.json`，daemon 会提供稳定的 `default` 项目，并暴露 `GET/POST/PATCH/DELETE /v1/projects`；Project 级 Session 主入口已落到 `GET/POST /v1/projects/:projectId/sessions`、`GET /v1/projects/:projectId/session-files` 和 `POST /v1/projects/:projectId/sessions/open`；session、prompt、workflow、schedule action 和 run 摘要已经携带 `projectId`，`GET /v1/runs`、`GET /v1/session-files`、`GET /v1/workflow-runs` 与 `GET /v1/schedules` 支持按项目过滤。
 - run registry 已持久化到 `.zuu/pi-agent/runs.json`，daemon 重启后可恢复最近运行摘要；prompt stream 事件已按 run 持久化到 `.zuu/pi-agent/run-events.json`，可通过 `GET /v1/runs/:runId/events`、`GET /v1/events`、`@zuu/client.listRunEvents()` 和 `@zuu/client.subscribeEvents()` 补拉事件窗口；`subscribeEvents()` 默认会自动重连并基于最后事件 ID 去重；projects、runs、run-events、approvals、workflow-runs、schedules、package-operations 和 package-trust 已统一使用版本化 JSON store，写入采用临时文件加原子替换，损坏文件会备份为 `.corrupt-*.bak` 并恢复为空数据。
 - `AgentSessionRuntime` 的 `newSession`、`switchSession`、`fork` 和 `importFromJsonl` 已通过 daemon API 与 client 暴露。
@@ -767,7 +767,7 @@ UI end-to-end
 - 路径保护是根目录级 allowlist，尚未做到按工具/动作细粒度授权。
 - 默认工具集偏只读，`bash`、`edit`、`write` 需要 UI 显式启用。
 - 当前环境下真实模型 stream 可能因为网络返回 `Connection error`；daemon 已将 SDK assistant error 映射为 SSE error。
-- Workflow/subagent package 在当前环境尚未安装，diagnostics 会明确报告缺口；`pi-package` adapter 已有 launch 桥接，但当前 Windows 原生环境会按 `@agwab/pi-workflow` 包页面说明标记为不可用。Scheduler 已有最小内置后端，但 `cron`、timezone、misfire、retry、abort schedule run 和真实持久队列仍未落地。
+- Workflow/subagent package 在当前环境尚未安装，diagnostics 会明确报告缺口；`pi-package` adapter 已有 launch 桥接，但当前 Windows 原生环境会按 `@agwab/pi-workflow` 包页面说明标记为不可用。Scheduler 已有最小内置后端和基础 5 字段 UTC `cron`，但 timezone、misfire、retry、abort schedule run 和真实持久队列仍未落地。
 
 后续计划应从此切片继续收敛，而不是另起炉灶：Client workspace 包、run registry 持久化、package source/trust/load 管理、package status/install/update/remove operations、approval tool-call 拦截、Vue WebUI approval 操作面、daemon event stream 面板、fake workflow 合约、pi-package launch adapter、pi-workflow runtime spike 和 Scheduler MVP 已经落地，接下来应优先在 WSL2/Linux 中安装并信任 `@agwab/pi-workflow` 跑通 `docs/spikes/pi-workflow-runtime.md`，再研究 `.pi/workflows` board/run-state 的只读映射，最后补齐 cron/timezone/retry 等 scheduler backend 能力。
 

@@ -2,6 +2,8 @@ import type { RunSummary } from "@zuu/client";
 import { JsonFileStore } from "./json-file-store";
 
 const RUN_HISTORY_LIMIT = 200;
+const RUN_SOURCES = new Set(["user", "schedule", "workflow", "api"]);
+const RUN_STATUSES = new Set(["queued", "running", "waiting_approval", "completed", "failed", "aborted"]);
 
 export function loadRunHistory(path: string): RunSummary[] {
   return createRunHistoryStore(path)
@@ -11,9 +13,19 @@ export function loadRunHistory(path: string): RunSummary[] {
         run &&
           typeof run === "object" &&
           "id" in run &&
+          typeof run.id === "string" &&
           "sessionId" in run &&
+          typeof run.sessionId === "string" &&
           "projectId" in run &&
-          "status" in run,
+          typeof run.projectId === "string" &&
+          "source" in run &&
+          RUN_SOURCES.has(String(run.source)) &&
+          "status" in run &&
+          RUN_STATUSES.has(String(run.status)) &&
+          "prompt" in run &&
+          typeof run.prompt === "string" &&
+          "startedAt" in run &&
+          typeof run.startedAt === "string"
       );
     });
 }

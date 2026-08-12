@@ -559,10 +559,11 @@ async function main() {
       id: "store-check-run",
       sessionId: "store-check-session",
       projectId: "default",
-      status: "done",
+      source: "api",
+      status: "completed",
       prompt: "store check",
       startedAt: "2026-08-12T00:00:00.000Z",
-      endedAt: "2026-08-12T00:00:01.000Z",
+      finishedAt: "2026-08-12T00:00:01.000Z",
     },
   ]);
   const savedPayload = JSON.parse(readFileSync(corruptRunsPath, "utf8")) as { version?: number; data?: unknown };

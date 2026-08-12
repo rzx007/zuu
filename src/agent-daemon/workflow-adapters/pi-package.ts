@@ -114,12 +114,13 @@ export class PiPackageWorkflowBackend implements WorkflowBackend {
         prompt: command,
         projectId: request.projectId,
         sessionId: request.sessionId,
+        source: "workflow",
         name: `Workflow: ${definition.name}`,
       });
       const endedAt = new Date().toISOString();
       const artifact = launchArtifact(runId, launchTask.id, definition, command, agentRun, endedAt);
 
-      run.status = agentRun.status === "done" ? "done" : agentRun.status === "aborted" ? "aborted" : "error";
+      run.status = agentRun.status === "completed" ? "done" : agentRun.status === "aborted" ? "aborted" : "error";
       run.endedAt = endedAt;
       run.artifacts = [artifact];
       launchStage.status = run.status;

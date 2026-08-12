@@ -29,6 +29,7 @@ export class RunService {
       id: crypto.randomUUID(),
       sessionId: input.sessionId,
       projectId: input.projectId,
+      source: input.request.source ?? "user",
       status: "running",
       prompt: input.request.prompt,
       startedAt: new Date().toISOString(),
@@ -76,12 +77,12 @@ export class RunService {
     };
   }
 
-  abortSessionRuns(sessionId: string, endedAt = new Date().toISOString()) {
+  abortSessionRuns(sessionId: string, finishedAt = new Date().toISOString()) {
     let changed = false;
     for (const run of this.runs.values()) {
-      if (run.sessionId === sessionId && run.status === "running") {
+      if (run.sessionId === sessionId && (run.status === "running" || run.status === "waiting_approval")) {
         run.status = "aborted";
-        run.endedAt = endedAt;
+        run.finishedAt = finishedAt;
         changed = true;
       }
     }
