@@ -104,6 +104,10 @@ async function main() {
   if (!Array.isArray(auditEvents.events)) {
     throw new Error("audit events response is invalid");
   }
+  const healthAuditEvents = await client.listAuditEvents({ action: "api.read", target: "GET /v1/health", limit: 10 });
+  if (healthAuditEvents.events.some((event) => event.target === "GET /v1/health")) {
+    throw new Error("public health checks should not be recorded as read API audit events");
+  }
 
   let sawAuthHeader = false;
   const authClient = createZuuClient({
@@ -212,6 +216,10 @@ async function main() {
   const { runs } = await client.listRuns();
   if (!Array.isArray(runs)) throw new Error("runs response is invalid");
   const projects = await client.listProjects();
+  const readAuditEvents = await client.listAuditEvents({ action: "api.read", outcome: "success", target: "GET /v1/projects", limit: 20 });
+  if (!readAuditEvents.events.some((event) => event.target === "GET /v1/projects")) {
+    throw new Error("successful read API calls should be recorded in audit events");
+  }
   const defaultProject = projects.projects.find((project) => project.id === "default");
   if (!defaultProject || defaultProject.cwd !== process.cwd()) {
     throw new Error("default project response is invalid");

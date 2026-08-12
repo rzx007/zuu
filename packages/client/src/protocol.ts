@@ -202,6 +202,7 @@ export interface AuthRotateResponse extends AuthStatusResponse {
 }
 
 export type AuditEventAction =
+  | "api.read"
   | "api.mutate"
   | "auth.rotate"
   | "approval.resolve"
