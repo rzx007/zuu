@@ -736,7 +736,7 @@ UI end-to-end
 - `pnpm run check:pi-workflow` 已作为真实环境验证入口，但只应在 `ZUU_WORKFLOW_BACKEND=pi-package` 的 WSL2/Linux daemon 旁运行。
 - `GET /v1/health` 正常且作为公开探针，已返回 `ok/status/protocolVersion/version/startedAt/uptimeMs/node/platform`；除 health 外的 `/v1/*` 默认要求 Bearer token。
 - API 错误响应已统一为 `{ error: { message, status, retryable, code?, details? } }`；`@zuu/client` 会把非 2xx 响应映射为 `ZuuClientError`。
-- `GET /v1/auth/status` 与 `POST /v1/auth/rotate` 已支持本地 access token 状态查询和轮换；`ZUU_API_TOKEN` 仍可作为环境变量覆盖，此时 token 由进程外管理且 API 不允许轮换。
+- `GET /v1/auth/status` 与 `POST /v1/auth/rotate` 已支持本地 admin/read 双 token 状态查询和轮换；read token 只能访问受保护 `GET /v1/*`，写操作需要 admin token；`ZUU_API_TOKEN` 仍可作为环境变量覆盖，此时它作为 admin token 由进程外管理且 API 不允许轮换。
 - `GET /v1/audit-events` 已支持查询最近审计事件，并可按 `action`、`outcome`、`target` 和 `limit` 过滤；当前会为受保护的 `GET /v1/*` 只读操作记录 `api.read`，为已授权的 `POST/PATCH/DELETE /v1/*` 写操作记录 `api.mutate`，并额外记录 auth rotate、approval resolve 和 package add/trust/install/update/remove 等领域动作；公开探针 `/v1/health` 和 daemon 级 SSE `/v1/events` 不进入审计，同时避免写入 token/provider key 等密钥。
 - `GET /v1/diagnostics` 正常返回 SDK 版本、模型数量、skills、extensions、resource diagnostics、trusted packages、blocked packages、JSON store 健康状态和能力缺口，store diagnostics 已包含本地 auth-token store 和 audit-events store。
 - `POST /v1/prompt` 可以返回带稳定事件 ID 和 `createdAt` 的 SSE `session`、`error`、`agent_event` 和 `done` 事件；`GET /v1/events` 支持按 `runId`/`sessionId` 过滤，并通过 `afterEventId` 或 `Last-Event-ID` 先 replay 再订阅 live 事件。
@@ -754,7 +754,7 @@ UI end-to-end
 - `ZUU_WORKFLOW_BACKEND` 已支持选择 `fake` 或 `pi-package`；`pi-package` 会探测 `@agwab/pi-workflow` package source、安装路径和平台支持，ready 后通过 `/workflow run` 或 `/workflow dynamic` 发起真实 Pi extension 工作，并把 Zuu 侧 launch 结果包装成 `WorkflowRun`。真实 `pi-workflow` board/run-state 读取尚未绑定，因此阶段、任务和 artifact 目前仍是 launch 层记录。
 - `GET/POST/PATCH/DELETE /v1/schedules`、`GET /v1/schedules/:scheduleId`、`GET /v1/schedules/:scheduleId/runs`、`GET /v1/schedule-runs/:runId`、`POST /v1/schedule-runs/:runId/abort`、`POST /v1/schedules/:scheduleId/pause`、`POST /v1/schedules/:scheduleId/resume` 和 `POST /v1/schedules/:scheduleId/trigger` 已支持 Scheduler MVP；Project 级 schedule API 也已同步暴露。当前支持 `once`、`interval`、基础 5 字段 `cron`、IANA timezone、prompt action、workflow action、`overlapPolicy: "skip" | "queue" | "parallel"`、`misfirePolicy: "skip" | "run_once"` 和可选 `retryPolicy`，并将 schedule run 关联到 Agent Run 或 Workflow Run。Schedule Run 摘要已使用 `scheduledFor`、`startedAt`、`finishedAt`、`attempts` 和 `queued/running/completed/failed/skipped/aborted` 状态；cron 的 `nextRunAt` 仍以 UTC ISO 返回，但会按指定 timezone 计算本地墙上时间；同一 schedule 重叠触发时，`skip` 会记录 `reason` 为 `schedule_overlap` 的 skipped run，`queue` 会最多积压一个 queued run，`parallel` 会并发启动新 run；daemon 重启后错过触发可按策略记录 `reason` 为 `schedule_misfire` 的 skipped run，或补跑一次；retry 可按 `maxAttempts`、`backoffMs` 与 `retryableCodes` 对同一个 run 进行有限重试；queued/running schedule run 可 best-effort abort，并保持 `aborted` 终态；记录持久化到 `.zuu/pi-agent/schedules.json`。
 - 内置 Zuu approval policy 已通过 Pi inline extension 接入 `tool_call`，默认阻断 `bash`、`edit`、`write`，并会对 `read`、`grep`、`find`、`ls` 命中的 `.env`、SSH、auth token、credential、secret、key 等敏感路径触发文件系统审批；审批会通过 prompt SSE 发出 `approval_requested`；`allow_once` 可消费一次，`allow_session` 可对同 session 的同类工具/敏感路径 scope 放行。
-- 本地 access token 已支持首次启动生成、Bearer token 中间件、文件权限 best-effort 收紧和在线轮换；`ZUU_API_TOKEN` 可覆盖本地 token，client 和 WebUI 都能发送 Bearer token。
+- 本地 access token 已支持首次启动生成 admin/read 双 token、Bearer token 中间件、文件权限 best-effort 收紧和在线轮换；`ZUU_API_TOKEN` 可覆盖本地 token 并作为 admin token，client 和 WebUI 都能发送 Bearer token。
 - 默认路径保护已限制 `cwd`、session 文件和 import 文件在当前项目根内；可通过 `ZUU_ALLOWED_CWD` 追加允许根目录。
 - Node server 已支持 SIGINT/SIGTERM graceful shutdown，会关闭 HTTP server 并 dispose active runtime。
 
@@ -765,7 +765,7 @@ UI end-to-end
 - WebUI 已迁移到 Vue + Vite，并支持打开持久化 session、查看当前 session tree、按 entry fork、从本地 JSONL 路径 import、处理 pending approvals、启动/查看 fake workflow runs、创建/暂停/恢复/触发/删除 schedule、模型 smoke test、查看 audit events，以及通过 daemon 级 `subscribeEvents()` 实时展示事件并节流刷新 runs、approvals、session tree、schedule 和 workflow run 状态。
 - Package API 已能展示安装状态、信任状态、加载状态、显式触发安装/更新/删除，并通过持久化 operation 记录暴露任务进度和失败原因；WebUI 已能 trust/revoke package source 并展示 SDK resource diagnostics/collision。未信任 package 会保留在配置清单中，但已从 Pi `ResourceLoader` 和 `pi-package` workflow backend 的加载链路中过滤，diagnostics 会通过 `blockedPackages` 暴露被阻止加载的 source。
 - Approval 已接入 Pi tool call 拦截和 SSE 事件，但当前策略是 fail-closed：危险工具被阻断后需要用户 resolve 并重试 prompt，尚未实现挂起并恢复同一个 tool call 的交互式等待。
-- 当前 API token 仍是单 token 配置，尚未实现权限分级；审计日志已覆盖受保护只读 API、已授权写 API 和常用检索过滤，但尚未实现按 actor、scope 或 token 权限分层查询。
+- 当前 API token 已有 admin/read 最小权限分级；审计日志已覆盖受保护只读 API、已授权写 API 和常用检索过滤，但尚未实现多 actor、多 scope token 管理或按 token 权限分层查询。
 - 路径保护已有根目录级 allowlist，并已对默认只读工具增加敏感路径审批；尚未做到完整的按工具/动作策略矩阵。
 - 默认工具集偏只读，`bash`、`edit`、`write` 需要 UI 显式启用。
 - 当前环境下真实模型 stream 可能因为网络返回 `Connection error`；daemon 已将 SDK assistant error 映射为 SSE error，并可通过模型 smoke test 把真实调用结果保存为 run/events。

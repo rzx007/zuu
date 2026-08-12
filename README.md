@@ -13,7 +13,7 @@ pnpm dev
 
 项目脚本使用 Node 24 原生 `--env-file-if-exists=.env` 读取环境变量文件，不需要额外安装 `dotenv`。如果 `.env` 不存在，启动不会报错。
 
-除 `GET /v1/health` 外，所有 `/v1/*` 请求都需要 `Authorization: Bearer <token>`。如果设置了 `ZUU_API_TOKEN`，daemon 会使用该环境变量且不允许在线轮换；否则首次启动会在 `.zuu/pi-agent/auth-token.json` 生成本地 token，并在控制台打印 token 预览和文件路径。浏览器 UI 可以在 Runtime 面板保存 token；本地 token 可通过 Runtime 面板或 `POST /v1/auth/rotate` 轮换。
+除 `GET /v1/health` 外，所有 `/v1/*` 请求都需要 `Authorization: Bearer <token>`。如果设置了 `ZUU_API_TOKEN`，daemon 会把该环境变量作为 admin token 使用且不允许在线轮换；否则首次启动会在 `.zuu/pi-agent/auth-token.json` 生成本地 admin/read 双 token，并在控制台打印 admin token 预览和文件路径。read token 只能访问受保护 `GET /v1/*`，写操作需要 admin token。浏览器 UI 可以在 Runtime 面板保存 admin token；本地 token 可通过 Runtime 面板或 `POST /v1/auth/rotate` 同时轮换。
 
 默认只允许操作当前项目根目录内的 `cwd`、session 文件和 import 文件；如需额外目录，可用分号分隔的 `ZUU_ALLOWED_CWD` 放行。
 

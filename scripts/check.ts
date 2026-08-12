@@ -81,6 +81,18 @@ async function main() {
   if (!authStatus.auth.enabled || !authStatus.auth.tokenPreview) {
     throw new Error("auth status response is invalid");
   }
+  if (!authStatus.auth.tokens.some((token) => token.scope === "admin") || !authStatus.auth.tokens.some((token) => token.scope === "read")) {
+    throw new Error("auth status should expose admin and read token previews");
+  }
+  const readOnlyClient = createZuuClient({ baseUrl: "http://zuu.local", fetch: fetchFromApp, apiToken: auth.currentToken("read") });
+  const readOnlyProjects = await readOnlyClient.listProjects();
+  if (!Array.isArray(readOnlyProjects.projects)) {
+    throw new Error("read token should be able to call protected GET routes");
+  }
+  await expectClientError(() => readOnlyClient.createProject({ cwd: process.cwd(), name: "read token write check" }), {
+    status: 403,
+    code: "forbidden",
+  });
   const diagnostics = await client.diagnostics();
   if (!Array.isArray(diagnostics.resources.resourceDiagnostics)) {
     throw new Error("resource diagnostics response is invalid");
@@ -160,17 +172,22 @@ async function main() {
   const authServiceDir = mkdtempSync(join(tmpdir(), "zuu-auth-service-check-"));
   const localAuth = new AuthService(join(authServiceDir, "auth-token.json"), "");
   const originalLocalToken = localAuth.currentToken();
+  const originalReadToken = localAuth.currentToken("read");
   const rotatedLocalAuth = localAuth.rotate();
   if (
     !originalLocalToken ||
+    !originalReadToken ||
     rotatedLocalAuth.apiToken === originalLocalToken ||
+    rotatedLocalAuth.readApiToken === originalReadToken ||
     localAuth.currentToken() !== rotatedLocalAuth.apiToken ||
-    !localAuth.status().canRotate
+    localAuth.currentToken("read") !== rotatedLocalAuth.readApiToken ||
+    !localAuth.status().canRotate ||
+    !localAuth.status().tokens.some((token) => token.scope === "read")
   ) {
-    throw new Error("local auth token should be generated and rotated");
+    throw new Error("local auth tokens should be generated and rotated");
   }
   const envAuth = new AuthService(join(authServiceDir, "env-auth-token.json"), "env-token");
-  if (envAuth.status().source !== "env" || envAuth.status().canRotate) {
+  if (envAuth.status().source !== "env" || envAuth.status().canRotate || envAuth.status().tokens[0]?.scope !== "admin") {
     throw new Error("env auth token status should be read-only");
   }
 

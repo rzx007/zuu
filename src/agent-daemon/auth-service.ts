@@ -4,8 +4,18 @@ import { ApiError } from "../http";
 import { JsonFileStore } from "./json-file-store";
 
 interface AuthTokenRecord {
-  token: string;
+  adminToken: string;
+  readToken: string;
   createdAt: string;
+  rotatedAt?: string;
+}
+
+export type AuthScope = "admin" | "read";
+
+export interface AuthTokenStatus {
+  scope: AuthScope;
+  tokenPreview: string;
+  createdAt?: string;
   rotatedAt?: string;
 }
 
@@ -17,14 +27,22 @@ export interface AuthStatus {
   tokenFile?: string;
   createdAt?: string;
   rotatedAt?: string;
+  tokens: AuthTokenStatus[];
 }
 
 export interface AuthRotateResult {
   status: AuthStatus;
   apiToken: string;
+  readApiToken?: string;
 }
 
-const DEFAULT_TOKEN_RECORD: AuthTokenRecord = { token: "", createdAt: "" };
+export interface AuthDecision {
+  authorized: boolean;
+  scope?: AuthScope;
+  reason?: "unauthorized" | "forbidden";
+}
+
+const DEFAULT_TOKEN_RECORD: AuthTokenRecord = { adminToken: "", readToken: "", createdAt: "" };
 
 export class AuthService {
   private readonly store: JsonFileStore<AuthTokenRecord>;
@@ -37,7 +55,7 @@ export class AuthService {
       name: "auth-token",
       path: tokenPath,
       defaultValue: DEFAULT_TOKEN_RECORD,
-      countRecords: (value) => (value.token ? 1 : 0),
+      countRecords: (value) => [value.adminToken, value.readToken].filter(Boolean).length,
     });
 
     if (!this.envToken) {
@@ -45,12 +63,28 @@ export class AuthService {
     }
   }
 
-  currentToken() {
-    return this.envToken ?? this.localRecord?.token ?? "";
+  currentToken(scope: AuthScope = "admin") {
+    if (this.envToken) return this.envToken;
+    const record = this.localRecord ?? this.loadOrCreateLocalToken();
+    this.localRecord = record;
+    return scope === "read" ? record.readToken : record.adminToken;
   }
 
-  isAuthorized(authorization: string | undefined) {
-    return authorization === `Bearer ${this.currentToken()}`;
+  authorize(authorization: string | undefined, requiredScope: AuthScope = "admin"): AuthDecision {
+    const token = bearerToken(authorization);
+    if (!token) return { authorized: false, reason: "unauthorized" };
+
+    if (this.envToken) {
+      return token === this.envToken ? { authorized: true, scope: "admin" } : { authorized: false, reason: "unauthorized" };
+    }
+
+    const record = this.localRecord ?? this.loadOrCreateLocalToken();
+    this.localRecord = record;
+    if (token === record.adminToken) return { authorized: true, scope: "admin" };
+    if (token === record.readToken) {
+      return requiredScope === "read" ? { authorized: true, scope: "read" } : { authorized: false, scope: "read", reason: "forbidden" };
+    }
+    return { authorized: false, reason: "unauthorized" };
   }
 
   status(): AuthStatus {
@@ -60,6 +94,7 @@ export class AuthService {
         source: "env",
         canRotate: false,
         tokenPreview: tokenPreview(this.envToken),
+        tokens: [{ scope: "admin", tokenPreview: tokenPreview(this.envToken) }],
       };
     }
 
@@ -69,10 +104,14 @@ export class AuthService {
       enabled: true,
       source: "local",
       canRotate: true,
-      tokenPreview: tokenPreview(record.token),
+      tokenPreview: tokenPreview(record.adminToken),
       tokenFile: this.tokenPath,
       createdAt: record.createdAt,
       rotatedAt: record.rotatedAt,
+      tokens: [
+        { scope: "admin", tokenPreview: tokenPreview(record.adminToken), createdAt: record.createdAt, rotatedAt: record.rotatedAt },
+        { scope: "read", tokenPreview: tokenPreview(record.readToken), createdAt: record.createdAt, rotatedAt: record.rotatedAt },
+      ],
     };
   }
 
@@ -86,7 +125,8 @@ export class AuthService {
 
     const previous = this.localRecord ?? this.loadOrCreateLocalToken();
     const next: AuthTokenRecord = {
-      token: generateToken(),
+      adminToken: generateToken("admin"),
+      readToken: generateToken("read"),
       createdAt: previous.createdAt || new Date().toISOString(),
       rotatedAt: new Date().toISOString(),
     };
@@ -94,7 +134,8 @@ export class AuthService {
     this.localRecord = next;
     return {
       status: this.status(),
-      apiToken: next.token,
+      apiToken: next.adminToken,
+      readApiToken: next.readToken,
     };
   }
 
@@ -106,10 +147,11 @@ export class AuthService {
 
   private loadOrCreateLocalToken() {
     const loaded = this.store.load(isAuthTokenRecord);
-    if (loaded.token) return loaded;
+    if (loaded.adminToken && loaded.readToken) return loaded;
 
     const record: AuthTokenRecord = {
-      token: generateToken(),
+      adminToken: generateToken("admin"),
+      readToken: generateToken("read"),
       createdAt: new Date().toISOString(),
     };
     this.saveLocalToken(record);
@@ -126,8 +168,8 @@ export class AuthService {
   }
 }
 
-function generateToken() {
-  return `zuu_${randomBytes(32).toString("base64url")}`;
+function generateToken(scope: AuthScope) {
+  return `zuu_${scope}_${randomBytes(32).toString("base64url")}`;
 }
 
 function tokenPreview(token: string) {
@@ -138,10 +180,18 @@ function isAuthTokenRecord(value: unknown): value is AuthTokenRecord {
   return Boolean(
     value &&
       typeof value === "object" &&
-      "token" in value &&
-      typeof value.token === "string" &&
+      "adminToken" in value &&
+      typeof value.adminToken === "string" &&
+      "readToken" in value &&
+      typeof value.readToken === "string" &&
       "createdAt" in value &&
       typeof value.createdAt === "string" &&
       (!("rotatedAt" in value) || typeof value.rotatedAt === "string"),
   );
+}
+
+function bearerToken(authorization: string | undefined) {
+  const prefix = "Bearer ";
+  if (!authorization?.startsWith(prefix)) return undefined;
+  return authorization.slice(prefix.length);
 }

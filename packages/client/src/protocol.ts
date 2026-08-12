@@ -183,6 +183,15 @@ export interface HealthResponse {
   platform: string;
 }
 
+export type AuthScope = "admin" | "read";
+
+export interface AuthTokenStatus {
+  scope: AuthScope;
+  tokenPreview: string;
+  createdAt?: string;
+  rotatedAt?: string;
+}
+
 export interface AuthStatus {
   enabled: boolean;
   source: "env" | "local";
@@ -191,6 +200,7 @@ export interface AuthStatus {
   tokenFile?: string;
   createdAt?: string;
   rotatedAt?: string;
+  tokens: AuthTokenStatus[];
 }
 
 export interface AuthStatusResponse {
@@ -199,6 +209,7 @@ export interface AuthStatusResponse {
 
 export interface AuthRotateResponse extends AuthStatusResponse {
   apiToken: string;
+  readApiToken?: string;
 }
 
 export type AuditEventAction =

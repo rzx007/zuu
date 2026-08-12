@@ -1114,6 +1114,14 @@ onUnmounted(() => {
           <p v-if="authStatus" class="empty-text">
             {{ authStatus.tokenPreview }}{{ authStatus.tokenFile ? ` / ${authStatus.tokenFile}` : '' }}
           </p>
+          <div v-if="authStatus?.tokens.length" class="list-stack">
+            <div v-for="token in authStatus.tokens" :key="token.scope" class="workflow-row">
+              <div class="flex items-center justify-between gap-2">
+                <Badge variant="outline">{{ token.scope }}</Badge>
+                <span>{{ token.tokenPreview }}</span>
+              </div>
+            </div>
+          </div>
         </section>
 
         <section class="panel-block">

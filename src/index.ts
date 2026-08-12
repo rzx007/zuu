@@ -7,6 +7,7 @@ import { serveStatic } from "@hono/node-server/serve-static";
 import { Hono } from "hono";
 import { createAuditMiddleware } from "./agent-daemon/audit-middleware";
 import { AuditService } from "./agent-daemon/audit-service";
+import type { AuthScope } from "./agent-daemon/auth-service";
 import { AuthService } from "./agent-daemon/auth-service";
 import { ZuuDaemon } from "./agent-daemon";
 import { getAuditEventStorePath, getAuthTokenStorePath, getZuuAgentDir } from "./agent-daemon/environment";
@@ -28,7 +29,11 @@ app.use("/v1/*", async (c, next) => {
     return;
   }
 
-  if (!auth.isAuthorized(c.req.header("authorization"))) {
+  const decision = auth.authorize(c.req.header("authorization"), requiredAuthScope(c.req.method));
+  if (!decision.authorized) {
+    if (decision.reason === "forbidden") {
+      return c.json(jsonError("Forbidden", 403), 403);
+    }
     return c.json(jsonError("Unauthorized", 401), 401);
   }
 
@@ -96,3 +101,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
 }
 
 export default app;
+
+function requiredAuthScope(method: string): AuthScope {
+  return method === "GET" ? "read" : "admin";
+}
