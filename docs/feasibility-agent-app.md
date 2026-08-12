@@ -331,7 +331,7 @@ UI / 第三方只看见上述 API；cron 触发产生的 run/session 事件仍�
 | 风险 | 影响 | 缓解 |
 |---|---|---|
 | UI 绕过 Client 直连 HTTP | 协议分裂、多端不一致 | lint/约定 + 示例只展示 Client |
-| 协议破坏性变更 | Client/多端翻车 | `/v1` 版本化；DTO 兼容 |
+| 协议破坏性变更 | Client/多端翻车 | `/v1` 版本化；破坏性调整进入新的 `/vN` 契约 |
 | Packages 未进 Daemon | 编排/cron「装了却没有」 | 启动 diagnostics |
 | **Daemon 未常驻 / 关机** | **cron 不触发** | 文档强调 Daemon 服务化；可选开机自启；错过窗口策略（skip / catch-up） |
 | **cron 与 workflow 时区/夏令时** | 跑错点 | 统一存 UTC + 显式 timezone 字段 |

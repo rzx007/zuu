@@ -116,7 +116,7 @@ flowchart LR
 - 验证进程重启后的任务恢复。
 - 验证触发 Workflow 的可行性。
 
-#### SPIKE-005：运行时兼容
+#### SPIKE-005：运行时支持矩阵
 
 - Node.js 下运行主 Daemon。
 - 验证主进程与子 Pi 进程所需 Node.js 版本。
@@ -622,13 +622,13 @@ UI end-to-end
 ### 16.1 当前代码迁移
 
 - `src/pi-agent.ts` 已迁移为 `examples/pi-sdk-basic.ts`，不再作为生产入口保留。
-- `src/index.ts` 的 Hono 占位入口迁移到 `packages/daemon`。
-- 根 `package.json` 改为 workspace 管理。
-- `tsconfig.json` 拆为 base config 和 package configs。
+- daemon 入口继续保留在 `src/index.ts`，业务实现已拆到 `src/agent-daemon/`、`src/routes/` 和服务类，避免单文件继续膨胀。
+- 根 `package.json` 已改为 pnpm workspace 管理，当前已拆出 `packages/client`；daemon 暂不单独发布为 workspace package。
+- `packages/client/tsconfig.json` 负责 client SDK 构建，根 `tsconfig.json` 负责 daemon 与脚本类型检查。
 
-### 16.2 向后兼容
+### 16.2 迁移策略
 
-当前项目没有已发布 API 或持久业务数据，因此 M1 可进行一次性结构重组。自 `/v1` 和首个数据库 migration 发布后，后续必须采用兼容迁移。
+当前项目没有已发布 API 或必须保留的持久业务数据，M1 期间允许直接做破坏性结构调整。后续 schema 或协议变更以当前实现和文档为准，不保留旧数据、旧路由或旧格式兼容层；必要时提供一次性重建/清理说明。
 
 ## 17. 风险登记
 

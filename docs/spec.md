@@ -587,11 +587,11 @@ Schedule：
 - `schedule.run_failed`
 - `schedule.run_skipped`
 
-### 8.4 事件兼容性
+### 8.4 事件演进规则
 
 - 新字段只能以可选字段加入
 - Client 必须忽略未知事件和未知字段
-- 已发布的事件语义不得在同一主版本内改变
+- 当前未发布阶段允许直接调整事件语义；发布后以新的 `/vN` 契约承载破坏性变更
 - Pi 原始事件不得直接穿透为公共事件
 
 ## 9. Client SDK
@@ -601,7 +601,7 @@ Schedule：
 ```ts
 const client = createZuuClient({
   baseUrl: "http://127.0.0.1:8787",
-  token,
+  apiToken,
   timeoutMs: 30_000,
 });
 ```
@@ -1017,8 +1017,8 @@ docs/
 ### 18.3 契约测试
 
 - Daemon 与 Client 使用同一 protocol fixtures
-- 未知字段兼容
-- 未知事件兼容
+- 未知字段不影响已知字段解析，但不承诺旧格式适配
+- 未知事件类型可忽略，但不承诺旧事件格式适配
 - `/v1` 错误响应稳定
 
 ### 18.4 平台测试
@@ -1099,7 +1099,7 @@ Zuu 集成 Pi SDK 时必须遵守以下约束：
 
 1. Daemon 必须显式传入 app-owned `agentDir`，并让 `ModelRuntime`、`SettingsManager`、`DefaultResourceLoader` 和 `SessionManager` 使用同一目录策略。不得依赖 SDK 默认的 `~/.pi/agent` 作为应用状态目录。
 2. Session 持久化目录必须由 Daemon 管理。若使用 `SessionManager.create(cwd)`，必须显式传入 sessionDir。
-3. Daemon 不得把 Pi 原始事件直接暴露给 UI。必须映射为 Zuu 协议事件，并对未知事件保持前向兼容。
+3. Daemon 不得把 Pi 原始事件直接暴露给 UI。必须映射为 Zuu 协议事件；未知事件类型可被 Client 忽略，但不提供旧事件格式适配层。
 4. Assistant message 中的 `stopReason: "error"` 必须映射为标准错误事件。
 5. Model diagnostics 必须区分“认证/目录可用”和“真实 provider stream 成功”。
 6. Package 加载前必须有信任边界；package 来源、错误和启用状态必须能通过 diagnostics 查询。
