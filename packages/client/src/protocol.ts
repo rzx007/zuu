@@ -637,6 +637,10 @@ export interface StoreDiagnostic {
   exists: boolean;
   recordCount: number;
   recovered: boolean;
+  lockPath: string;
+  locked: boolean;
+  lockStale: boolean;
+  lockAgeMs?: number;
   backupPath?: string;
   error?: string;
 }

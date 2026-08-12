@@ -738,7 +738,7 @@ UI end-to-end
 - API 错误响应已统一为 `{ error: { message, status, retryable, code?, details? } }`；`@zuu/client` 会把非 2xx 响应映射为 `ZuuClientError`。
 - `GET /v1/auth/status`、`POST /v1/auth/rotate`、`POST /v1/auth/tokens` 和 `DELETE /v1/auth/tokens/:tokenId` 已支持本地多 token 状态查询、整体轮换、按 actor 创建 read/admin token 和撤销 token；read token 只能访问受保护 `GET /v1/*`，写操作需要 admin token；最后一个 admin token 不允许撤销；`ZUU_API_TOKEN` 仍可作为环境变量覆盖，此时它作为 admin token 由进程外管理且 API 不允许轮换、创建或撤销。
 - `GET /v1/audit-events` 已支持查询最近审计事件，并可按 `action`、`outcome`、`target`、`authScope`、`authActor`、`authTokenId`、`since`、`until` 和 `limit` 过滤；当前会为受保护的 `GET /v1/*` 只读操作记录 `api.read`，为已授权的 `POST/PATCH/DELETE /v1/*` 写操作记录 `api.mutate`，并在 details 中写入 `authScope`、`authActor` 和 `authTokenId` 元数据；还会额外记录 auth rotate、approval resolve 和 package add/trust/install/update/remove 等领域动作；公开探针 `/v1/health` 和 daemon 级 SSE `/v1/events` 不进入审计，同时避免写入原始 token/provider key 等密钥。
-- `GET /v1/diagnostics` 正常返回 SDK 版本、模型数量、skills、extensions、resource diagnostics、trusted packages、blocked packages、JSON store 健康状态和能力缺口，store diagnostics 已包含本地 auth-token store 和 audit-events store。
+- `GET /v1/diagnostics` 正常返回 SDK 版本、模型数量、skills、extensions、resource diagnostics、trusted packages、blocked packages、JSON store 健康状态和能力缺口，store diagnostics 已包含本地 auth-token store、audit-events store 和 `.lock` 状态。
 - `POST /v1/prompt` 可以返回带稳定事件 ID 和 `createdAt` 的 SSE `session`、`error`、`agent_event` 和 `done` 事件；`GET /v1/events` 支持按 `runId`/`sessionId` 过滤，并通过 `afterEventId` 或 `Last-Event-ID` 先 replay 再订阅 live 事件。
 - `@zuu/client` 可从 Node.js 侧调用 health、diagnostics、prompt stream、session-scoped prompt、steer 和 follow-up，并可通过 `pnpm example:client` 运行第三方消费示例。
 - prompt stream 已携带稳定 `runId`，并可通过 `GET /v1/runs` 和 `GET /v1/runs/:runId` 查询最近运行状态；`POST /v1/sessions/:sessionId/prompts`、`POST /v1/sessions/:sessionId/steer` 和 `POST /v1/sessions/:sessionId/follow-ups` 已暴露已有 Session 的显式交互入口，其中 steer/follow-up 会向 Pi SDK 传递 `streamingBehavior`；正在运行的 Session 如未指定合法 `streamingBehavior` 会返回 `409 session_busy`。Agent Run 摘要已使用 `source`、`queued/running/waiting_approval/completed/failed/aborted` 和 `finishedAt`。
@@ -761,7 +761,7 @@ UI end-to-end
 当前限制：
 
 - `@zuu/client` 已是可独立构建的 workspace 包，具备 `dist` 产物、包入口、类型声明、包内中文 README、CHANGELOG、第三方示例、`client:release:prepare` 版本/changelog 准备脚本和 `client:release:check` 发布门禁；真正 `npm publish` 仍需在具备 registry/token 的发布环境执行。
-- JSON store 已有原子写、损坏恢复和本地 `.lock` 文件写入协调，prompt run 事件已有最小存档、按 run 补拉、daemon 级 `/v1/events` replay/live stream 和 SDK 自动 SSE 重连，但还没有 SQLite migration 或生产级事务存储。
+- JSON store 已有原子写、损坏恢复、本地 `.lock` 文件写入协调和 stale lock diagnostics，prompt run 事件已有最小存档、按 run 补拉、daemon 级 `/v1/events` replay/live stream 和 SDK 自动 SSE 重连，但还没有 SQLite migration 或生产级事务存储。
 - WebUI 已迁移到 Vue + Vite，并支持打开持久化 session、查看当前 session tree、按 entry fork、从本地 JSONL 路径 import、处理 pending approvals、启动/查看 fake workflow runs、选择 workflow run 并查看 stage/task/artifact 详情、创建/暂停/恢复/触发/删除 schedule、查看 schedule run 历史/详情、模型 smoke test、查看 audit events，以及通过 daemon 级 `subscribeEvents()` 实时展示事件并节流刷新 runs、approvals、session tree、schedule 和 workflow run 状态。
 - Package API 已能展示安装状态、信任状态、加载状态、显式触发安装/更新/删除，并通过持久化 operation 记录暴露任务进度和失败原因；WebUI 已能 trust/revoke package source 并展示 SDK resource diagnostics/collision。未信任 package 会保留在配置清单中，但已从 Pi `ResourceLoader` 和 `pi-package` workflow backend 的加载链路中过滤，diagnostics 会通过 `blockedPackages` 暴露被阻止加载的 source。
 - Approval 已接入 Pi tool call 拦截、SSE 事件和 WebUI resolve；交互式危险工具会让同一个 tool call 异步等待审批，allow 后继续执行，deny/expire 才阻断本次工具调用；schedule 等非交互来源默认不等待审批。

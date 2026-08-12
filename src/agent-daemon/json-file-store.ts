@@ -13,6 +13,10 @@ export interface JsonStoreStatus {
   exists: boolean;
   recordCount: number;
   recovered: boolean;
+  lockPath: string;
+  locked: boolean;
+  lockStale: boolean;
+  lockAgeMs?: number;
   backupPath?: string;
   error?: string;
 }
@@ -90,7 +94,8 @@ export class JsonFileStore<T> {
   }
 
   inspect(): JsonStoreStatus {
-    return statuses.get(this.path) ?? this.createStatus(this.defaultValue, { exists: existsSync(this.path) });
+    const status = statuses.get(this.path) ?? this.createStatus(this.defaultValue, { exists: existsSync(this.path) });
+    return withCurrentLockStatus(status);
   }
 
   private backupCorruptFile() {
@@ -108,13 +113,15 @@ export class JsonFileStore<T> {
   }
 
   private createStatus(value: T, patch: Partial<JsonStoreStatus> = {}): JsonStoreStatus {
+    const lock = inspectStoreLock(this.path);
     return {
       name: this.options.name,
       path: this.path,
-      ok: !patch.error,
+      ok: !patch.error && !lock.lockStale,
       exists: patch.exists ?? existsSync(this.path),
       recordCount: this.countRecords(value),
       recovered: false,
+      ...lock,
       ...patch,
     };
   }
@@ -135,6 +142,34 @@ function defaultCountRecords(value: unknown) {
   if (Array.isArray(value)) return value.length;
   if (value && typeof value === "object") return Object.keys(value).length;
   return value === undefined ? 0 : 1;
+}
+
+function withCurrentLockStatus(status: JsonStoreStatus): JsonStoreStatus {
+  const lock = inspectStoreLock(status.path);
+  return {
+    ...status,
+    ...lock,
+    ok: !status.error && !lock.lockStale,
+  };
+}
+
+function inspectStoreLock(storePath: string) {
+  const lockPath = `${storePath}.lock`;
+  try {
+    const lockAgeMs = Math.max(0, Date.now() - statSync(lockPath).mtimeMs);
+    return {
+      lockPath,
+      locked: true,
+      lockStale: lockAgeMs > STORE_LOCK_STALE_MS,
+      lockAgeMs,
+    };
+  } catch {
+    return {
+      lockPath,
+      locked: false,
+      lockStale: false,
+    };
+  }
 }
 
 function withStoreLock<T>(storePath: string, fn: () => T): T {

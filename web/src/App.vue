@@ -1687,7 +1687,11 @@ onUnmounted(() => {
                     <Badge :variant="store.ok ? 'secondary' : 'destructive'">{{ store.ok ? 'ok' : 'review' }}</Badge>
                   </div>
                   <span>{{ store.recordCount }} records / {{ store.exists ? 'exists' : 'missing' }}</span>
+                  <span v-if="store.locked">locked <template v-if="store.lockAgeMs !== undefined">{{ Math.round(store.lockAgeMs) }}ms</template></span>
+                  <span v-else>unlocked</span>
+                  <p v-if="store.lockStale">stale lock needs review</p>
                   <span>{{ store.path }}</span>
+                  <span v-if="store.locked">lock {{ store.lockPath }}</span>
                   <p v-if="store.recovered">recovered from corrupt JSON</p>
                   <span v-if="store.backupPath">backup {{ store.backupPath }}</span>
                   <p v-if="store.error">{{ store.error }}</p>

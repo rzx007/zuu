@@ -141,7 +141,7 @@ Project 已作为一等资源持久化在 `.zuu/pi-agent/projects.json`。Daemon
 
 默认情况下，Zuu 会把 Pi 应用状态存放在 `.zuu/pi-agent`，嵌入式应用不需要写入 `~/.pi/agent`。可以通过 `ZUU_AGENT_DIR` 覆盖。
 
-当前轻量持久化文件统一使用版本化 JSON store：`projects.json`、`runs.json`、`run-events.json`、`approvals.json`、`workflow-runs.json`、`schedules.json`、`package-operations.json` 和 `package-trust.json` 都会先通过同路径 `.lock` 文件串行化写入，再写入临时文件并原子替换。启动时如果读到损坏 JSON，会把原文件备份为 `.corrupt-*.bak`，再恢复为空数据；`GET /v1/diagnostics` 的 `resources.stores` 会暴露每个 store 的路径、记录数、恢复状态和错误信息。Agent Run 摘要使用 `source`、`status`、`startedAt` 和 `finishedAt`，其中 `status` 为 `queued`、`running`、`waiting_approval`、`completed`、`failed` 或 `aborted`。
+当前轻量持久化文件统一使用版本化 JSON store：`projects.json`、`runs.json`、`run-events.json`、`approvals.json`、`workflow-runs.json`、`schedules.json`、`package-operations.json` 和 `package-trust.json` 都会先通过同路径 `.lock` 文件串行化写入，再写入临时文件并原子替换。启动时如果读到损坏 JSON，会把原文件备份为 `.corrupt-*.bak`，再恢复为空数据；`GET /v1/diagnostics` 的 `resources.stores` 会暴露每个 store 的路径、记录数、恢复状态、lock 状态和错误信息，stale lock 会让对应 store 进入 review 状态。Agent Run 摘要使用 `source`、`status`、`startedAt` 和 `finishedAt`，其中 `status` 为 `queued`、`running`、`waiting_approval`、`completed`、`failed` 或 `aborted`。
 
 Packages 面板会区分 `configured`、`installed`、`filtered`、`trusted` / `untrusted` 和 `enabled` / `blocked`，`GET /v1/packages` 返回结构化 package 列表。`POST /v1/packages` 只登记 package source；安装或更新前需要先通过 `POST /v1/packages/trust` 或 WebUI 的 Trust 按钮信任 source。未信任 package 会保留在配置清单中，但不会进入 Pi `ResourceLoader` 或 workflow backend 的加载链路。
 
@@ -151,7 +151,7 @@ Packages 面板会区分 `configured`、`installed`、`filtered`、`trusted` / `
 
 `GET /v1/audit-events` 会返回最近审计事件，并支持 `limit`、`action`、`outcome`、`target`、`authScope`、`authActor`、`authTokenId`、`since` 和 `until` 过滤。当前会为受保护的 `GET /v1/*` 只读操作记录 `api.read`，为已授权的 `POST/PATCH/DELETE /v1/*` 写操作记录 `api.mutate`，并在 details 中写入 `authScope`、`authActor` 和 `authTokenId`；公开探针 `GET /v1/health` 和 daemon 级 SSE `GET /v1/events` 不进入审计，避免探活和长连接噪音。领域动作还会额外覆盖 auth rotate、approval resolve 和 package add/trust/install/update/remove 等；审计记录只写 method/path/status、auth token 元数据、source、decision、错误摘要等非密钥信息。
 
-`GET /v1/diagnostics` 会返回 SDK resource diagnostics；其中 `resources.packages` 只列出已信任且会参与加载的 package，`resources.blockedPackages` 列出因未信任而被阻止加载的 package，`resources.stores` 列出 JSON store 健康状态，包括本地 auth token store 和 audit event store。WebUI 的 Resources 面板会展示 extension/skill/prompt/theme 的加载错误、warning、name collision 和 store recovery 状态。
+`GET /v1/diagnostics` 会返回 SDK resource diagnostics；其中 `resources.packages` 只列出已信任且会参与加载的 package，`resources.blockedPackages` 列出因未信任而被阻止加载的 package，`resources.stores` 列出 JSON store 健康状态，包括本地 auth token store、audit event store 和 lock 状态。WebUI 的 Resources 面板会展示 extension/skill/prompt/theme 的加载错误、warning、name collision、store recovery 和 stale lock 状态。
 
 `GET /v1/models` 只说明当前认证和模型目录看起来可用；需要确认 DeepSeek 等 provider 是否真的能流式返回时，使用 `POST /v1/models/smoke` 或 WebUI 模型区的 Smoke test。该接口会创建一个临时 in-memory session，发送极小 prompt，并返回 `ok/status/runId/error/durationMs`；失败也会写入 run/events，方便继续排查网络、代理或 provider 错误。
 

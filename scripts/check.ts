@@ -29,6 +29,7 @@ import { ProjectStore } from "../src/agent-daemon/projects";
 import { RunEventStore } from "../src/agent-daemon/run-events";
 import { loadRunHistory, saveRunHistory } from "../src/agent-daemon/run-history";
 import { ScheduleStore } from "../src/agent-daemon/schedules";
+import { inspectJsonStore } from "../src/agent-daemon/json-file-store";
 import { createWorkflowBackend } from "../src/agent-daemon/workflows";
 import { WorkflowApiService } from "../src/agent-daemon/workflow-api-service";
 import { WorkflowService } from "../src/agent-daemon/workflow-service";
@@ -2279,9 +2280,17 @@ async function main() {
   writeFileSync(staleLockPath, "stale lock", "utf8");
   const staleLockTime = new Date(Date.now() - 60_000);
   utimesSync(staleLockPath, staleLockTime, staleLockTime);
+  const staleLockStatus = inspectJsonStore({ name: "runs", path: corruptRunsPath, defaultValue: [] });
+  if (!staleLockStatus.locked || !staleLockStatus.lockStale || staleLockStatus.ok) {
+    throw new Error("store diagnostics should report stale JSON store locks");
+  }
   saveRunHistory(corruptRunsPath, []);
   if (existsSync(staleLockPath)) {
     throw new Error("run history save should clean up stale JSON store locks");
+  }
+  const unlockedStatus = inspectJsonStore({ name: "runs", path: corruptRunsPath, defaultValue: [] });
+  if (unlockedStatus.locked || unlockedStatus.lockStale || unlockedStatus.lockPath !== staleLockPath) {
+    throw new Error("store diagnostics should report unlocked JSON stores after cleanup");
   }
 
   const projectStoreDir = mkdtempSync(join(tmpdir(), "zuu-project-store-check-"));
