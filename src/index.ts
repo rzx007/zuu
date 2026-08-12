@@ -24,6 +24,11 @@ function jsonError(error: unknown, status = 500) {
   return { error: { message, status } };
 }
 
+function isAuthorized(authorization: string | undefined) {
+  const apiToken = process.env.ZUU_API_TOKEN?.trim();
+  return !apiToken || authorization === `Bearer ${apiToken}`;
+}
+
 async function getClientJs() {
   clientJsPromise ??= readFile(new URL("./client.ts", import.meta.url), "utf8").then((source) => {
     return ts.transpileModule(source, {
@@ -365,6 +370,10 @@ const page = String.raw`<!doctype html>
       <section class="panel stack">
         <h2>Runtime</h2>
         <p id="diag" class="meta">Loading diagnostics...</p>
+        <label>API token <input id="api-token" type="password" placeholder="Optional ZUU_API_TOKEN" /></label>
+        <div class="actions">
+          <button id="save-token">Save</button>
+        </div>
       </section>
 
       <section class="panel stack">
@@ -452,7 +461,8 @@ const page = String.raw`<!doctype html>
   <script type="module">
     import { createZuuClient } from "/client.js";
 
-    const client = createZuuClient();
+    const tokenKey = "zuu.apiToken";
+    let client = createZuuClient({ apiToken: localStorage.getItem(tokenKey) || undefined });
     const state = { sessionId: undefined, controller: undefined };
     const el = (id) => document.getElementById(id);
     const messages = el("messages");
@@ -473,6 +483,20 @@ const page = String.raw`<!doctype html>
 
     function selectedTools() {
       return [...document.querySelectorAll(".check input:checked")].map((input) => input.value);
+    }
+
+    function saveToken() {
+      const token = el("api-token").value.trim();
+      if (token) {
+        localStorage.setItem(tokenKey, token);
+      } else {
+        localStorage.removeItem(tokenKey);
+      }
+      client = createZuuClient({ apiToken: token || undefined });
+      addMessage("event", token ? "API token saved." : "API token cleared.");
+      loadDiagnostics().catch((error) => {
+        el("diag").textContent = String(error.message || error);
+      });
     }
 
     async function loadDiagnostics() {
@@ -774,6 +798,7 @@ const page = String.raw`<!doctype html>
     el("add-package").addEventListener("click", () => {
       addPackage().catch((error) => addMessage("event", String(error.message || error)));
     });
+    el("save-token").addEventListener("click", saveToken);
     el("import-session").addEventListener("click", () => {
       importSession().catch((error) => addMessage("event", String(error.message || error)));
     });
@@ -786,6 +811,7 @@ const page = String.raw`<!doctype html>
       if ((event.metaKey || event.ctrlKey) && event.key === "Enter") sendPrompt();
     });
 
+    el("api-token").value = localStorage.getItem(tokenKey) || "";
     loadDiagnostics().catch((error) => {
       el("diag").textContent = String(error.message || error);
     });
@@ -812,6 +838,14 @@ app.get("/client.js", async () => {
 });
 
 app.get("/", (c) => c.html(page));
+
+app.use("/api/*", async (c, next) => {
+  if (!isAuthorized(c.req.header("authorization"))) {
+    return c.json(jsonError("Unauthorized", 401), 401);
+  }
+
+  await next();
+});
 
 app.get("/api/health", (c) => c.json({ ok: true }));
 

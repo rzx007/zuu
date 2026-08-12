@@ -15,6 +15,8 @@ pnpm dev
 
 项目脚本使用 Node 24 原生 `--env-file-if-exists=.env` 读取环境变量文件，不需要额外安装 `dotenv`。如果 `.env` 不存在，启动不会报错。
 
+如果设置了 `ZUU_API_TOKEN`，所有 `/api/*` 请求都需要 `Authorization: Bearer <token>`；浏览器 UI 可以在 Runtime 面板保存 token。
+
 如果 Windows PowerShell 拦截 `pnpm.ps1`，可以使用 `pnpm.cmd dev`。
 
 ## 校验

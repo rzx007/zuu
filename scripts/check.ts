@@ -11,6 +11,38 @@ async function main() {
   const health = await client.health();
   if (!health.ok) throw new Error("health check failed");
 
+  let sawAuthHeader = false;
+  const authClient = createZuuClient({
+    baseUrl: "http://zuu.local",
+    apiToken: "check-token",
+    fetch: async (input, init) => {
+      const request = input instanceof Request ? input : new Request(input, init);
+      sawAuthHeader = request.headers.get("authorization") === "Bearer check-token";
+      return Response.json({ ok: true });
+    },
+  });
+  await authClient.health();
+  if (!sawAuthHeader) throw new Error("api token header was not sent");
+
+  const previousToken = process.env.ZUU_API_TOKEN;
+  try {
+    process.env.ZUU_API_TOKEN = "server-check-token";
+    const unauthorized = await fetchFromApp("http://zuu.local/api/health");
+    if (unauthorized.status !== 401) throw new Error("missing api token should be rejected");
+    const authorizedClient = createZuuClient({
+      baseUrl: "http://zuu.local",
+      fetch: fetchFromApp,
+      apiToken: "server-check-token",
+    });
+    await authorizedClient.health();
+  } finally {
+    if (previousToken === undefined) {
+      delete process.env.ZUU_API_TOKEN;
+    } else {
+      process.env.ZUU_API_TOKEN = previousToken;
+    }
+  }
+
   const { runs } = await client.listRuns();
   if (!Array.isArray(runs)) throw new Error("runs response is invalid");
 

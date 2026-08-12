@@ -23,6 +23,7 @@ import type {
 export interface ZuuClientOptions {
   baseUrl?: string;
   fetch?: typeof fetch;
+  apiToken?: string;
 }
 
 export interface PromptStreamOptions {
@@ -77,11 +78,13 @@ async function requestJson<T>(
   baseUrl: string,
   path: string,
   init?: RequestInit,
+  apiToken?: string,
 ): Promise<T> {
   const response = await fetchImpl(joinUrl(baseUrl, path), {
     ...init,
     headers: {
       ...(init?.body ? { "content-type": "application/json" } : {}),
+      ...(apiToken ? { authorization: `Bearer ${apiToken}` } : {}),
       ...init?.headers,
     },
   });
@@ -110,81 +113,89 @@ function parseSseEvents(buffer: string) {
 export function createZuuClient(options: ZuuClientOptions = {}): ZuuClient {
   const fetchImpl = options.fetch ?? fetch;
   const baseUrl = options.baseUrl ?? "";
+  const apiToken = options.apiToken;
 
   return {
-    health: () => requestJson<HealthResponse>(fetchImpl, baseUrl, "/api/health"),
-    diagnostics: () => requestJson<Diagnostics>(fetchImpl, baseUrl, "/api/diagnostics"),
-    listPackages: () => requestJson<PackagesResponse>(fetchImpl, baseUrl, "/api/packages"),
-    listModels: () => requestJson<ModelsResponse>(fetchImpl, baseUrl, "/api/models"),
+    health: () => requestJson<HealthResponse>(fetchImpl, baseUrl, "/api/health", undefined, apiToken),
+    diagnostics: () => requestJson<Diagnostics>(fetchImpl, baseUrl, "/api/diagnostics", undefined, apiToken),
+    listPackages: () => requestJson<PackagesResponse>(fetchImpl, baseUrl, "/api/packages", undefined, apiToken),
+    listModels: () => requestJson<ModelsResponse>(fetchImpl, baseUrl, "/api/models", undefined, apiToken),
     addPackage: (input) =>
       requestJson<PackagesResponse>(fetchImpl, baseUrl, "/api/packages", {
         method: "POST",
         body: JSON.stringify(input),
-      }),
+      }, apiToken),
     removePackage: (input) =>
       requestJson<PackagesResponse>(fetchImpl, baseUrl, "/api/packages", {
         method: "DELETE",
         body: JSON.stringify(input),
-      }),
-    listSessions: () => requestJson<SessionsResponse>(fetchImpl, baseUrl, "/api/sessions"),
+      }, apiToken),
+    listSessions: () => requestJson<SessionsResponse>(fetchImpl, baseUrl, "/api/sessions", undefined, apiToken),
     listStoredSessions: (cwd) =>
       requestJson<StoredSessionsResponse>(
         fetchImpl,
         baseUrl,
         cwd ? `/api/session-files?cwd=${encodeURIComponent(cwd)}` : "/api/session-files",
+        undefined,
+        apiToken,
       ),
     getSessionTree: (sessionId) =>
-      requestJson<SessionTreeResponse>(fetchImpl, baseUrl, `/api/sessions/${encodeURIComponent(sessionId)}/tree`),
+      requestJson<SessionTreeResponse>(fetchImpl, baseUrl, `/api/sessions/${encodeURIComponent(sessionId)}/tree`, undefined, apiToken),
     listRuns: (sessionId) =>
       requestJson<RunsResponse>(
         fetchImpl,
         baseUrl,
         sessionId ? `/api/runs?sessionId=${encodeURIComponent(sessionId)}` : "/api/runs",
+        undefined,
+        apiToken,
       ),
-    getRun: (runId) => requestJson<RunResponse>(fetchImpl, baseUrl, `/api/runs/${encodeURIComponent(runId)}`),
+    getRun: (runId) => requestJson<RunResponse>(fetchImpl, baseUrl, `/api/runs/${encodeURIComponent(runId)}`, undefined, apiToken),
     createSession: (input = {}) =>
       requestJson<SessionResponse>(fetchImpl, baseUrl, "/api/sessions", {
         method: "POST",
         body: JSON.stringify(input),
-      }),
+      }, apiToken),
     openSession: (input) =>
       requestJson<SessionResponse>(fetchImpl, baseUrl, "/api/sessions/open", {
         method: "POST",
         body: JSON.stringify(input),
-      }),
+      }, apiToken),
     abort: (sessionId) =>
       requestJson<SessionResponse>(fetchImpl, baseUrl, `/api/sessions/${encodeURIComponent(sessionId)}/abort`, {
         method: "POST",
-      }),
+      }, apiToken),
     compact: (sessionId, instructions) =>
       requestJson<SessionResponse>(fetchImpl, baseUrl, `/api/sessions/${encodeURIComponent(sessionId)}/compact`, {
         method: "POST",
         body: JSON.stringify({ instructions }),
-      }),
+      }, apiToken),
     newSession: (sessionId, input = {}) =>
       requestJson<SessionActionResponse>(fetchImpl, baseUrl, `/api/sessions/${encodeURIComponent(sessionId)}/new`, {
         method: "POST",
         body: JSON.stringify(input),
-      }),
+      }, apiToken),
     switchSession: (sessionId, input) =>
       requestJson<SessionActionResponse>(fetchImpl, baseUrl, `/api/sessions/${encodeURIComponent(sessionId)}/switch`, {
         method: "POST",
         body: JSON.stringify(input),
-      }),
+      }, apiToken),
     forkSession: (sessionId, input) =>
       requestJson<SessionActionResponse>(fetchImpl, baseUrl, `/api/sessions/${encodeURIComponent(sessionId)}/fork`, {
         method: "POST",
         body: JSON.stringify(input),
-      }),
+      }, apiToken),
     importSession: (sessionId, input) =>
       requestJson<SessionActionResponse>(fetchImpl, baseUrl, `/api/sessions/${encodeURIComponent(sessionId)}/import`, {
         method: "POST",
         body: JSON.stringify(input),
-      }),
+      }, apiToken),
     async *prompt(input, options = {}) {
       const response = await fetchImpl(joinUrl(baseUrl, "/api/prompt"), {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: {
+          "content-type": "application/json",
+          ...(apiToken ? { authorization: `Bearer ${apiToken}` } : {}),
+        },
         body: JSON.stringify(input),
         signal: options.signal,
       });
