@@ -148,4 +148,10 @@ export class DaemonServiceRegistry {
   smokeModel(request: ModelSmokeRequest = {}): Promise<ModelSmokeResponse> {
     return this.modelApiService.smokeModel(request);
   }
+
+  async dispose() {
+    this.scheduleService.dispose();
+    await this.sessionService.dispose();
+    this.runService.clear();
+  }
 }

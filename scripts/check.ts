@@ -8,6 +8,7 @@ import { ApprovalApiService } from "../src/agent-daemon/approval-api-service";
 import { ApprovalService } from "../src/agent-daemon/approval-service";
 import { ApprovalStore } from "../src/agent-daemon/approval-store";
 import { createApprovalExtension } from "../src/agent-daemon/approval-policy";
+import { DaemonServiceRegistry } from "../src/agent-daemon/daemon-service-registry";
 import { ModelApiService } from "../src/agent-daemon/model-api-service";
 import { ModelService } from "../src/agent-daemon/model-service";
 import { PackageApiService } from "../src/agent-daemon/package-api-service";
@@ -2066,6 +2067,47 @@ async function main() {
   const modelApiSmoke = await modelApi.smokeModel({ prompt: "zuu-ok" });
   if (!modelApiSmoke.ok || modelApiSmoke.runId !== "model-api-smoke-run" || modelApiDeletedSessions[0] !== "model-api-smoke-session") {
     throw new Error("model API smoke should run through prompt and clean up the temporary session");
+  }
+  const registry = new DaemonServiceRegistry({
+    prompt: async function* () {
+      yield {
+        id: "registry-prompt:1",
+        createdAt: "2026-08-12T00:00:00.000Z",
+        runId: "registry-run",
+        type: "done",
+      };
+    },
+    abortSession: async () => undefined,
+    deleteSession: async () => undefined,
+    startWorkflow: async (workflowId, request) => ({
+      id: "registry-workflow-run",
+      workflowId,
+      workflowName: "Registry workflow",
+      status: "completed",
+      source: request.source ?? "api",
+      projectId: request.projectId ?? "default",
+      startedAt: "2026-08-12T00:00:00.000Z",
+      finishedAt: "2026-08-12T00:00:01.000Z",
+      stages: [],
+      tasks: [],
+      artifacts: [],
+    }),
+  });
+  try {
+    const registryProjects = registry.projectApiService.listProjects();
+    if (!registryProjects.some((item) => item.id === "default")) {
+      throw new Error("daemon service registry should wire project API service");
+    }
+    const registrySchedules = registry.scheduleApiService.listSchedules("default");
+    if (!Array.isArray(registrySchedules)) {
+      throw new Error("daemon service registry should wire schedule API service");
+    }
+    const registryModels = await registry.listModels();
+    if (!Array.isArray(registryModels.models)) {
+      throw new Error("daemon service registry should expose model helpers");
+    }
+  } finally {
+    await registry.dispose();
   }
   const sessionApiAbortedRuns: string[] = [];
   const sessionApi = new SessionApiService(

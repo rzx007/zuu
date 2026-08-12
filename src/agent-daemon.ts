@@ -287,9 +287,7 @@ export class ZuuDaemon {
   }
 
   async dispose() {
-    this.services.scheduleService.dispose();
-    await this.services.sessionService.dispose();
-    this.services.runService.clear();
+    await this.services.dispose();
   }
 }
 
