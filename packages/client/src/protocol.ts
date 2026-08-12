@@ -339,7 +339,7 @@ export interface WorkflowRunResponse {
 
 export type ScheduleStatus = "active" | "paused";
 export type ScheduleTriggerKind = "once" | "interval" | "cron";
-export type ScheduleRunStatus = "running" | "done" | "error";
+export type ScheduleRunStatus = "queued" | "running" | "completed" | "failed" | "skipped" | "aborted";
 
 export interface ScheduleTrigger {
   kind: ScheduleTriggerKind;
@@ -374,11 +374,13 @@ export interface ScheduleRun {
   id: string;
   scheduleId: string;
   status: ScheduleRunStatus;
-  startedAt: string;
-  endedAt?: string;
+  scheduledFor: string;
+  startedAt?: string;
+  finishedAt?: string;
   agentRunId?: string;
   workflowRunId?: string;
   error?: string;
+  reason?: string;
 }
 
 export interface Schedule {

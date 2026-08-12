@@ -42,7 +42,9 @@ export class ScheduleService {
     if (scheduleId) {
       return this.getSchedule(scheduleId, projectId).runs;
     }
-    return this.listSchedules(projectId).flatMap((schedule) => schedule.runs).sort((a, b) => b.startedAt.localeCompare(a.startedAt));
+    return this.listSchedules(projectId)
+      .flatMap((schedule) => schedule.runs)
+      .sort((a, b) => (b.startedAt ?? b.scheduledFor).localeCompare(a.startedAt ?? a.scheduledFor));
   }
 
   getScheduleRun(runId: string, projectId?: string) {

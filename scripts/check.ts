@@ -339,7 +339,7 @@ async function main() {
   const nextRunAtBeforeTrigger = resumedSchedule.schedule.nextRunAt;
   const triggeredSchedule = await client.triggerProjectSchedule(defaultProject.id, schedule.schedule.id);
   const scheduleRun = triggeredSchedule.schedule.runs[0];
-  if (scheduleRun?.status !== "done" || !scheduleRun.workflowRunId) {
+  if (scheduleRun?.status !== "completed" || !scheduleRun.workflowRunId || !scheduleRun.scheduledFor || !scheduleRun.finishedAt) {
     throw new Error("triggered schedule response is invalid");
   }
   const scheduleRuns = await client.listProjectScheduleRuns(defaultProject.id, schedule.schedule.id);

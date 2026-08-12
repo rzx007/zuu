@@ -11,6 +11,7 @@ const SCHEDULE_RUN_HISTORY_LIMIT = 50;
 const MAX_TIMER_DELAY_MS = 2_147_483_647;
 const MIN_INTERVAL_MS = 1_000;
 const CRON_SEARCH_LIMIT_MINUTES = 366 * 24 * 60;
+const SCHEDULE_RUN_STATUSES = new Set(["queued", "running", "completed", "failed", "skipped", "aborted"]);
 
 type PromptAction = Extract<ScheduleAction, { type: "prompt" }>;
 type WorkflowAction = Extract<ScheduleAction, { type: "workflow" }>;
@@ -25,11 +26,34 @@ function isSchedule(value: unknown): value is Schedule {
     value &&
       typeof value === "object" &&
       "id" in value &&
+      typeof value.id === "string" &&
       "name" in value &&
+      typeof value.name === "string" &&
       "status" in value &&
       "trigger" in value &&
       "action" in value &&
-      "runs" in value,
+      "runs" in value &&
+      Array.isArray(value.runs) &&
+      value.runs.every(isScheduleRun) &&
+      "createdAt" in value &&
+      typeof value.createdAt === "string" &&
+      "updatedAt" in value &&
+      typeof value.updatedAt === "string",
+  );
+}
+
+function isScheduleRun(value: unknown): value is ScheduleRun {
+  return Boolean(
+    value &&
+      typeof value === "object" &&
+      "id" in value &&
+      typeof value.id === "string" &&
+      "scheduleId" in value &&
+      typeof value.scheduleId === "string" &&
+      "status" in value &&
+      SCHEDULE_RUN_STATUSES.has(String(value.status)) &&
+      "scheduledFor" in value &&
+      typeof value.scheduledFor === "string",
   );
 }
 
@@ -145,7 +169,7 @@ export class ScheduleStore {
 
   listRuns(scheduleId?: string) {
     const schedules = scheduleId ? [this.get(scheduleId)] : this.sortedSchedules();
-    return schedules.flatMap((schedule) => schedule.runs).sort((a, b) => b.startedAt.localeCompare(a.startedAt));
+    return schedules.flatMap((schedule) => schedule.runs).sort(compareScheduleRuns);
   }
 
   get(scheduleId: string) {
@@ -211,15 +235,17 @@ export class ScheduleStore {
     }
 
     const previousNextRunAt = schedule.nextRunAt;
+    const startedAt = new Date().toISOString();
     this.clearTimer(schedule.id);
     const run: ScheduleRun = {
       id: crypto.randomUUID(),
       scheduleId: schedule.id,
       status: "running",
-      startedAt: new Date().toISOString(),
+      scheduledFor: options.automatic && previousNextRunAt ? previousNextRunAt : startedAt,
+      startedAt,
     };
     schedule.runs = [run, ...schedule.runs].slice(0, SCHEDULE_RUN_HISTORY_LIMIT);
-    schedule.updatedAt = run.startedAt;
+    schedule.updatedAt = startedAt;
     this.persist();
 
     try {
@@ -230,13 +256,13 @@ export class ScheduleStore {
         const result = await this.executor.runWorkflow(schedule.action);
         run.workflowRunId = result.workflowRunId;
       }
-      run.status = "done";
+      run.status = "completed";
     } catch (error) {
-      run.status = "error";
+      run.status = "failed";
       run.error = error instanceof Error ? error.message : String(error);
     } finally {
       const now = new Date().toISOString();
-      run.endedAt = now;
+      run.finishedAt = now;
       schedule.lastRunAt = now;
       schedule.updatedAt = now;
       if (options.automatic) {
@@ -328,6 +354,10 @@ export class ScheduleStore {
   private persist() {
     saveSchedules(this.path, this.sortedSchedules());
   }
+}
+
+function compareScheduleRuns(a: ScheduleRun, b: ScheduleRun) {
+  return (b.startedAt ?? b.scheduledFor).localeCompare(a.startedAt ?? a.scheduledFor);
 }
 
 function defaultScheduleName(action: ScheduleAction) {
