@@ -280,6 +280,17 @@ async function consumeEventStream(streamGeneration: number, signal: AbortSignal)
     reconnectDelayMs: 800,
     maxReconnectDelayMs: 8000,
     signal,
+    onOpen: () => {
+      if (!signal.aborted && streamGeneration === eventStreamGeneration) {
+        eventStreamStatus.value = 'live'
+        eventStreamError.value = ''
+      }
+    },
+    onReconnect: () => {
+      if (!signal.aborted && streamGeneration === eventStreamGeneration) {
+        eventStreamStatus.value = 'connecting'
+      }
+    },
   })) {
     if (signal.aborted || streamGeneration !== eventStreamGeneration) return
     eventStreamStatus.value = 'live'

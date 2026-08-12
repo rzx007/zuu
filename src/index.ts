@@ -40,7 +40,7 @@ function isAuthorized(authorization: string | undefined) {
   return !apiToken || authorization === `Bearer ${apiToken}`;
 }
 
-app.use("/api/*", async (c, next) => {
+app.use("/v1/*", async (c, next) => {
   if (!isAuthorized(c.req.header("authorization"))) {
     return c.json(jsonError("Unauthorized", 401), 401);
   }
@@ -48,9 +48,11 @@ app.use("/api/*", async (c, next) => {
   await next();
 });
 
-app.get("/api/health", (c) => c.json({ ok: true }));
+app.all("/api/*", (c) => c.json(jsonError("Use /v1 instead of /api.", 404), 404));
 
-app.get("/api/diagnostics", async (c) => {
+app.get("/v1/health", (c) => c.json({ ok: true }));
+
+app.get("/v1/diagnostics", async (c) => {
   try {
     return c.json(await daemon.diagnostics());
   } catch (error) {
@@ -58,11 +60,11 @@ app.get("/api/diagnostics", async (c) => {
   }
 });
 
-app.get("/api/packages", (c) => c.json(daemon.listPackages()));
+app.get("/v1/packages", (c) => c.json(daemon.listPackages()));
 
-app.get("/api/package-operations", (c) => c.json(daemon.listPackageOperations()));
+app.get("/v1/package-operations", (c) => c.json(daemon.listPackageOperations()));
 
-app.get("/api/package-operations/:operationId", (c) => {
+app.get("/v1/package-operations/:operationId", (c) => {
   try {
     return c.json(daemon.getPackageOperation(c.req.param("operationId")));
   } catch (error) {
@@ -70,7 +72,7 @@ app.get("/api/package-operations/:operationId", (c) => {
   }
 });
 
-app.get("/api/models", async (c) => {
+app.get("/v1/models", async (c) => {
   try {
     return c.json(await daemon.listModels());
   } catch (error) {
@@ -78,7 +80,7 @@ app.get("/api/models", async (c) => {
   }
 });
 
-app.post("/api/packages", async (c) => {
+app.post("/v1/packages", async (c) => {
   try {
     const body = parsePackageMutation(await readJson(c.req));
     return c.json(await daemon.addPackage(body));
@@ -87,7 +89,7 @@ app.post("/api/packages", async (c) => {
   }
 });
 
-app.post("/api/packages/install", async (c) => {
+app.post("/v1/packages/install", async (c) => {
   try {
     const body = parsePackageMutation(await readJson(c.req));
     return c.json(await daemon.installPackage(body));
@@ -96,7 +98,7 @@ app.post("/api/packages/install", async (c) => {
   }
 });
 
-app.post("/api/packages/update", async (c) => {
+app.post("/v1/packages/update", async (c) => {
   try {
     const body = parsePackageMutation(await readJson(c.req));
     return c.json(daemon.updatePackage(body));
@@ -105,7 +107,7 @@ app.post("/api/packages/update", async (c) => {
   }
 });
 
-app.delete("/api/packages", async (c) => {
+app.delete("/v1/packages", async (c) => {
   try {
     const body = parsePackageMutation(await readJson(c.req));
     return c.json(daemon.removePackage(body));
@@ -114,7 +116,7 @@ app.delete("/api/packages", async (c) => {
   }
 });
 
-app.post("/api/packages/trust", async (c) => {
+app.post("/v1/packages/trust", async (c) => {
   try {
     const body = parsePackageMutation(await readJson(c.req));
     return c.json(daemon.trustPackage(body));
@@ -123,7 +125,7 @@ app.post("/api/packages/trust", async (c) => {
   }
 });
 
-app.delete("/api/packages/trust", async (c) => {
+app.delete("/v1/packages/trust", async (c) => {
   try {
     const body = parsePackageMutation(await readJson(c.req));
     return c.json(daemon.revokePackageTrust(body));
@@ -132,9 +134,9 @@ app.delete("/api/packages/trust", async (c) => {
   }
 });
 
-app.get("/api/sessions", (c) => c.json({ sessions: daemon.listSessions() }));
+app.get("/v1/sessions", (c) => c.json({ sessions: daemon.listSessions() }));
 
-app.get("/api/session-files", async (c) => {
+app.get("/v1/session-files", async (c) => {
   try {
     return c.json({ sessions: await daemon.listStoredSessions(c.req.query("cwd")) });
   } catch (error) {
@@ -142,7 +144,7 @@ app.get("/api/session-files", async (c) => {
   }
 });
 
-app.get("/api/sessions/:sessionId/tree", (c) => {
+app.get("/v1/sessions/:sessionId/tree", (c) => {
   try {
     return c.json({ tree: daemon.summarizeSessionTree(c.req.param("sessionId")) });
   } catch (error) {
@@ -150,12 +152,12 @@ app.get("/api/sessions/:sessionId/tree", (c) => {
   }
 });
 
-app.get("/api/runs", (c) => {
+app.get("/v1/runs", (c) => {
   const sessionId = c.req.query("sessionId");
   return c.json({ runs: daemon.listRuns(sessionId) });
 });
 
-app.get("/api/runs/:runId", (c) => {
+app.get("/v1/runs/:runId", (c) => {
   try {
     return c.json({ run: daemon.getRun(c.req.param("runId")) });
   } catch (error) {
@@ -163,7 +165,7 @@ app.get("/api/runs/:runId", (c) => {
   }
 });
 
-app.get("/api/runs/:runId/events", (c) => {
+app.get("/v1/runs/:runId/events", (c) => {
   try {
     return c.json({ events: daemon.listRunEvents(c.req.param("runId"), c.req.query("afterEventId")) });
   } catch (error) {
@@ -171,7 +173,7 @@ app.get("/api/runs/:runId/events", (c) => {
   }
 });
 
-app.get("/api/events", (c) => {
+app.get("/v1/events", (c) => {
   const query: EventStreamQuery = {
     runId: c.req.query("runId"),
     sessionId: c.req.query("sessionId"),
@@ -233,7 +235,7 @@ app.get("/api/events", (c) => {
   });
 });
 
-app.get("/api/workflows", async (c) => {
+app.get("/v1/workflows", async (c) => {
   try {
     return c.json(await daemon.listWorkflows());
   } catch (error) {
@@ -241,7 +243,7 @@ app.get("/api/workflows", async (c) => {
   }
 });
 
-app.post("/api/workflows/:workflowId/runs", async (c) => {
+app.post("/v1/workflows/:workflowId/runs", async (c) => {
   try {
     const body = parseStartWorkflow(await readJson(c.req, { optional: true }));
     return c.json({ run: await daemon.startWorkflow(c.req.param("workflowId"), body) }, 201);
@@ -250,7 +252,7 @@ app.post("/api/workflows/:workflowId/runs", async (c) => {
   }
 });
 
-app.get("/api/workflow-runs", async (c) => {
+app.get("/v1/workflow-runs", async (c) => {
   try {
     return c.json({ runs: await daemon.listWorkflowRuns() });
   } catch (error) {
@@ -258,7 +260,7 @@ app.get("/api/workflow-runs", async (c) => {
   }
 });
 
-app.get("/api/workflow-runs/:runId", async (c) => {
+app.get("/v1/workflow-runs/:runId", async (c) => {
   try {
     return c.json({ run: await daemon.getWorkflowRun(c.req.param("runId")) });
   } catch (error) {
@@ -266,7 +268,7 @@ app.get("/api/workflow-runs/:runId", async (c) => {
   }
 });
 
-app.post("/api/workflow-runs/:runId/abort", async (c) => {
+app.post("/v1/workflow-runs/:runId/abort", async (c) => {
   try {
     return c.json({ run: await daemon.abortWorkflowRun(c.req.param("runId")) });
   } catch (error) {
@@ -274,7 +276,7 @@ app.post("/api/workflow-runs/:runId/abort", async (c) => {
   }
 });
 
-app.get("/api/schedules", (c) => {
+app.get("/v1/schedules", (c) => {
   try {
     return c.json({ schedules: daemon.listSchedules() });
   } catch (error) {
@@ -282,7 +284,7 @@ app.get("/api/schedules", (c) => {
   }
 });
 
-app.post("/api/schedules", async (c) => {
+app.post("/v1/schedules", async (c) => {
   try {
     const body = parseCreateSchedule(await readJson(c.req));
     return c.json({ schedule: daemon.createSchedule(body) }, 201);
@@ -291,7 +293,7 @@ app.post("/api/schedules", async (c) => {
   }
 });
 
-app.get("/api/schedules/:scheduleId", (c) => {
+app.get("/v1/schedules/:scheduleId", (c) => {
   try {
     return c.json({ schedule: daemon.getSchedule(c.req.param("scheduleId")) });
   } catch (error) {
@@ -299,7 +301,7 @@ app.get("/api/schedules/:scheduleId", (c) => {
   }
 });
 
-app.post("/api/schedules/:scheduleId/pause", (c) => {
+app.post("/v1/schedules/:scheduleId/pause", (c) => {
   try {
     return c.json({ schedule: daemon.pauseSchedule(c.req.param("scheduleId")) });
   } catch (error) {
@@ -307,7 +309,7 @@ app.post("/api/schedules/:scheduleId/pause", (c) => {
   }
 });
 
-app.post("/api/schedules/:scheduleId/resume", (c) => {
+app.post("/v1/schedules/:scheduleId/resume", (c) => {
   try {
     return c.json({ schedule: daemon.resumeSchedule(c.req.param("scheduleId")) });
   } catch (error) {
@@ -315,7 +317,7 @@ app.post("/api/schedules/:scheduleId/resume", (c) => {
   }
 });
 
-app.post("/api/schedules/:scheduleId/trigger", async (c) => {
+app.post("/v1/schedules/:scheduleId/trigger", async (c) => {
   try {
     return c.json({ schedule: await daemon.triggerSchedule(c.req.param("scheduleId")) });
   } catch (error) {
@@ -323,7 +325,7 @@ app.post("/api/schedules/:scheduleId/trigger", async (c) => {
   }
 });
 
-app.delete("/api/schedules/:scheduleId", (c) => {
+app.delete("/v1/schedules/:scheduleId", (c) => {
   try {
     return c.json({ schedule: daemon.deleteSchedule(c.req.param("scheduleId")) });
   } catch (error) {
@@ -331,7 +333,7 @@ app.delete("/api/schedules/:scheduleId", (c) => {
   }
 });
 
-app.get("/api/approvals", (c) => {
+app.get("/v1/approvals", (c) => {
   try {
     return c.json({ approvals: daemon.listApprovals(c.req.query("status") as ApprovalStatus | undefined) });
   } catch (error) {
@@ -339,7 +341,7 @@ app.get("/api/approvals", (c) => {
   }
 });
 
-app.get("/api/approvals/:approvalId", (c) => {
+app.get("/v1/approvals/:approvalId", (c) => {
   try {
     return c.json({ approval: daemon.getApproval(c.req.param("approvalId")) });
   } catch (error) {
@@ -347,7 +349,7 @@ app.get("/api/approvals/:approvalId", (c) => {
   }
 });
 
-app.post("/api/approvals/:approvalId/resolve", async (c) => {
+app.post("/v1/approvals/:approvalId/resolve", async (c) => {
   try {
     const body = parseResolveApproval(await readJson(c.req));
     return c.json({ approval: daemon.resolveApproval(c.req.param("approvalId"), body) });
@@ -356,7 +358,7 @@ app.post("/api/approvals/:approvalId/resolve", async (c) => {
   }
 });
 
-app.post("/api/sessions", async (c) => {
+app.post("/v1/sessions", async (c) => {
   try {
     const body = parseCreateSession(await readJson(c.req, { optional: true }));
     const session = await daemon.createSession(body);
@@ -366,7 +368,7 @@ app.post("/api/sessions", async (c) => {
   }
 });
 
-app.post("/api/sessions/open", async (c) => {
+app.post("/v1/sessions/open", async (c) => {
   try {
     const body = parseOpenSession(await readJson(c.req));
     const session = await daemon.openSession(body);
@@ -376,7 +378,7 @@ app.post("/api/sessions/open", async (c) => {
   }
 });
 
-app.post("/api/prompt", async (c) => {
+app.post("/v1/prompt", async (c) => {
   let request: PromptRequest;
   try {
     request = parsePrompt(await readJson(c.req));
@@ -418,7 +420,7 @@ function writePromptStreamEvent(
   });
 }
 
-app.post("/api/sessions/:sessionId/abort", async (c) => {
+app.post("/v1/sessions/:sessionId/abort", async (c) => {
   try {
     const session = await daemon.abort(c.req.param("sessionId"));
     return c.json({ session });
@@ -427,7 +429,7 @@ app.post("/api/sessions/:sessionId/abort", async (c) => {
   }
 });
 
-app.post("/api/sessions/:sessionId/compact", async (c) => {
+app.post("/v1/sessions/:sessionId/compact", async (c) => {
   try {
     const body = parseCompact(await readJson(c.req, { optional: true }));
     const session = await daemon.compact(c.req.param("sessionId"), body.instructions);
@@ -437,7 +439,7 @@ app.post("/api/sessions/:sessionId/compact", async (c) => {
   }
 });
 
-app.post("/api/sessions/:sessionId/new", async (c) => {
+app.post("/v1/sessions/:sessionId/new", async (c) => {
   try {
     const body = parseNewSession(await readJson(c.req, { optional: true }));
     return c.json(await daemon.newSession(c.req.param("sessionId"), body));
@@ -446,7 +448,7 @@ app.post("/api/sessions/:sessionId/new", async (c) => {
   }
 });
 
-app.post("/api/sessions/:sessionId/switch", async (c) => {
+app.post("/v1/sessions/:sessionId/switch", async (c) => {
   try {
     const body = parseSwitchSession(await readJson(c.req));
     return c.json(await daemon.switchSession(c.req.param("sessionId"), body));
@@ -455,7 +457,7 @@ app.post("/api/sessions/:sessionId/switch", async (c) => {
   }
 });
 
-app.post("/api/sessions/:sessionId/fork", async (c) => {
+app.post("/v1/sessions/:sessionId/fork", async (c) => {
   try {
     const body = parseForkSession(await readJson(c.req));
     return c.json(await daemon.forkSession(c.req.param("sessionId"), body));
@@ -464,7 +466,7 @@ app.post("/api/sessions/:sessionId/fork", async (c) => {
   }
 });
 
-app.post("/api/sessions/:sessionId/import", async (c) => {
+app.post("/v1/sessions/:sessionId/import", async (c) => {
   try {
     const body = parseImportSession(await readJson(c.req));
     return c.json(await daemon.importSession(c.req.param("sessionId"), body));

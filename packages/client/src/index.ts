@@ -55,6 +55,8 @@ export interface EventStreamOptions extends EventStreamQuery {
   reconnect?: boolean;
   reconnectDelayMs?: number;
   maxReconnectDelayMs?: number;
+  onOpen?: () => void;
+  onReconnect?: (attempt: number, afterEventId: string | undefined) => void;
 }
 
 export interface ZuuClient {
@@ -241,174 +243,174 @@ export function createZuuClient(options: ZuuClientOptions = {}): ZuuClient {
   const apiToken = options.apiToken;
 
   return {
-    health: () => requestJson<HealthResponse>(fetchImpl, baseUrl, "/api/health", undefined, apiToken),
-    diagnostics: () => requestJson<Diagnostics>(fetchImpl, baseUrl, "/api/diagnostics", undefined, apiToken),
-    listPackages: () => requestJson<PackagesResponse>(fetchImpl, baseUrl, "/api/packages", undefined, apiToken),
-    listModels: () => requestJson<ModelsResponse>(fetchImpl, baseUrl, "/api/models", undefined, apiToken),
+    health: () => requestJson<HealthResponse>(fetchImpl, baseUrl, "/v1/health", undefined, apiToken),
+    diagnostics: () => requestJson<Diagnostics>(fetchImpl, baseUrl, "/v1/diagnostics", undefined, apiToken),
+    listPackages: () => requestJson<PackagesResponse>(fetchImpl, baseUrl, "/v1/packages", undefined, apiToken),
+    listModels: () => requestJson<ModelsResponse>(fetchImpl, baseUrl, "/v1/models", undefined, apiToken),
     addPackage: (input) =>
-      requestJson<PackagesResponse>(fetchImpl, baseUrl, "/api/packages", {
+      requestJson<PackagesResponse>(fetchImpl, baseUrl, "/v1/packages", {
         method: "POST",
         body: JSON.stringify(input),
       }, apiToken),
     installPackage: (input) =>
-      requestJson<PackageInstallResponse>(fetchImpl, baseUrl, "/api/packages/install", {
+      requestJson<PackageInstallResponse>(fetchImpl, baseUrl, "/v1/packages/install", {
         method: "POST",
         body: JSON.stringify(input),
       }, apiToken),
     updatePackage: (input) =>
-      requestJson<PackageOperationStartResponse>(fetchImpl, baseUrl, "/api/packages/update", {
+      requestJson<PackageOperationStartResponse>(fetchImpl, baseUrl, "/v1/packages/update", {
         method: "POST",
         body: JSON.stringify(input),
       }, apiToken),
     removePackage: (input) =>
-      requestJson<PackageOperationStartResponse>(fetchImpl, baseUrl, "/api/packages", {
+      requestJson<PackageOperationStartResponse>(fetchImpl, baseUrl, "/v1/packages", {
         method: "DELETE",
         body: JSON.stringify(input),
       }, apiToken),
     trustPackage: (input) =>
-      requestJson<PackagesResponse>(fetchImpl, baseUrl, "/api/packages/trust", {
+      requestJson<PackagesResponse>(fetchImpl, baseUrl, "/v1/packages/trust", {
         method: "POST",
         body: JSON.stringify(input),
       }, apiToken),
     revokePackageTrust: (input) =>
-      requestJson<PackagesResponse>(fetchImpl, baseUrl, "/api/packages/trust", {
+      requestJson<PackagesResponse>(fetchImpl, baseUrl, "/v1/packages/trust", {
         method: "DELETE",
         body: JSON.stringify(input),
       }, apiToken),
     listPackageOperations: () =>
-      requestJson<PackageOperationsResponse>(fetchImpl, baseUrl, "/api/package-operations", undefined, apiToken),
+      requestJson<PackageOperationsResponse>(fetchImpl, baseUrl, "/v1/package-operations", undefined, apiToken),
     getPackageOperation: (operationId) =>
       requestJson<PackageOperationResponse>(
         fetchImpl,
         baseUrl,
-        `/api/package-operations/${encodeURIComponent(operationId)}`,
+        `/v1/package-operations/${encodeURIComponent(operationId)}`,
         undefined,
         apiToken,
       ),
-    listSessions: () => requestJson<SessionsResponse>(fetchImpl, baseUrl, "/api/sessions", undefined, apiToken),
+    listSessions: () => requestJson<SessionsResponse>(fetchImpl, baseUrl, "/v1/sessions", undefined, apiToken),
     listStoredSessions: (cwd) =>
       requestJson<StoredSessionsResponse>(
         fetchImpl,
         baseUrl,
-        cwd ? `/api/session-files?cwd=${encodeURIComponent(cwd)}` : "/api/session-files",
+        cwd ? `/v1/session-files?cwd=${encodeURIComponent(cwd)}` : "/v1/session-files",
         undefined,
         apiToken,
       ),
     getSessionTree: (sessionId) =>
-      requestJson<SessionTreeResponse>(fetchImpl, baseUrl, `/api/sessions/${encodeURIComponent(sessionId)}/tree`, undefined, apiToken),
+      requestJson<SessionTreeResponse>(fetchImpl, baseUrl, `/v1/sessions/${encodeURIComponent(sessionId)}/tree`, undefined, apiToken),
     listRuns: (sessionId) =>
       requestJson<RunsResponse>(
         fetchImpl,
         baseUrl,
-        sessionId ? `/api/runs?sessionId=${encodeURIComponent(sessionId)}` : "/api/runs",
+        sessionId ? `/v1/runs?sessionId=${encodeURIComponent(sessionId)}` : "/v1/runs",
         undefined,
         apiToken,
       ),
-    getRun: (runId) => requestJson<RunResponse>(fetchImpl, baseUrl, `/api/runs/${encodeURIComponent(runId)}`, undefined, apiToken),
+    getRun: (runId) => requestJson<RunResponse>(fetchImpl, baseUrl, `/v1/runs/${encodeURIComponent(runId)}`, undefined, apiToken),
     listRunEvents: (runId, afterEventId) =>
       requestJson<RunEventsResponse>(
         fetchImpl,
         baseUrl,
         afterEventId
-          ? `/api/runs/${encodeURIComponent(runId)}/events?afterEventId=${encodeURIComponent(afterEventId)}`
-          : `/api/runs/${encodeURIComponent(runId)}/events`,
+          ? `/v1/runs/${encodeURIComponent(runId)}/events?afterEventId=${encodeURIComponent(afterEventId)}`
+          : `/v1/runs/${encodeURIComponent(runId)}/events`,
         undefined,
         apiToken,
       ),
-    listWorkflows: () => requestJson<WorkflowsResponse>(fetchImpl, baseUrl, "/api/workflows", undefined, apiToken),
+    listWorkflows: () => requestJson<WorkflowsResponse>(fetchImpl, baseUrl, "/v1/workflows", undefined, apiToken),
     startWorkflow: (workflowId, input = {}) =>
-      requestJson<WorkflowRunResponse>(fetchImpl, baseUrl, `/api/workflows/${encodeURIComponent(workflowId)}/runs`, {
+      requestJson<WorkflowRunResponse>(fetchImpl, baseUrl, `/v1/workflows/${encodeURIComponent(workflowId)}/runs`, {
         method: "POST",
         body: JSON.stringify(input),
       }, apiToken),
     listWorkflowRuns: () =>
-      requestJson<WorkflowRunsResponse>(fetchImpl, baseUrl, "/api/workflow-runs", undefined, apiToken),
+      requestJson<WorkflowRunsResponse>(fetchImpl, baseUrl, "/v1/workflow-runs", undefined, apiToken),
     getWorkflowRun: (runId) =>
-      requestJson<WorkflowRunResponse>(fetchImpl, baseUrl, `/api/workflow-runs/${encodeURIComponent(runId)}`, undefined, apiToken),
+      requestJson<WorkflowRunResponse>(fetchImpl, baseUrl, `/v1/workflow-runs/${encodeURIComponent(runId)}`, undefined, apiToken),
     abortWorkflowRun: (runId) =>
-      requestJson<WorkflowRunResponse>(fetchImpl, baseUrl, `/api/workflow-runs/${encodeURIComponent(runId)}/abort`, {
+      requestJson<WorkflowRunResponse>(fetchImpl, baseUrl, `/v1/workflow-runs/${encodeURIComponent(runId)}/abort`, {
         method: "POST",
       }, apiToken),
-    listSchedules: () => requestJson<SchedulesResponse>(fetchImpl, baseUrl, "/api/schedules", undefined, apiToken),
+    listSchedules: () => requestJson<SchedulesResponse>(fetchImpl, baseUrl, "/v1/schedules", undefined, apiToken),
     createSchedule: (input) =>
-      requestJson<ScheduleResponse>(fetchImpl, baseUrl, "/api/schedules", {
+      requestJson<ScheduleResponse>(fetchImpl, baseUrl, "/v1/schedules", {
         method: "POST",
         body: JSON.stringify(input),
       }, apiToken),
     getSchedule: (scheduleId) =>
-      requestJson<ScheduleResponse>(fetchImpl, baseUrl, `/api/schedules/${encodeURIComponent(scheduleId)}`, undefined, apiToken),
+      requestJson<ScheduleResponse>(fetchImpl, baseUrl, `/v1/schedules/${encodeURIComponent(scheduleId)}`, undefined, apiToken),
     pauseSchedule: (scheduleId) =>
-      requestJson<ScheduleResponse>(fetchImpl, baseUrl, `/api/schedules/${encodeURIComponent(scheduleId)}/pause`, {
+      requestJson<ScheduleResponse>(fetchImpl, baseUrl, `/v1/schedules/${encodeURIComponent(scheduleId)}/pause`, {
         method: "POST",
       }, apiToken),
     resumeSchedule: (scheduleId) =>
-      requestJson<ScheduleResponse>(fetchImpl, baseUrl, `/api/schedules/${encodeURIComponent(scheduleId)}/resume`, {
+      requestJson<ScheduleResponse>(fetchImpl, baseUrl, `/v1/schedules/${encodeURIComponent(scheduleId)}/resume`, {
         method: "POST",
       }, apiToken),
     triggerSchedule: (scheduleId) =>
-      requestJson<ScheduleResponse>(fetchImpl, baseUrl, `/api/schedules/${encodeURIComponent(scheduleId)}/trigger`, {
+      requestJson<ScheduleResponse>(fetchImpl, baseUrl, `/v1/schedules/${encodeURIComponent(scheduleId)}/trigger`, {
         method: "POST",
       }, apiToken),
     deleteSchedule: (scheduleId) =>
-      requestJson<ScheduleResponse>(fetchImpl, baseUrl, `/api/schedules/${encodeURIComponent(scheduleId)}`, {
+      requestJson<ScheduleResponse>(fetchImpl, baseUrl, `/v1/schedules/${encodeURIComponent(scheduleId)}`, {
         method: "DELETE",
       }, apiToken),
     listApprovals: (status) =>
       requestJson<ApprovalsResponse>(
         fetchImpl,
         baseUrl,
-        status ? `/api/approvals?status=${encodeURIComponent(status)}` : "/api/approvals",
+        status ? `/v1/approvals?status=${encodeURIComponent(status)}` : "/v1/approvals",
         undefined,
         apiToken,
       ),
     getApproval: (approvalId) =>
-      requestJson<ApprovalResponse>(fetchImpl, baseUrl, `/api/approvals/${encodeURIComponent(approvalId)}`, undefined, apiToken),
+      requestJson<ApprovalResponse>(fetchImpl, baseUrl, `/v1/approvals/${encodeURIComponent(approvalId)}`, undefined, apiToken),
     resolveApproval: (approvalId, input) =>
-      requestJson<ApprovalResponse>(fetchImpl, baseUrl, `/api/approvals/${encodeURIComponent(approvalId)}/resolve`, {
+      requestJson<ApprovalResponse>(fetchImpl, baseUrl, `/v1/approvals/${encodeURIComponent(approvalId)}/resolve`, {
         method: "POST",
         body: JSON.stringify(input),
       }, apiToken),
     createSession: (input = {}) =>
-      requestJson<SessionResponse>(fetchImpl, baseUrl, "/api/sessions", {
+      requestJson<SessionResponse>(fetchImpl, baseUrl, "/v1/sessions", {
         method: "POST",
         body: JSON.stringify(input),
       }, apiToken),
     openSession: (input) =>
-      requestJson<SessionResponse>(fetchImpl, baseUrl, "/api/sessions/open", {
+      requestJson<SessionResponse>(fetchImpl, baseUrl, "/v1/sessions/open", {
         method: "POST",
         body: JSON.stringify(input),
       }, apiToken),
     abort: (sessionId) =>
-      requestJson<SessionResponse>(fetchImpl, baseUrl, `/api/sessions/${encodeURIComponent(sessionId)}/abort`, {
+      requestJson<SessionResponse>(fetchImpl, baseUrl, `/v1/sessions/${encodeURIComponent(sessionId)}/abort`, {
         method: "POST",
       }, apiToken),
     compact: (sessionId, instructions) =>
-      requestJson<SessionResponse>(fetchImpl, baseUrl, `/api/sessions/${encodeURIComponent(sessionId)}/compact`, {
+      requestJson<SessionResponse>(fetchImpl, baseUrl, `/v1/sessions/${encodeURIComponent(sessionId)}/compact`, {
         method: "POST",
         body: JSON.stringify({ instructions }),
       }, apiToken),
     newSession: (sessionId, input = {}) =>
-      requestJson<SessionActionResponse>(fetchImpl, baseUrl, `/api/sessions/${encodeURIComponent(sessionId)}/new`, {
+      requestJson<SessionActionResponse>(fetchImpl, baseUrl, `/v1/sessions/${encodeURIComponent(sessionId)}/new`, {
         method: "POST",
         body: JSON.stringify(input),
       }, apiToken),
     switchSession: (sessionId, input) =>
-      requestJson<SessionActionResponse>(fetchImpl, baseUrl, `/api/sessions/${encodeURIComponent(sessionId)}/switch`, {
+      requestJson<SessionActionResponse>(fetchImpl, baseUrl, `/v1/sessions/${encodeURIComponent(sessionId)}/switch`, {
         method: "POST",
         body: JSON.stringify(input),
       }, apiToken),
     forkSession: (sessionId, input) =>
-      requestJson<SessionActionResponse>(fetchImpl, baseUrl, `/api/sessions/${encodeURIComponent(sessionId)}/fork`, {
+      requestJson<SessionActionResponse>(fetchImpl, baseUrl, `/v1/sessions/${encodeURIComponent(sessionId)}/fork`, {
         method: "POST",
         body: JSON.stringify(input),
       }, apiToken),
     importSession: (sessionId, input) =>
-      requestJson<SessionActionResponse>(fetchImpl, baseUrl, `/api/sessions/${encodeURIComponent(sessionId)}/import`, {
+      requestJson<SessionActionResponse>(fetchImpl, baseUrl, `/v1/sessions/${encodeURIComponent(sessionId)}/import`, {
         method: "POST",
         body: JSON.stringify(input),
       }, apiToken),
     async *prompt(input, options = {}) {
-      const response = await fetchImpl(joinUrl(baseUrl, "/api/prompt"), {
+      const response = await fetchImpl(joinUrl(baseUrl, "/v1/prompt"), {
         method: "POST",
         headers: {
           "content-type": "application/json",
@@ -477,12 +479,14 @@ async function* streamEvents(
       if (options.signal?.aborted || isAbortError(error)) return;
       if (!reconnect || (error instanceof ZuuClientError && !error.retryable)) throw error;
       attempt += 1;
+      options.onReconnect?.(attempt, afterEventId);
       await waitForReconnect(backoffDelay(reconnectDelayMs, maxReconnectDelayMs, attempt), options.signal);
       continue;
     }
 
     if (!reconnect) return;
     attempt += 1;
+    options.onReconnect?.(attempt, afterEventId);
     await waitForReconnect(backoffDelay(reconnectDelayMs, maxReconnectDelayMs, attempt), options.signal);
   }
 }
@@ -497,7 +501,7 @@ async function* openEventStream(
   if (options.runId) params.set("runId", options.runId);
   if (options.sessionId) params.set("sessionId", options.sessionId);
   if (options.afterEventId) params.set("afterEventId", options.afterEventId);
-  const path = params.size ? `/api/events?${params}` : "/api/events";
+  const path = params.size ? `/v1/events?${params}` : "/v1/events";
   const response = await fetchImpl(joinUrl(baseUrl, path), {
     headers: {
       ...(apiToken ? { authorization: `Bearer ${apiToken}` } : {}),
@@ -511,6 +515,7 @@ async function* openEventStream(
     return;
   }
 
+  options.onOpen?.();
   const reader = response.body.pipeThrough(new TextDecoderStream()).getReader();
   let buffer = "";
 

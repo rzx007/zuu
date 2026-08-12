@@ -8,8 +8,8 @@
 
 - daemon 能识别 `ZUU_WORKFLOW_BACKEND=pi-package`。
 - `@agwab/pi-workflow` 已配置并解析到安装路径。
-- `/api/workflows` 能列出 pi-package workflow definitions。
-- `/api/workflows/:workflowId/runs` 能通过 `/workflow run ...` 或 `/workflow dynamic ...` 发起真实 Pi extension 工作。
+- `/v1/workflows` 能列出 pi-package workflow definitions。
+- `/v1/workflows/:workflowId/runs` 能通过 `/workflow run ...` 或 `/workflow dynamic ...` 发起真实 Pi extension 工作。
 - Zuu 侧 workflow run 能关联到 launch artifact 和 agent run。
 
 ## 支持环境
@@ -138,7 +138,7 @@ pnpm check:pi-workflow
 - `@agwab/pi-workflow` 没有添加到 package source。
 - package 没有安装或无法解析到安装路径。
 - 当前平台是原生 Windows。
-- 查看 `/api/diagnostics` 的 `resources.workflowBackend.message`。
+- 查看 `/v1/diagnostics` 的 `resources.workflowBackend.message`。
 
 workflow launch 状态不是 `done`：
 
@@ -146,7 +146,7 @@ workflow launch 状态不是 `done`：
 - `/workflow` slash command 没有被 package extension 注册。
 - package extension 加载失败。
 - prompt 被 approval 或工具策略阻断。
-- 查看 `/api/runs` 中对应 agent run 的错误。
+- 查看 `/v1/runs` 中对应 agent run 的错误。
 
 ## 后续工作
 

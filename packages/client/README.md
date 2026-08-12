@@ -65,6 +65,18 @@ for await (const event of client.subscribeEvents({ runId, afterEventId })) {
 }
 ```
 
+可以用 `onOpen` 和 `onReconnect` 更新 UI 连接状态：
+
+```ts
+for await (const event of client.subscribeEvents({
+  afterEventId,
+  onOpen: () => console.log("live"),
+  onReconnect: (attempt) => console.log("reconnecting", attempt),
+})) {
+  console.log(event.id, event.type);
+}
+```
+
 需要一次性读取当前窗口时，可以关闭自动重连：
 
 ```ts

@@ -13,7 +13,7 @@ pnpm dev
 
 项目脚本使用 Node 24 原生 `--env-file-if-exists=.env` 读取环境变量文件，不需要额外安装 `dotenv`。如果 `.env` 不存在，启动不会报错。
 
-如果设置了 `ZUU_API_TOKEN`，所有 `/api/*` 请求都需要 `Authorization: Bearer <token>`；浏览器 UI 可以在 Runtime 面板保存 token。
+如果设置了 `ZUU_API_TOKEN`，所有 `/v1/*` 请求都需要 `Authorization: Bearer <token>`；浏览器 UI 可以在 Runtime 面板保存 token。
 
 默认只允许操作当前项目根目录内的 `cwd`、session 文件和 import 文件；如需额外目录，可用分号分隔的 `ZUU_ALLOWED_CWD` 放行。
 
@@ -37,65 +37,65 @@ ZUU_PI_WORKFLOW_RUN=1 pnpm check:pi-workflow
 
 ## API
 
-- `GET /api/health`
-- `GET /api/diagnostics`
-- `GET /api/events`：以 SSE 方式订阅 daemon 级事件，支持 `runId`、`sessionId`、`afterEventId` 和 `Last-Event-ID`
-- `GET /api/models`
-- `GET /api/packages`
-- `POST /api/packages`
-- `POST /api/packages/install`
-- `POST /api/packages/update`
-- `DELETE /api/packages`
-- `POST /api/packages/trust`
-- `DELETE /api/packages/trust`
-- `GET /api/package-operations`
-- `GET /api/package-operations/:operationId`
-- `GET /api/sessions`
-- `GET /api/session-files`
-- `GET /api/sessions/:sessionId/tree`
-- `GET /api/runs`
-- `GET /api/runs/:runId`
-- `GET /api/runs/:runId/events`
-- `GET /api/workflows`
-- `POST /api/workflows/:workflowId/runs`
-- `GET /api/workflow-runs`
-- `GET /api/workflow-runs/:runId`
-- `POST /api/workflow-runs/:runId/abort`
-- `GET /api/schedules`
-- `POST /api/schedules`
-- `GET /api/schedules/:scheduleId`
-- `POST /api/schedules/:scheduleId/pause`
-- `POST /api/schedules/:scheduleId/resume`
-- `POST /api/schedules/:scheduleId/trigger`
-- `DELETE /api/schedules/:scheduleId`
-- `GET /api/approvals`
-- `GET /api/approvals/:approvalId`
-- `POST /api/approvals/:approvalId/resolve`
-- `POST /api/sessions`
-- `POST /api/sessions/open`
-- `POST /api/prompt`：以 SSE 方式流式返回事件
-- `POST /api/sessions/:sessionId/abort`
-- `POST /api/sessions/:sessionId/compact`
-- `POST /api/sessions/:sessionId/new`
-- `POST /api/sessions/:sessionId/switch`
-- `POST /api/sessions/:sessionId/fork`
-- `POST /api/sessions/:sessionId/import`
+- `GET /v1/health`
+- `GET /v1/diagnostics`
+- `GET /v1/events`：以 SSE 方式订阅 daemon 级事件，支持 `runId`、`sessionId`、`afterEventId` 和 `Last-Event-ID`
+- `GET /v1/models`
+- `GET /v1/packages`
+- `POST /v1/packages`
+- `POST /v1/packages/install`
+- `POST /v1/packages/update`
+- `DELETE /v1/packages`
+- `POST /v1/packages/trust`
+- `DELETE /v1/packages/trust`
+- `GET /v1/package-operations`
+- `GET /v1/package-operations/:operationId`
+- `GET /v1/sessions`
+- `GET /v1/session-files`
+- `GET /v1/sessions/:sessionId/tree`
+- `GET /v1/runs`
+- `GET /v1/runs/:runId`
+- `GET /v1/runs/:runId/events`
+- `GET /v1/workflows`
+- `POST /v1/workflows/:workflowId/runs`
+- `GET /v1/workflow-runs`
+- `GET /v1/workflow-runs/:runId`
+- `POST /v1/workflow-runs/:runId/abort`
+- `GET /v1/schedules`
+- `POST /v1/schedules`
+- `GET /v1/schedules/:scheduleId`
+- `POST /v1/schedules/:scheduleId/pause`
+- `POST /v1/schedules/:scheduleId/resume`
+- `POST /v1/schedules/:scheduleId/trigger`
+- `DELETE /v1/schedules/:scheduleId`
+- `GET /v1/approvals`
+- `GET /v1/approvals/:approvalId`
+- `POST /v1/approvals/:approvalId/resolve`
+- `POST /v1/sessions`
+- `POST /v1/sessions/open`
+- `POST /v1/prompt`：以 SSE 方式流式返回事件
+- `POST /v1/sessions/:sessionId/abort`
+- `POST /v1/sessions/:sessionId/compact`
+- `POST /v1/sessions/:sessionId/new`
+- `POST /v1/sessions/:sessionId/switch`
+- `POST /v1/sessions/:sessionId/fork`
+- `POST /v1/sessions/:sessionId/import`
 
 浏览器 UI 通过 `@zuu/client` 调用 daemon API，业务请求不再散落手写 `fetch` 和 SSE 解析逻辑。
 
 默认情况下，Zuu 会把 Pi 应用状态存放在 `.zuu/pi-agent`，嵌入式应用不需要写入 `~/.pi/agent`。可以通过 `ZUU_AGENT_DIR` 覆盖。
 
-当前轻量持久化文件统一使用版本化 JSON store：`runs.json`、`run-events.json`、`approvals.json`、`workflow-runs.json`、`schedules.json`、`package-operations.json` 和 `package-trust.json` 都会先写入临时文件再原子替换。启动时如果读到损坏 JSON，会把原文件备份为 `.corrupt-*.bak`，再恢复为空数据；`GET /api/diagnostics` 的 `resources.stores` 会暴露每个 store 的路径、记录数、恢复状态和错误信息。
+当前轻量持久化文件统一使用版本化 JSON store：`runs.json`、`run-events.json`、`approvals.json`、`workflow-runs.json`、`schedules.json`、`package-operations.json` 和 `package-trust.json` 都会先写入临时文件再原子替换。启动时如果读到损坏 JSON，会把原文件备份为 `.corrupt-*.bak`，再恢复为空数据；`GET /v1/diagnostics` 的 `resources.stores` 会暴露每个 store 的路径、记录数、恢复状态和错误信息。
 
-Packages 面板会区分 `configured`、`installed`、`filtered`、`trusted` / `untrusted` 和 `enabled` / `blocked`，`GET /api/packages` 返回结构化 package 列表。`POST /api/packages` 只登记 package source；安装或更新前需要先通过 `POST /api/packages/trust` 或 WebUI 的 Trust 按钮信任 source。未信任 package 会保留在配置清单中，但不会进入 Pi `ResourceLoader` 或 workflow backend 的加载链路。
+Packages 面板会区分 `configured`、`installed`、`filtered`、`trusted` / `untrusted` 和 `enabled` / `blocked`，`GET /v1/packages` 返回结构化 package 列表。`POST /v1/packages` 只登记 package source；安装或更新前需要先通过 `POST /v1/packages/trust` 或 WebUI 的 Trust 按钮信任 source。未信任 package 会保留在配置清单中，但不会进入 Pi `ResourceLoader` 或 workflow backend 的加载链路。
 
-安装、更新和删除都会创建后台 operation 并立即返回 `operation.id`；WebUI 通过 `GET /api/package-operations` 轮询最近任务，展示 SDK progress callback 的事件、完成状态和失败原因。删除成功后会同步撤销对应 source 的信任记录。operation 记录默认持久化在 `.zuu/pi-agent/package-operations.json`，package trust 记录默认持久化在 `.zuu/pi-agent/package-trust.json`。
+安装、更新和删除都会创建后台 operation 并立即返回 `operation.id`；WebUI 通过 `GET /v1/package-operations` 轮询最近任务，展示 SDK progress callback 的事件、完成状态和失败原因。删除成功后会同步撤销对应 source 的信任记录。operation 记录默认持久化在 `.zuu/pi-agent/package-operations.json`，package trust 记录默认持久化在 `.zuu/pi-agent/package-trust.json`。
 
-`GET /api/diagnostics` 会返回 SDK resource diagnostics；其中 `resources.packages` 只列出已信任且会参与加载的 package，`resources.blockedPackages` 列出因未信任而被阻止加载的 package，`resources.stores` 列出 JSON store 健康状态。WebUI 的 Resources 面板会展示 extension/skill/prompt/theme 的加载错误、warning、name collision 和 store recovery 状态。
+`GET /v1/diagnostics` 会返回 SDK resource diagnostics；其中 `resources.packages` 只列出已信任且会参与加载的 package，`resources.blockedPackages` 列出因未信任而被阻止加载的 package，`resources.stores` 列出 JSON store 健康状态。WebUI 的 Resources 面板会展示 extension/skill/prompt/theme 的加载错误、warning、name collision 和 store recovery 状态。
 
 API 错误统一返回 `error.message`、`error.status`、`error.retryable`、`error.code` 和可选 `error.details`。`@zuu/client` 会把非 2xx 响应映射成 `ZuuClientError`，调用方可以直接读取 `status`、`code`、`retryable` 和 `details`，不需要解析错误文案。
 
-Prompt SSE 事件会带稳定 `id` 和 `createdAt`，并按 run 写入 `.zuu/pi-agent/run-events.json`。断线后可通过 `GET /api/runs/:runId/events?afterEventId=<event-id>` 或 `@zuu/client` 的 `listRunEvents(runId, afterEventId)` 补拉事件窗口；也可以通过 `GET /api/events` 或 `@zuu/client.subscribeEvents()` 先 replay 历史事件再订阅 live 事件。`subscribeEvents()` 默认会保存最后事件 ID、用指数退避自动重连，并去重重复事件。WebUI 会用全局 Event Stream 面板展示 daemon live 事件，并用该事件流节流刷新 runs、approvals、session tree、schedule 和 workflow run 状态。
+Prompt SSE 事件会带稳定 `id` 和 `createdAt`，并按 run 写入 `.zuu/pi-agent/run-events.json`。断线后可通过 `GET /v1/runs/:runId/events?afterEventId=<event-id>` 或 `@zuu/client` 的 `listRunEvents(runId, afterEventId)` 补拉事件窗口；也可以通过 `GET /v1/events` 或 `@zuu/client.subscribeEvents()` 先 replay 历史事件再订阅 live 事件。`subscribeEvents()` 默认会保存最后事件 ID、用指数退避自动重连，并去重重复事件。WebUI 会用全局 Event Stream 面板展示 daemon live 事件，并用该事件流节流刷新 runs、approvals、session tree、schedule 和 workflow run 状态。
 
 ## Client SDK
 
@@ -131,7 +131,7 @@ pnpm dev
 pnpm dev:web
 ```
 
-`web/vite.config.ts` 已将开发态 `/api` 代理到 `http://127.0.0.1:3001`。
+`web/vite.config.ts` 已将开发态 `/v1` 代理到 `http://127.0.0.1:3001`。
 
 生产或单进程预览时先构建 WebUI：
 

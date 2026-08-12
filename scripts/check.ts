@@ -46,6 +46,10 @@ async function main() {
   const client = createZuuClient({ baseUrl: "http://zuu.local", fetch: fetchFromApp });
   const health = await client.health();
   if (!health.ok) throw new Error("health check failed");
+  const legacyApi = await fetchFromApp("http://zuu.local/api/health");
+  if (legacyApi.status !== 404) throw new Error("legacy /api routes should not be served");
+  const legacyApiBody = await legacyApi.json() as { error?: { code?: string } };
+  if (legacyApiBody.error?.code !== "not_found") throw new Error("legacy /api routes should return not_found");
   const diagnostics = await client.diagnostics();
   if (!Array.isArray(diagnostics.resources.resourceDiagnostics)) {
     throw new Error("resource diagnostics response is invalid");
@@ -73,7 +77,7 @@ async function main() {
   const previousToken = process.env.ZUU_API_TOKEN;
   try {
     process.env.ZUU_API_TOKEN = "server-check-token";
-    const unauthorized = await fetchFromApp("http://zuu.local/api/health");
+    const unauthorized = await fetchFromApp("http://zuu.local/v1/health");
     if (unauthorized.status !== 401) throw new Error("missing api token should be rejected");
     const unauthorizedBody = await unauthorized.json() as { error?: { code?: string; status?: number } };
     if (unauthorizedBody.error?.code !== "unauthorized" || unauthorizedBody.error.status !== 401) {
@@ -94,7 +98,7 @@ async function main() {
     }
   }
 
-  const malformedJson = await fetchFromApp("http://zuu.local/api/packages", {
+  const malformedJson = await fetchFromApp("http://zuu.local/v1/packages", {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: "{",
@@ -106,7 +110,7 @@ async function main() {
   const { runs } = await client.listRuns();
   if (!Array.isArray(runs)) throw new Error("runs response is invalid");
   await expectClientError(() => client.listRunEvents("missing"), { status: 404, code: "not_found" });
-  const missingEventStream = await fetchFromApp("http://zuu.local/api/events?runId=missing");
+  const missingEventStream = await fetchFromApp("http://zuu.local/v1/events?runId=missing");
   if (missingEventStream.status !== 404) throw new Error("missing event stream run should fail before streaming");
 
   let eventStreamRequestCount = 0;
@@ -149,7 +153,18 @@ async function main() {
     },
   });
   const streamedEvents = [];
-  for await (const event of eventStreamClient.subscribeEvents({ afterEventId: "event-check:0", reconnectDelayMs: 0 })) {
+  let eventStreamOpenCount = 0;
+  let eventStreamReconnectCount = 0;
+  for await (const event of eventStreamClient.subscribeEvents({
+    afterEventId: "event-check:0",
+    reconnectDelayMs: 0,
+    onOpen: () => {
+      eventStreamOpenCount += 1;
+    },
+    onReconnect: () => {
+      eventStreamReconnectCount += 1;
+    },
+  })) {
     streamedEvents.push(event);
     if (streamedEvents.length === 2) break;
   }
@@ -157,9 +172,11 @@ async function main() {
     eventStreamRequestCount !== 2 ||
     eventStreamLastEventIds[0] !== "event-check:0" ||
     eventStreamLastEventIds[1] !== "event-check:1" ||
+    eventStreamOpenCount !== 2 ||
+    eventStreamReconnectCount !== 1 ||
     streamedEvents.map((event) => event.id).join(",") !== "event-check:1,event-check:2"
   ) {
-    throw new Error("event stream client should reconnect with Last-Event-ID, dedupe events, and ignore heartbeats");
+    throw new Error("event stream client should report open/reconnect, reconnect with Last-Event-ID, dedupe events, and ignore heartbeats");
   }
 
   const workflows = await client.listWorkflows();

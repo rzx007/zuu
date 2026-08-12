@@ -727,31 +727,31 @@ UI end-to-end
 - `pnpm run check` 可以加载应用入口并验证 health/models/packages/runs/stored sessions/session tree/runtime lifecycle client 合同。
 - `pnpm run typecheck` 可以完成 TypeScript `noEmit` 校验。
 - `pnpm run check:pi-workflow` 已作为真实环境验证入口，但只应在 `ZUU_WORKFLOW_BACKEND=pi-package` 的 WSL2/Linux daemon 旁运行。
-- `GET /api/health` 正常。
+- `GET /v1/health` 正常。
 - API 错误响应已统一为 `{ error: { message, status, retryable, code?, details? } }`；`@zuu/client` 会把非 2xx 响应映射为 `ZuuClientError`。
-- `GET /api/diagnostics` 正常返回 SDK 版本、模型数量、skills、extensions、resource diagnostics、trusted packages、blocked packages、JSON store 健康状态和能力缺口。
-- `POST /api/prompt` 可以返回带稳定事件 ID 和 `createdAt` 的 SSE `session`、`error`、`agent_event` 和 `done` 事件；`GET /api/events` 支持按 `runId`/`sessionId` 过滤，并通过 `afterEventId` 或 `Last-Event-ID` 先 replay 再订阅 live 事件。
+- `GET /v1/diagnostics` 正常返回 SDK 版本、模型数量、skills、extensions、resource diagnostics、trusted packages、blocked packages、JSON store 健康状态和能力缺口。
+- `POST /v1/prompt` 可以返回带稳定事件 ID 和 `createdAt` 的 SSE `session`、`error`、`agent_event` 和 `done` 事件；`GET /v1/events` 支持按 `runId`/`sessionId` 过滤，并通过 `afterEventId` 或 `Last-Event-ID` 先 replay 再订阅 live 事件。
 - `@zuu/client` 可从 Node.js 侧调用 health、diagnostics 和 prompt stream，并可通过 `pnpm example:client` 运行第三方消费示例。
-- prompt stream 已携带稳定 `runId`，并可通过 `GET /api/runs` 和 `GET /api/runs/:runId` 查询最近运行状态。
-- run registry 已持久化到 `.zuu/pi-agent/runs.json`，daemon 重启后可恢复最近运行摘要；prompt stream 事件已按 run 持久化到 `.zuu/pi-agent/run-events.json`，可通过 `GET /api/runs/:runId/events`、`GET /api/events`、`@zuu/client.listRunEvents()` 和 `@zuu/client.subscribeEvents()` 补拉事件窗口；`subscribeEvents()` 默认会自动重连并基于最后事件 ID 去重；runs、run-events、approvals、workflow-runs、schedules、package-operations 和 package-trust 已统一使用版本化 JSON store，写入采用临时文件加原子替换，损坏文件会备份为 `.corrupt-*.bak` 并恢复为空数据。
+- prompt stream 已携带稳定 `runId`，并可通过 `GET /v1/runs` 和 `GET /v1/runs/:runId` 查询最近运行状态。
+- run registry 已持久化到 `.zuu/pi-agent/runs.json`，daemon 重启后可恢复最近运行摘要；prompt stream 事件已按 run 持久化到 `.zuu/pi-agent/run-events.json`，可通过 `GET /v1/runs/:runId/events`、`GET /v1/events`、`@zuu/client.listRunEvents()` 和 `@zuu/client.subscribeEvents()` 补拉事件窗口；`subscribeEvents()` 默认会自动重连并基于最后事件 ID 去重；runs、run-events、approvals、workflow-runs、schedules、package-operations 和 package-trust 已统一使用版本化 JSON store，写入采用临时文件加原子替换，损坏文件会备份为 `.corrupt-*.bak` 并恢复为空数据。
 - `AgentSessionRuntime` 的 `newSession`、`switchSession`、`fork` 和 `importFromJsonl` 已通过 daemon API 与 client 暴露。
-- `GET /api/session-files` 和 `POST /api/sessions/open` 已支持列出和打开 Pi 持久化 session 文件。
-- `GET /api/sessions/:sessionId/tree` 已支持读取当前 active session 的树形 entry 摘要，为 fork 选择器提供基础。
-- `GET/POST/DELETE /api/packages` 已支持查看和维护结构化 Pi package 列表；`GET /api/packages` 会返回 `configured`、`installed`、`filtered`、trust 状态、load 状态和安装路径，`POST /api/packages/trust` 与 `DELETE /api/packages/trust` 可维护 package source 信任记录，`POST /api/packages/install` 和 `POST /api/packages/update` 会在 source 已信任后创建后台 operation，调用 Pi package manager 安装或更新 source，并记录 SDK progress callback、完成状态和失败原因；`DELETE /api/packages` 会创建后台删除 operation，删除成功后撤销对应 source 的信任记录；`GET /api/package-operations` 与 `GET /api/package-operations/:operationId` 可查询最近 package 任务。
-- `GET /api/models` 已支持列出当前已认证可用模型，WebUI 可直接下拉选择。
-- `GET /api/approvals`、`GET /api/approvals/:approvalId` 和 `POST /api/approvals/:approvalId/resolve` 已支持审批列表、详情与处理，审批记录持久化到 `.zuu/pi-agent/approvals.json`。
-- `GET /api/workflows`、`POST /api/workflows/:workflowId/runs`、`GET /api/workflow-runs`、`GET /api/workflow-runs/:runId` 和 `POST /api/workflow-runs/:runId/abort` 已支持最小 workflow 合约；默认后端是 `FakeWorkflowBackend`，用于稳定 Definition/Run/Stage/Task/Artifact DTO 和 UI board，不启动真实 subagent。
+- `GET /v1/session-files` 和 `POST /v1/sessions/open` 已支持列出和打开 Pi 持久化 session 文件。
+- `GET /v1/sessions/:sessionId/tree` 已支持读取当前 active session 的树形 entry 摘要，为 fork 选择器提供基础。
+- `GET/POST/DELETE /v1/packages` 已支持查看和维护结构化 Pi package 列表；`GET /v1/packages` 会返回 `configured`、`installed`、`filtered`、trust 状态、load 状态和安装路径，`POST /v1/packages/trust` 与 `DELETE /v1/packages/trust` 可维护 package source 信任记录，`POST /v1/packages/install` 和 `POST /v1/packages/update` 会在 source 已信任后创建后台 operation，调用 Pi package manager 安装或更新 source，并记录 SDK progress callback、完成状态和失败原因；`DELETE /v1/packages` 会创建后台删除 operation，删除成功后撤销对应 source 的信任记录；`GET /v1/package-operations` 与 `GET /v1/package-operations/:operationId` 可查询最近 package 任务。
+- `GET /v1/models` 已支持列出当前已认证可用模型，WebUI 可直接下拉选择。
+- `GET /v1/approvals`、`GET /v1/approvals/:approvalId` 和 `POST /v1/approvals/:approvalId/resolve` 已支持审批列表、详情与处理，审批记录持久化到 `.zuu/pi-agent/approvals.json`。
+- `GET /v1/workflows`、`POST /v1/workflows/:workflowId/runs`、`GET /v1/workflow-runs`、`GET /v1/workflow-runs/:runId` 和 `POST /v1/workflow-runs/:runId/abort` 已支持最小 workflow 合约；默认后端是 `FakeWorkflowBackend`，用于稳定 Definition/Run/Stage/Task/Artifact DTO 和 UI board，不启动真实 subagent。
 - `ZUU_WORKFLOW_BACKEND` 已支持选择 `fake` 或 `pi-package`；`pi-package` 会探测 `@agwab/pi-workflow` package source、安装路径和平台支持，ready 后通过 `/workflow run` 或 `/workflow dynamic` 发起真实 Pi extension 工作，并把 Zuu 侧 launch 结果包装成 `WorkflowRun`。真实 `pi-workflow` board/run-state 读取尚未绑定，因此阶段、任务和 artifact 目前仍是 launch 层记录。
-- `GET/POST/DELETE /api/schedules`、`GET /api/schedules/:scheduleId`、`POST /api/schedules/:scheduleId/pause`、`POST /api/schedules/:scheduleId/resume` 和 `POST /api/schedules/:scheduleId/trigger` 已支持 Scheduler MVP；当前支持 `once`、`interval`、prompt action 和 workflow action，并将 schedule run 关联到 Agent Run 或 Workflow Run，记录持久化到 `.zuu/pi-agent/schedules.json`。
+- `GET/POST/DELETE /v1/schedules`、`GET /v1/schedules/:scheduleId`、`POST /v1/schedules/:scheduleId/pause`、`POST /v1/schedules/:scheduleId/resume` 和 `POST /v1/schedules/:scheduleId/trigger` 已支持 Scheduler MVP；当前支持 `once`、`interval`、prompt action 和 workflow action，并将 schedule run 关联到 Agent Run 或 Workflow Run，记录持久化到 `.zuu/pi-agent/schedules.json`。
 - 内置 Zuu approval policy 已通过 Pi inline extension 接入 `tool_call`，默认阻断 `bash`、`edit`、`write`，并通过 prompt SSE 发出 `approval_requested`；`allow_once` 可消费一次，`allow_session` 可对同 session 的同类工具放行。
-- 可选 `ZUU_API_TOKEN` 已支持保护 `/api/*`，client 和 WebUI 都能发送 Bearer token。
+- 可选 `ZUU_API_TOKEN` 已支持保护 `/v1/*`，client 和 WebUI 都能发送 Bearer token。
 - 默认路径保护已限制 `cwd`、session 文件和 import 文件在当前项目根内；可通过 `ZUU_ALLOWED_CWD` 追加允许根目录。
 - Node server 已支持 SIGINT/SIGTERM graceful shutdown，会关闭 HTTP server 并 dispose active runtime。
 
 当前限制：
 
 - `@zuu/client` 已是可独立构建的 workspace 包，具备 `dist` 产物、包入口、类型声明、包内中文 README 和第三方示例；尚未接入自动版本发布、changelog 和 npm publish 流程。
-- JSON store 已有原子写和损坏恢复，prompt run 事件已有最小存档、按 run 补拉、daemon 级 `/api/events` replay/live stream 和 SDK 自动 SSE 重连，但还没有 SQLite migration 或跨进程写入协调。
+- JSON store 已有原子写和损坏恢复，prompt run 事件已有最小存档、按 run 补拉、daemon 级 `/v1/events` replay/live stream 和 SDK 自动 SSE 重连，但还没有 SQLite migration 或跨进程写入协调。
 - WebUI 已迁移到 Vue + Vite，并支持打开持久化 session、查看当前 session tree、按 entry fork、从本地 JSONL 路径 import、处理 pending approvals、启动/查看 fake workflow runs、创建/暂停/恢复/触发/删除 schedule，以及通过 daemon 级 `subscribeEvents()` 实时展示事件并节流刷新 runs、approvals、session tree、schedule 和 workflow run 状态。
 - Package API 已能展示安装状态、信任状态、加载状态、显式触发安装/更新/删除，并通过持久化 operation 记录暴露任务进度和失败原因；WebUI 已能 trust/revoke package source 并展示 SDK resource diagnostics/collision。未信任 package 会保留在配置清单中，但已从 Pi `ResourceLoader` 和 `pi-package` workflow backend 的加载链路中过滤，diagnostics 会通过 `blockedPackages` 暴露被阻止加载的 source。
 - Approval 已接入 Pi tool call 拦截和 SSE 事件，但当前策略是 fail-closed：危险工具被阻断后需要用户 resolve 并重试 prompt，尚未实现挂起并恢复同一个 tool call 的交互式等待。
