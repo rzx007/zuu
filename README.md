@@ -73,9 +73,9 @@ pnpm build:web
 
 浏览器会话默认启用 `read`、`grep`、`find`、`ls` 和 `zuu_status`。如果需要更强的 coding agent 能力，可以在界面里有意识地启用 `bash`、`edit` 或 `write`。
 
-当前 workflow API 使用内置 `FakeWorkflowBackend`，用于验证 `WorkflowDefinition`、`WorkflowRun`、`Stage`、`Task` 和 `Artifact` 的 daemon/client/WebUI 合约。它会立即生成一个完成态 run，不会启动真实 subagent；真实编排仍需要后续接入 `pi-workflow` adapter。
+当前 workflow API 默认使用内置 `FakeWorkflowBackend`，用于验证 `WorkflowDefinition`、`WorkflowRun`、`Stage`、`Task` 和 `Artifact` 的 daemon/client/WebUI 合约。它会立即生成一个完成态 run，不会启动真实 subagent。
 
-可通过 `ZUU_WORKFLOW_BACKEND=fake` 或 `ZUU_WORKFLOW_BACKEND=pi-package` 选择 workflow 后端。当前 `pi-package` 模式只做 readiness/diagnostics 暴露，真实 run-state adapter 尚未绑定，因此未完成前不要把它视为生产可用。
+可通过 `ZUU_WORKFLOW_BACKEND=fake` 或 `ZUU_WORKFLOW_BACKEND=pi-package` 选择 workflow 后端。`pi-package` 模式会探测 `@agwab/pi-workflow` 是否已配置、是否解析到安装路径，以及当前平台是否受支持；ready 后会通过 Pi 的 `/workflow run ...` 或 `/workflow dynamic ...` 命令发起真实 extension 工作，并把 Zuu 侧 launch 结果包装成 `WorkflowRun`。它还没有读取 `pi-workflow` board/run-state，因此阶段、任务和 artifact 仍只是 Zuu launch 层的记录。`@agwab/pi-workflow` 包页面说明原生 Windows 不支持，Windows 用户应使用 WSL2/Linux。
 
 Scheduler MVP 已支持 `once` 和 `interval` trigger，支持 prompt action 和 workflow action，记录最近 schedule runs，并可在 WebUI 中创建、暂停、恢复、手动触发和删除。`cron`、timezone、misfire policy、retry policy、abort schedule run 和真实持久队列仍是后续工作。
 

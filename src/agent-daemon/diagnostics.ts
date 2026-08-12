@@ -41,7 +41,7 @@ export async function buildDiagnostics(
     gaps.push(workflowBackend.message ?? "Pi workflow backend is not ready.");
   }
   if (!packages.some((item) => item.includes("pi-crew"))) {
-    gaps.push("Cron/interval/one-shot scheduling still needs a daemon scheduler adapter or a package such as pi-crew.");
+    gaps.push("Scheduler MVP supports once/interval locally; cron/timezone orchestration still needs pi-crew or another cron-capable adapter.");
   }
   if (available.length === 0) {
     gaps.push("No authenticated model is available; configure provider auth in ~/.pi/agent/auth.json or environment variables.");

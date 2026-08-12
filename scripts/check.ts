@@ -4,6 +4,7 @@ import { join } from "node:path";
 import app from "../src/index";
 import { ApprovalStore } from "../src/agent-daemon/approval-store";
 import { createApprovalExtension } from "../src/agent-daemon/approval-policy";
+import { createWorkflowBackend } from "../src/agent-daemon/workflows";
 import { createZuuClient } from "@zuu/client";
 import { createEventBus } from "@earendil-works/pi-coding-agent";
 
@@ -92,6 +93,27 @@ async function main() {
     missingWorkflowFailed = true;
   }
   if (!missingWorkflowFailed) throw new Error("missing workflow should fail");
+
+  const piBackend = createWorkflowBackend({
+    path: join(mkdtempSync(join(tmpdir(), "zuu-pi-workflow-check-")), "workflow-runs.json"),
+    agentDir: mkdtempSync(join(tmpdir(), "zuu-pi-agent-check-")),
+    packages: ["npm:@agwab/pi-workflow"],
+    requestedKind: "pi-package",
+    launchPrompt: async () => {
+      throw new Error("pi-package launch should not be reached when backend is unavailable");
+    },
+  });
+  const piBackendInfo = piBackend.getInfo();
+  if (piBackendInfo.kind !== "pi-package" || piBackendInfo.status !== "unavailable") {
+    throw new Error("pi-package backend should be unavailable in the check environment");
+  }
+  let unavailablePiWorkflowFailed = false;
+  try {
+    await piBackend.start("deep-research", { prompt: "contract check" });
+  } catch {
+    unavailablePiWorkflowFailed = true;
+  }
+  if (!unavailablePiWorkflowFailed) throw new Error("unavailable pi-package workflow should fail");
 
   const schedulesBefore = await client.listSchedules();
   if (!Array.isArray(schedulesBefore.schedules)) throw new Error("schedules response is invalid");

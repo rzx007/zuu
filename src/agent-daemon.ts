@@ -297,6 +297,8 @@ export class ZuuDaemon {
       path: getWorkflowStorePath(this.agentDir),
       packages: this.listPackages(),
       requestedKind: process.env.ZUU_WORKFLOW_BACKEND,
+      agentDir: this.agentDir,
+      launchPrompt: (request) => this.launchWorkflowPrompt(request),
     });
   }
 
@@ -319,6 +321,15 @@ export class ZuuDaemon {
 
   abortWorkflowRun(runId: string) {
     return this.createWorkflowBackend().abort(runId);
+  }
+
+  private async launchWorkflowPrompt(request: PromptRequest) {
+    let finalRun: RunSummary | undefined;
+    for await (const event of this.prompt(request)) {
+      finalRun = event.run ?? finalRun;
+    }
+    if (!finalRun) throw new Error("Workflow launch did not produce an agent run");
+    return finalRun;
   }
 
   listSchedules() {

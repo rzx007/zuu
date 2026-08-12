@@ -714,7 +714,7 @@ UI end-to-end
 本仓库已先行实现一个最小可运行切片，用于验证 Pi SDK 嵌入方式和文档假设：
 
 - `src/index.ts`：Hono daemon、health、diagnostics、model、package、active session、stored session、session tree、run、prompt、abort、compact、new、switch、fork、import API，以及生产态 WebUI 静态托管。
-- `src/agent-daemon.ts`：封装 `ModelRuntime`、`DefaultResourceLoader`、`SettingsManager`、`SessionManager`、`createAgentSessionServices`、`createAgentSessionFromServices`、`createAgentSessionRuntime` 和 runtime lifecycle 编排；daemon 辅助逻辑统一放在 `src/agent-daemon/`。
+- `src/agent-daemon.ts`：封装 `ModelRuntime`、`DefaultResourceLoader`、`SettingsManager`、`SessionManager`、`createAgentSessionServices`、`createAgentSessionFromServices`、`createAgentSessionRuntime` 和 runtime lifecycle 编排；daemon 辅助逻辑统一放在 `src/agent-daemon/`，workflow 后端已拆到 `src/agent-daemon/workflow-adapters/`。
 - `packages/client`：workspace 包 `@zuu/client`，封装协议 DTO、health、diagnostics、models、packages、active sessions、stored sessions、session tree、runs、prompt SSE、abort、compact 和 runtime lifecycle 操作。
 - `web/`：Vue + Vite WebUI，浏览器侧直接 bundle `@zuu/client`，用于 diagnostics、model 选择、package source、prompt SSE、session 文件、session tree、runs 和 approval 操作。
 - `.zuu/pi-agent`：默认 Pi app state 目录，可通过 `ZUU_AGENT_DIR` 覆盖，避免嵌入式运行时写入 `~/.pi/agent`。
@@ -736,8 +736,8 @@ UI end-to-end
 - `GET/POST/DELETE /api/packages` 已支持查看和维护 Pi package source 列表。
 - `GET /api/models` 已支持列出当前已认证可用模型，WebUI 可直接下拉选择。
 - `GET /api/approvals`、`GET /api/approvals/:approvalId` 和 `POST /api/approvals/:approvalId/resolve` 已支持审批列表、详情与处理，审批记录持久化到 `.zuu/pi-agent/approvals.json`。
-- `GET /api/workflows`、`POST /api/workflows/:workflowId/runs`、`GET /api/workflow-runs`、`GET /api/workflow-runs/:runId` 和 `POST /api/workflow-runs/:runId/abort` 已支持最小 workflow 合约；当前后端是 `FakeWorkflowBackend`，用于稳定 Definition/Run/Stage/Task/Artifact DTO 和 UI board，不启动真实 subagent。
-- `ZUU_WORKFLOW_BACKEND` 已支持选择 `fake` 或 `pi-package`；`pi-package` 当前只做 readiness/diagnostics 暴露，尚未绑定真实 `@agwab/pi-workflow` run-state adapter。
+- `GET /api/workflows`、`POST /api/workflows/:workflowId/runs`、`GET /api/workflow-runs`、`GET /api/workflow-runs/:runId` 和 `POST /api/workflow-runs/:runId/abort` 已支持最小 workflow 合约；默认后端是 `FakeWorkflowBackend`，用于稳定 Definition/Run/Stage/Task/Artifact DTO 和 UI board，不启动真实 subagent。
+- `ZUU_WORKFLOW_BACKEND` 已支持选择 `fake` 或 `pi-package`；`pi-package` 会探测 `@agwab/pi-workflow` package source、安装路径和平台支持，ready 后通过 `/workflow run` 或 `/workflow dynamic` 发起真实 Pi extension 工作，并把 Zuu 侧 launch 结果包装成 `WorkflowRun`。真实 `pi-workflow` board/run-state 读取尚未绑定，因此阶段、任务和 artifact 目前仍是 launch 层记录。
 - `GET/POST/DELETE /api/schedules`、`GET /api/schedules/:scheduleId`、`POST /api/schedules/:scheduleId/pause`、`POST /api/schedules/:scheduleId/resume` 和 `POST /api/schedules/:scheduleId/trigger` 已支持 Scheduler MVP；当前支持 `once`、`interval`、prompt action 和 workflow action，并将 schedule run 关联到 Agent Run 或 Workflow Run，记录持久化到 `.zuu/pi-agent/schedules.json`。
 - 内置 Zuu approval policy 已通过 Pi inline extension 接入 `tool_call`，默认阻断 `bash`、`edit`、`write`，并通过 prompt SSE 发出 `approval_requested`；`allow_once` 可消费一次，`allow_session` 可对同 session 的同类工具放行。
 - 可选 `ZUU_API_TOKEN` 已支持保护 `/api/*`，client 和 WebUI 都能发送 Bearer token。
@@ -755,7 +755,7 @@ UI end-to-end
 - 路径保护是根目录级 allowlist，尚未做到按工具/动作细粒度授权。
 - 默认工具集偏只读，`bash`、`edit`、`write` 需要 UI 显式启用。
 - 当前环境下真实模型 stream 可能因为网络返回 `Connection error`；daemon 已将 SDK assistant error 映射为 SSE error。
-- Workflow/subagent 尚未安装真实 packages，diagnostics 会明确报告缺口；当前 fake workflow backend 只用于 API/Client/UI 合约验证。Scheduler 已有最小内置后端，但 `cron`、timezone、misfire、retry、abort schedule run 和真实持久队列仍未落地。
+- Workflow/subagent package 在当前环境尚未安装，diagnostics 会明确报告缺口；`pi-package` adapter 已有 launch 桥接，但当前 Windows 原生环境会按 `@agwab/pi-workflow` 包页面说明标记为不可用。Scheduler 已有最小内置后端，但 `cron`、timezone、misfire、retry、abort schedule run 和真实持久队列仍未落地。
 
-后续计划应从此切片继续收敛，而不是另起炉灶：Client workspace 包、run registry 持久化、package source 管理、approval tool-call 拦截、Vue WebUI approval 操作面、fake workflow 合约和 Scheduler MVP 已经落地，接下来应优先把 `FakeWorkflowBackend` 替换/桥接到真实 `pi-workflow` adapter，再补齐 cron/timezone/retry 等 scheduler backend 能力。
+后续计划应从此切片继续收敛，而不是另起炉灶：Client workspace 包、run registry 持久化、package source 管理、approval tool-call 拦截、Vue WebUI approval 操作面、fake workflow 合约、pi-package launch adapter 和 Scheduler MVP 已经落地，接下来应优先在 WSL2/Linux 中安装 `@agwab/pi-workflow` 验证 `/workflow run` 端到端，再研究 `.pi/workflows` board/run-state 的只读映射，最后补齐 cron/timezone/retry 等 scheduler backend 能力。
 
