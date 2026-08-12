@@ -6,6 +6,7 @@ import { AuthService } from "../src/agent-daemon/auth-service";
 import { AuditService } from "../src/agent-daemon/audit-service";
 import { ApprovalStore } from "../src/agent-daemon/approval-store";
 import { createApprovalExtension } from "../src/agent-daemon/approval-policy";
+import { PackageApiService } from "../src/agent-daemon/package-api-service";
 import { PackageService } from "../src/agent-daemon/packages";
 import { PackageTrustStore } from "../src/agent-daemon/package-trust";
 import { PromptService } from "../src/agent-daemon/prompt-service";
@@ -237,6 +238,27 @@ async function main() {
     auditService.list({ target: "check", until: new Date(Date.parse(auditEvent.createdAt) - 1).toISOString() }).length !== 0
   ) {
     throw new Error("audit service should filter by action, outcome, target, authScope, and time window");
+  }
+  const packageApiAudit = new AuditService(join(mkdtempSync(join(tmpdir(), "zuu-package-api-audit-check-")), "audit.json"));
+  const failingPackageApi = new PackageApiService(
+    {
+      add: async () => {
+        throw new Error("async package add failed");
+      },
+    } as unknown as PackageService,
+    packageApiAudit,
+  );
+  try {
+    await failingPackageApi.addPackage({ source: "npm:zuu-check-async-failure" });
+    throw new Error("async package add should fail");
+  } catch (error) {
+    if (!(error instanceof Error) || error.message !== "async package add failed") {
+      throw new Error("async package API failure should be rethrown");
+    }
+  }
+  const failedPackageApiAudit = packageApiAudit.list({ action: "package.add", outcome: "failure", target: "npm:zuu-check-async-failure", limit: 5 });
+  if (!failedPackageApiAudit.some((event) => event.details?.error === "async package add failed")) {
+    throw new Error("async package API failures should be recorded in audit events");
   }
   try {
     envAuth.rotate();

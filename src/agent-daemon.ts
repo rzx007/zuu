@@ -19,6 +19,7 @@ import { ApprovalService } from "./agent-daemon/approval-service";
 import { ModelService } from "./agent-daemon/model-service";
 import { ProjectService } from "./agent-daemon/project-service";
 import { ScheduleService } from "./agent-daemon/schedule-service";
+import { PackageApiService } from "./agent-daemon/package-api-service";
 import { PackageService } from "./agent-daemon/packages";
 import { PromptService } from "./agent-daemon/prompt-service";
 import { WorkflowService } from "./agent-daemon/workflow-service";
@@ -51,7 +52,13 @@ import { RunService } from "./agent-daemon/run-service";
 import { SessionService } from "./agent-daemon/session-service";
 
 export class ZuuDaemon {
-  constructor(private readonly options: { audit?: AuditService } = {}) {}
+  private readonly options: { audit?: AuditService };
+  private readonly packageApiService: PackageApiService;
+
+  constructor(options: { audit?: AuditService } = {}) {
+    this.options = options;
+    this.packageApiService = new PackageApiService(this.packageService, options.audit);
+  }
 
   private readonly agentDir = getZuuAgentDir();
   private readonly runService = new RunService(getRunStorePath(this.agentDir), getRunEventStorePath(this.agentDir));
@@ -366,57 +373,45 @@ export class ZuuDaemon {
   }
 
   listPackages() {
-    return this.packageService.list();
+    return this.packageApiService.listPackages();
   }
 
   async addPackage(request: PackageMutationRequest) {
-    return this.withPackageAudit("package.add", request, () => this.packageService.add(request));
+    return this.packageApiService.addPackage(request);
   }
 
   async installPackage(request: PackageMutationRequest) {
-    return this.withPackageAudit("package.install", request, () => this.packageService.install(request));
+    return this.packageApiService.installPackage(request);
   }
 
-  removePackage(request: PackageMutationRequest) {
-    return this.withPackageAudit("package.remove", request, () => this.packageService.remove(request));
+  async removePackage(request: PackageMutationRequest) {
+    return this.packageApiService.removePackage(request);
   }
 
-  updatePackage(request: PackageMutationRequest) {
-    return this.withPackageAudit("package.update", request, () => this.packageService.update(request));
+  async updatePackage(request: PackageMutationRequest) {
+    return this.packageApiService.updatePackage(request);
   }
 
-  trustPackage(request: PackageMutationRequest) {
-    return this.withPackageAudit("package.trust", request, () => this.packageService.trustPackage(request));
+  async trustPackage(request: PackageMutationRequest) {
+    return this.packageApiService.trustPackage(request);
   }
 
-  revokePackageTrust(request: PackageMutationRequest) {
-    return this.withPackageAudit("package.revoke_trust", request, () => this.packageService.revokeTrust(request));
+  async revokePackageTrust(request: PackageMutationRequest) {
+    return this.packageApiService.revokePackageTrust(request);
   }
 
   listPackageOperations() {
-    return this.packageService.listOperations();
+    return this.packageApiService.listPackageOperations();
   }
 
   getPackageOperation(operationId: string) {
-    return this.packageService.getOperation(operationId);
+    return this.packageApiService.getPackageOperation(operationId);
   }
 
   async dispose() {
     this.scheduleService.dispose();
     await this.sessionService.dispose();
     this.runService.clear();
-  }
-
-  private withPackageAudit<T>(action: Parameters<AuditService["record"]>[0]["action"], request: PackageMutationRequest, run: () => T) {
-    const target = typeof request.source === "string" ? request.source : undefined;
-    try {
-      const result = run();
-      this.recordAudit(action, target, { source: target });
-      return result;
-    } catch (error) {
-      this.recordAudit(action, target, { source: target, error: error instanceof Error ? error.message : String(error) }, "failure");
-      throw error;
-    }
   }
 
   private recordAudit(

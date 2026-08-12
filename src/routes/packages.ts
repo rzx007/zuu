@@ -36,7 +36,7 @@ export function registerPackageRoutes({ app, daemon }: RouteDeps) {
   app.post("/v1/packages/update", async (c) => {
     try {
       const body = parsePackageMutation(await readJson(c.req));
-      return c.json(daemon.updatePackage(body));
+      return c.json(await daemon.updatePackage(body));
     } catch (error) {
       return c.json(jsonError(error, 400), toStatus(error, 400));
     }
@@ -45,7 +45,7 @@ export function registerPackageRoutes({ app, daemon }: RouteDeps) {
   app.delete("/v1/packages", async (c) => {
     try {
       const body = parsePackageMutation(await readJson(c.req));
-      return c.json(daemon.removePackage(body));
+      return c.json(await daemon.removePackage(body));
     } catch (error) {
       return c.json(jsonError(error, 400), toStatus(error, 400));
     }
@@ -54,7 +54,7 @@ export function registerPackageRoutes({ app, daemon }: RouteDeps) {
   app.post("/v1/packages/trust", async (c) => {
     try {
       const body = parsePackageMutation(await readJson(c.req));
-      return c.json(daemon.trustPackage(body));
+      return c.json(await daemon.trustPackage(body));
     } catch (error) {
       return c.json(jsonError(error, 400), toStatus(error, 400));
     }
@@ -63,7 +63,7 @@ export function registerPackageRoutes({ app, daemon }: RouteDeps) {
   app.delete("/v1/packages/trust", async (c) => {
     try {
       const body = parsePackageMutation(await readJson(c.req));
-      return c.json(daemon.revokePackageTrust(body));
+      return c.json(await daemon.revokePackageTrust(body));
     } catch (error) {
       return c.json(jsonError(error, 400), toStatus(error, 400));
     }
