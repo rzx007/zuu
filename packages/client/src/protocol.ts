@@ -176,6 +176,24 @@ export interface HealthResponse {
   ok: boolean;
 }
 
+export interface AuthStatus {
+  enabled: boolean;
+  source: "env" | "local";
+  canRotate: boolean;
+  tokenPreview: string;
+  tokenFile?: string;
+  createdAt?: string;
+  rotatedAt?: string;
+}
+
+export interface AuthStatusResponse {
+  auth: AuthStatus;
+}
+
+export interface AuthRotateResponse extends AuthStatusResponse {
+  apiToken: string;
+}
+
 export interface SessionsResponse {
   sessions: SessionSummary[];
 }

@@ -5,23 +5,27 @@ import { serve } from "@hono/node-server";
 import type { ServerType } from "@hono/node-server";
 import { serveStatic } from "@hono/node-server/serve-static";
 import { Hono } from "hono";
+import { AuthService } from "./agent-daemon/auth-service";
 import { ZuuDaemon } from "./agent-daemon";
+import { getAuthTokenStorePath, getZuuAgentDir } from "./agent-daemon/environment";
 import { jsonError } from "./http";
 import { registerV1Routes } from "./routes";
 
 const app = new Hono();
+const agentDir = getZuuAgentDir();
+export const auth = new AuthService(getAuthTokenStorePath(agentDir));
 const daemon = new ZuuDaemon();
 const webDistRoot = "./web/dist";
 const webIndex = new URL("../web/dist/index.html", import.meta.url);
 const hasWebDist = existsSync(webIndex);
 
-function isAuthorized(authorization: string | undefined) {
-  const apiToken = process.env.ZUU_API_TOKEN?.trim();
-  return !apiToken || authorization === `Bearer ${apiToken}`;
-}
-
 app.use("/v1/*", async (c, next) => {
-  if (!isAuthorized(c.req.header("authorization"))) {
+  if (c.req.path === "/v1/health") {
+    await next();
+    return;
+  }
+
+  if (!auth.isAuthorized(c.req.header("authorization"))) {
     return c.json(jsonError("Unauthorized", 401), 401);
   }
 
@@ -30,7 +34,7 @@ app.use("/v1/*", async (c, next) => {
 
 app.all("/api/*", (c) => c.json(jsonError("Use /v1 instead of /api.", 404), 404));
 
-registerV1Routes({ app, daemon });
+registerV1Routes({ app, auth, daemon });
 
 if (hasWebDist) {
   app.get("/assets/*", serveStatic({ root: webDistRoot }));
@@ -60,6 +64,7 @@ function closeServer(server: ServerType) {
 export function startServer(port = Number(process.env.PORT ?? 3001)) {
   const server = serve({ fetch: app.fetch, port });
   console.log(`Zuu Agent listening on http://localhost:${port}`);
+  console.log(auth.startupMessage());
   return server;
 }
 

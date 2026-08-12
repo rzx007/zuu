@@ -56,6 +56,10 @@ export function getPackageTrustStorePath(agentDir: string) {
   return join(agentDir, "package-trust.json");
 }
 
+export function getAuthTokenStorePath(agentDir: string) {
+  return join(agentDir, "auth-token.json");
+}
+
 function normalizePathForCompare(pathname: string) {
   const resolved = resolve(pathname);
   return process.platform === "win32" ? resolved.toLowerCase() : resolved;

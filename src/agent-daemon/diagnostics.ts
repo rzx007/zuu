@@ -4,6 +4,7 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import {
   getApprovalStorePath,
+  getAuthTokenStorePath,
   getPackageOperationStorePath,
   getPackageTrustStorePath,
   getProjectStorePath,
@@ -69,6 +70,7 @@ export async function buildDiagnostics(
     inspectJsonStore({ name: "schedules", path: getScheduleStorePath(agentDir), defaultValue: [] }),
     inspectJsonStore({ name: "package-operations", path: getPackageOperationStorePath(agentDir), defaultValue: [] }),
     inspectJsonStore({ name: "package-trust", path: getPackageTrustStorePath(agentDir), defaultValue: [] }),
+    inspectJsonStore({ name: "auth-token", path: getAuthTokenStorePath(agentDir), defaultValue: { token: "", createdAt: "" } }),
   ];
   const gaps: string[] = [];
   if (stores.some((store) => store.recovered)) {

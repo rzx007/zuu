@@ -50,6 +50,8 @@ import type {
   WorkflowTasksResponse,
   WorkflowsResponse,
   ApiErrorResponse,
+  AuthRotateResponse,
+  AuthStatusResponse,
 } from "./protocol.js";
 
 export type * from "./protocol.js";
@@ -75,6 +77,8 @@ export interface EventStreamOptions extends EventStreamQuery {
 
 export interface ZuuClient {
   health(): Promise<HealthResponse>;
+  authStatus(): Promise<AuthStatusResponse>;
+  rotateAuthToken(): Promise<AuthRotateResponse>;
   diagnostics(): Promise<Diagnostics>;
   listPackages(): Promise<PackagesResponse>;
   listModels(): Promise<ModelsResponse>;
@@ -332,6 +336,11 @@ export function createZuuClient(options: ZuuClientOptions = {}): ZuuClient {
 
   return {
     health: () => requestJson<HealthResponse>(fetchImpl, baseUrl, "/v1/health", undefined, apiToken),
+    authStatus: () => requestJson<AuthStatusResponse>(fetchImpl, baseUrl, "/v1/auth/status", undefined, apiToken),
+    rotateAuthToken: () =>
+      requestJson<AuthRotateResponse>(fetchImpl, baseUrl, "/v1/auth/rotate", {
+        method: "POST",
+      }, apiToken),
     diagnostics: () => requestJson<Diagnostics>(fetchImpl, baseUrl, "/v1/diagnostics", undefined, apiToken),
     listPackages: () => requestJson<PackagesResponse>(fetchImpl, baseUrl, "/v1/packages", undefined, apiToken),
     listModels: () => requestJson<ModelsResponse>(fetchImpl, baseUrl, "/v1/models", undefined, apiToken),

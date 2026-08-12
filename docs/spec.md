@@ -385,6 +385,8 @@ Daemon 启动时必须：
 ### 7.2 Health 与 Diagnostics
 
 - `GET /v1/health`
+- `GET /v1/auth/status`
+- `POST /v1/auth/rotate`
 - `GET /v1/diagnostics`
 
 Health 至少返回 Daemon 状态、版本、协议版本、uptime。

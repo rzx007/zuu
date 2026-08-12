@@ -4,6 +4,7 @@ import {
   createZuuClient,
   type Approval,
   type ApprovalDecision,
+  type AuthStatus,
   type CreateScheduleRequest,
   type Diagnostics,
   type ModelSmokeResponse,
@@ -66,6 +67,7 @@ const countedEventIds = new Set<string>()
 const countedEventOrder: string[] = []
 
 const apiToken = ref(localStorage.getItem(tokenKey) || '')
+const authStatus = ref<AuthStatus>()
 const diagnostics = ref<Diagnostics>()
 const projects = ref<ProjectSummary[]>([])
 const selectedProjectId = ref(localStorage.getItem(projectKey) || '')
@@ -360,6 +362,10 @@ async function loadDiagnostics() {
   diagnostics.value = await client.diagnostics()
 }
 
+async function loadAuthStatus() {
+  authStatus.value = (await client.authStatus()).auth
+}
+
 async function loadPackages() {
   const response = await client.listPackages()
   packages.value = response.packages
@@ -435,6 +441,7 @@ async function refreshAll() {
   try {
     await loadProjects()
     await Promise.all([
+      loadAuthStatus(),
       loadDiagnostics(),
       loadPackages(),
       loadPackageOperations(),
@@ -461,6 +468,18 @@ function saveToken() {
   addMessage('event', token ? 'API token saved.' : 'API token cleared.')
   startEventStream()
   refreshAll().catch((error) => addMessage('error', errorMessage(error)))
+}
+
+async function rotateAuthToken() {
+  const result = await client.rotateAuthToken()
+  apiToken.value = result.apiToken
+  localStorage.setItem(tokenKey, result.apiToken)
+  stopEventStream()
+  client = createZuuClient({ apiToken: result.apiToken })
+  authStatus.value = result.auth
+  addMessage('event', `API token rotated: ${result.auth.tokenPreview}`)
+  startEventStream()
+  await refreshAll()
 }
 
 function chooseModel() {
@@ -1056,7 +1075,21 @@ onUnmounted(() => {
             API token
             <input v-model="apiToken" class="field-input" type="password" placeholder="Optional ZUU_API_TOKEN" @keydown.enter="saveToken">
           </label>
-          <Button variant="outline" size="sm" @click="saveToken">Save token</Button>
+          <div class="flex flex-wrap items-center gap-2">
+            <Button variant="outline" size="sm" @click="saveToken">Save token</Button>
+            <Button
+              variant="outline"
+              size="sm"
+              :disabled="!authStatus?.canRotate"
+              @click="rotateAuthToken().catch((error) => addMessage('error', errorMessage(error)))"
+            >
+              Rotate
+            </Button>
+            <Badge v-if="authStatus" variant="outline">{{ authStatus.source }}</Badge>
+          </div>
+          <p v-if="authStatus" class="empty-text">
+            {{ authStatus.tokenPreview }}{{ authStatus.tokenFile ? ` / ${authStatus.tokenFile}` : '' }}
+          </p>
         </section>
 
         <section class="panel-block">

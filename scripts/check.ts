@@ -1,7 +1,8 @@
 import { mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import app from "../src/index";
+import app, { auth } from "../src/index";
+import { AuthService } from "../src/agent-daemon/auth-service";
 import { ApprovalStore } from "../src/agent-daemon/approval-store";
 import { createApprovalExtension } from "../src/agent-daemon/approval-policy";
 import { PackageService } from "../src/agent-daemon/packages";
@@ -53,13 +54,27 @@ async function drainStream(stream: AsyncGenerator<unknown>) {
 }
 
 async function main() {
-  const client = createZuuClient({ baseUrl: "http://zuu.local", fetch: fetchFromApp });
+  const currentApiToken = auth.currentToken();
+  const authHeaders = () => ({ authorization: `Bearer ${currentApiToken}` });
+  const client = createZuuClient({ baseUrl: "http://zuu.local", fetch: fetchFromApp, apiToken: currentApiToken });
   const health = await client.health();
   if (!health.ok) throw new Error("health check failed");
   const legacyApi = await fetchFromApp("http://zuu.local/api/health");
   if (legacyApi.status !== 404) throw new Error("legacy /api routes should not be served");
   const legacyApiBody = await legacyApi.json() as { error?: { code?: string } };
   if (legacyApiBody.error?.code !== "not_found") throw new Error("legacy /api routes should return not_found");
+  const unauthorized = await fetchFromApp("http://zuu.local/v1/diagnostics");
+  if (unauthorized.status !== 401) throw new Error("missing api token should be rejected");
+  const unauthorizedBody = await unauthorized.json() as { error?: { code?: string; status?: number } };
+  if (unauthorizedBody.error?.code !== "unauthorized" || unauthorizedBody.error.status !== 401) {
+    throw new Error("unauthorized response should include a stable error code");
+  }
+  const unauthenticatedClient = createZuuClient({ baseUrl: "http://zuu.local", fetch: fetchFromApp });
+  await expectClientError(() => unauthenticatedClient.diagnostics(), { status: 401, code: "unauthorized" });
+  const authStatus = await client.authStatus();
+  if (!authStatus.auth.enabled || !authStatus.auth.tokenPreview) {
+    throw new Error("auth status response is invalid");
+  }
   const diagnostics = await client.diagnostics();
   if (!Array.isArray(diagnostics.resources.resourceDiagnostics)) {
     throw new Error("resource diagnostics response is invalid");
@@ -72,6 +87,9 @@ async function main() {
   }
   if (!diagnostics.resources.stores.some((store) => store.name === "projects")) {
     throw new Error("project store diagnostics should be reported");
+  }
+  if (!diagnostics.resources.stores.some((store) => store.name === "auth-token")) {
+    throw new Error("auth token store diagnostics should be reported");
   }
 
   let sawAuthHeader = false;
@@ -86,34 +104,57 @@ async function main() {
   });
   await authClient.health();
   if (!sawAuthHeader) throw new Error("api token header was not sent");
+  let sawRotateRoute = false;
+  const rotateClient = createZuuClient({
+    baseUrl: "http://zuu.local",
+    apiToken: "check-token",
+    fetch: async (input, init) => {
+      const request = input instanceof Request ? input : new Request(input, init);
+      sawRotateRoute = request.url === "http://zuu.local/v1/auth/rotate" && request.method === "POST";
+      return Response.json({
+        auth: {
+          enabled: true,
+          source: "local",
+          canRotate: true,
+          tokenPreview: "zuu_chec...oken",
+        },
+        apiToken: "zuu_check_new_token",
+      });
+    },
+  });
+  const rotateResponse = await rotateClient.rotateAuthToken();
+  if (!sawRotateRoute || rotateResponse.apiToken !== "zuu_check_new_token") {
+    throw new Error("rotate auth token client method should call the rotate route");
+  }
 
-  const previousToken = process.env.ZUU_API_TOKEN;
+  const authServiceDir = mkdtempSync(join(tmpdir(), "zuu-auth-service-check-"));
+  const localAuth = new AuthService(join(authServiceDir, "auth-token.json"), "");
+  const originalLocalToken = localAuth.currentToken();
+  const rotatedLocalAuth = localAuth.rotate();
+  if (
+    !originalLocalToken ||
+    rotatedLocalAuth.apiToken === originalLocalToken ||
+    localAuth.currentToken() !== rotatedLocalAuth.apiToken ||
+    !localAuth.status().canRotate
+  ) {
+    throw new Error("local auth token should be generated and rotated");
+  }
+  const envAuth = new AuthService(join(authServiceDir, "env-auth-token.json"), "env-token");
+  if (envAuth.status().source !== "env" || envAuth.status().canRotate) {
+    throw new Error("env auth token status should be read-only");
+  }
   try {
-    process.env.ZUU_API_TOKEN = "server-check-token";
-    const unauthorized = await fetchFromApp("http://zuu.local/v1/health");
-    if (unauthorized.status !== 401) throw new Error("missing api token should be rejected");
-    const unauthorizedBody = await unauthorized.json() as { error?: { code?: string; status?: number } };
-    if (unauthorizedBody.error?.code !== "unauthorized" || unauthorizedBody.error.status !== 401) {
-      throw new Error("unauthorized response should include a stable error code");
-    }
-    await expectClientError(() => client.health(), { status: 401, code: "unauthorized" });
-    const authorizedClient = createZuuClient({
-      baseUrl: "http://zuu.local",
-      fetch: fetchFromApp,
-      apiToken: "server-check-token",
-    });
-    await authorizedClient.health();
-  } finally {
-    if (previousToken === undefined) {
-      delete process.env.ZUU_API_TOKEN;
-    } else {
-      process.env.ZUU_API_TOKEN = previousToken;
+    envAuth.rotate();
+    throw new Error("env auth token rotation should fail");
+  } catch (error) {
+    if (!(error instanceof ApiError) || error.status !== 409) {
+      throw new Error("env auth token rotation should fail with conflict");
     }
   }
 
   const malformedJson = await fetchFromApp("http://zuu.local/v1/packages", {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: { "content-type": "application/json", ...authHeaders() },
     body: "{",
   });
   if (malformedJson.status !== 400) throw new Error("malformed JSON should be rejected");
@@ -210,7 +251,9 @@ async function main() {
   await expectClientError(() => client.abortRun("missing"), { status: 404, code: "not_found" });
   await expectClientError(() => client.listProjectRunEvents(defaultProject.id, "missing"), { status: 404, code: "not_found" });
   await expectClientError(() => client.abortProjectRun(defaultProject.id, "missing"), { status: 404, code: "not_found" });
-  const missingEventStream = await fetchFromApp("http://zuu.local/v1/events?runId=missing");
+  const missingEventStream = await fetchFromApp("http://zuu.local/v1/events?runId=missing", {
+    headers: authHeaders(),
+  });
   if (missingEventStream.status !== 404) throw new Error("missing event stream run should fail before streaming");
 
   let eventStreamRequestCount = 0;

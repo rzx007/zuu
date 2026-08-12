@@ -25,8 +25,19 @@ const client = createZuuClient({
 });
 
 const health = await client.health();
+const auth = await client.authStatus();
 const diagnostics = await client.diagnostics();
 const packages = await client.listPackages();
+```
+
+除 `GET /v1/health` 外，daemon API 都需要 Bearer token。未设置 `ZUU_API_TOKEN` 时，daemon 会在 `.zuu/pi-agent/auth-token.json` 生成本地 token；本地 token 可以轮换，环境变量 token 只能在进程外变更。
+
+```ts
+const status = await client.authStatus();
+if (status.auth.canRotate) {
+  const rotated = await client.rotateAuthToken();
+  console.log(rotated.apiToken);
+}
 ```
 
 `listModels()` 用于读取当前可选模型；`smokeModel()` 会发起一次极小真实调用，用来区分“模型目录可见”和“provider stream 确实可用”。
