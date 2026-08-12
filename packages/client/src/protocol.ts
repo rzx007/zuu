@@ -426,6 +426,14 @@ export interface CreateScheduleRequest {
   misfirePolicy?: ScheduleMisfirePolicy;
 }
 
+export interface UpdateScheduleRequest {
+  name?: string;
+  trigger?: ScheduleTrigger;
+  action?: ScheduleAction;
+  overlapPolicy?: ScheduleOverlapPolicy;
+  misfirePolicy?: ScheduleMisfirePolicy;
+}
+
 export interface CreateSessionRequest {
   projectId?: string;
   cwd?: string;

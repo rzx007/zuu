@@ -40,6 +40,7 @@ import type {
   StartWorkflowRequest,
   SwitchSessionRequest,
   UpdateProjectRequest,
+  UpdateScheduleRequest,
   UpdateSessionRequest,
 } from "@zuu/client";
 import { RunService } from "./agent-daemon/run-service";
@@ -254,6 +255,10 @@ export class ZuuDaemon {
 
   createSchedule(request: CreateScheduleRequest, projectIdOverride?: string) {
     return this.scheduleService.createSchedule(request, projectIdOverride);
+  }
+
+  updateSchedule(scheduleId: string, request: UpdateScheduleRequest, projectIdOverride?: string) {
+    return this.scheduleService.updateSchedule(scheduleId, request, projectIdOverride);
   }
 
   getSchedule(scheduleId: string, projectId?: string) {

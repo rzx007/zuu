@@ -92,6 +92,10 @@ const createdSchedule = await client.createProjectSchedule(currentProjectId, {
   overlapPolicy: "skip",
   misfirePolicy: "skip",
 });
+await client.updateProjectSchedule(currentProjectId, createdSchedule.schedule.id, {
+  name: "daily project review",
+  misfirePolicy: "run_once",
+});
 const scheduleRuns = schedules.schedules[0]
   ? await client.listProjectScheduleRuns(currentProjectId, schedules.schedules[0].id)
   : { runs: [] };

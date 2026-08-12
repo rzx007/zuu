@@ -14,8 +14,9 @@ import type {
   StartWorkflowRequest,
   SwitchSessionRequest,
   ThinkingLevel,
-  UpdateSessionRequest,
   UpdateProjectRequest,
+  UpdateScheduleRequest,
+  UpdateSessionRequest,
 } from "@zuu/client";
 import {
   assertObject,
@@ -136,6 +137,25 @@ export function parseStartWorkflow(value: unknown): StartWorkflowRequest {
 
 export function parseCreateSchedule(value: unknown): CreateScheduleRequest {
   assertObject(value);
+  return {
+    name: optionalString(value.name, "name"),
+    trigger: parseScheduleTrigger(value.trigger),
+    action: parseScheduleAction(value.action),
+    ...parseSchedulePolicies(value),
+  };
+}
+
+export function parseUpdateSchedule(value: unknown): UpdateScheduleRequest {
+  assertObject(value);
+  return {
+    name: optionalString(value.name, "name"),
+    trigger: value.trigger === undefined ? undefined : parseScheduleTrigger(value.trigger),
+    action: value.action === undefined ? undefined : parseScheduleAction(value.action),
+    ...parseSchedulePolicies(value),
+  };
+}
+
+function parseSchedulePolicies(value: Record<string, unknown>) {
   const overlapPolicy = optionalString(value.overlapPolicy, "overlapPolicy");
   if (overlapPolicy !== undefined && !SCHEDULE_OVERLAP_POLICIES.has(overlapPolicy)) {
     validationError("overlapPolicy must be skip, queue, or parallel", { field: "overlapPolicy" });
@@ -145,9 +165,6 @@ export function parseCreateSchedule(value: unknown): CreateScheduleRequest {
     validationError("misfirePolicy must be skip or run_once", { field: "misfirePolicy" });
   }
   return {
-    name: optionalString(value.name, "name"),
-    trigger: parseScheduleTrigger(value.trigger),
-    action: parseScheduleAction(value.action),
     overlapPolicy: overlapPolicy as CreateScheduleRequest["overlapPolicy"],
     misfirePolicy: misfirePolicy as CreateScheduleRequest["misfirePolicy"],
   };

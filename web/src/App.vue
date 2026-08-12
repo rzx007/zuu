@@ -4,6 +4,7 @@ import {
   createZuuClient,
   type Approval,
   type ApprovalDecision,
+  type CreateScheduleRequest,
   type Diagnostics,
   type ModelSummary,
   type PackageOperation,
@@ -100,6 +101,7 @@ const scheduleCron = ref('*/5 * * * *')
 const scheduleActionType = ref<'workflow' | 'prompt'>('workflow')
 const scheduleMisfirePolicy = ref<'skip' | 'run_once'>('skip')
 const schedulePrompt = ref('Run a scheduled Zuu status check and summarize the result.')
+const editingScheduleId = ref('')
 const messages = ref<MessageItem[]>([])
 const isRunning = ref(false)
 const isRefreshing = ref(false)
@@ -701,15 +703,44 @@ async function createSchedule() {
     }
     return { kind: 'cron' as const, cron: scheduleCron.value.trim() || '*/5 * * * *' }
   })()
-  const result = await client.createProjectSchedule(currentProjectId(), {
+  const input: CreateScheduleRequest = {
     name: scheduleName.value.trim() || undefined,
     trigger,
     action,
     overlapPolicy: 'skip',
     misfirePolicy: scheduleMisfirePolicy.value,
-  })
-  addMessage('event', `schedule created: ${result.schedule.name}`)
+  }
+  const result = editingScheduleId.value
+    ? await client.updateProjectSchedule(currentProjectId(), editingScheduleId.value, input)
+    : await client.createProjectSchedule(currentProjectId(), input)
+  addMessage('event', `schedule ${editingScheduleId.value ? 'updated' : 'created'}: ${result.schedule.name}`)
+  editingScheduleId.value = ''
   await loadSchedules()
+}
+
+function editSchedule(schedule: Schedule) {
+  editingScheduleId.value = schedule.id
+  scheduleName.value = schedule.name
+  scheduleKind.value = schedule.trigger.kind
+  if (schedule.trigger.kind === 'once') {
+    scheduleRunAt.value = toDatetimeLocal(new Date(schedule.trigger.runAt || Date.now()))
+  } else if (schedule.trigger.kind === 'interval') {
+    scheduleEveryMinutes.value = Math.max(1, Math.round((schedule.trigger.everyMs || 60_000) / 60_000))
+  } else {
+    scheduleCron.value = schedule.trigger.cron || '*/5 * * * *'
+  }
+  scheduleActionType.value = schedule.action.type
+  scheduleMisfirePolicy.value = schedule.misfirePolicy
+  if (schedule.action.type === 'workflow') {
+    selectedWorkflowId.value = schedule.action.workflowId
+    schedulePrompt.value = schedule.action.prompt || ''
+  } else {
+    schedulePrompt.value = schedule.action.prompt
+  }
+}
+
+function cancelScheduleEdit() {
+  editingScheduleId.value = ''
 }
 
 async function pauseSchedule(scheduleId: string) {
@@ -1129,7 +1160,10 @@ onUnmounted(() => {
             </select>
           </label>
           <Textarea v-model="schedulePrompt" class="min-h-16" />
-          <Button size="sm" :disabled="scheduleActionType === 'workflow' && !selectedWorkflowId" @click="createSchedule().catch((error) => addMessage('error', errorMessage(error)))">Create schedule</Button>
+          <div class="flex flex-wrap gap-2">
+            <Button size="sm" :disabled="scheduleActionType === 'workflow' && !selectedWorkflowId" @click="createSchedule().catch((error) => addMessage('error', errorMessage(error)))">{{ editingScheduleId ? 'Save schedule' : 'Create schedule' }}</Button>
+            <Button v-if="editingScheduleId" variant="ghost" size="sm" @click="cancelScheduleEdit">Cancel</Button>
+          </div>
           <div v-if="currentProjectSchedules.length" class="list-stack max-h-56 overflow-auto">
             <div v-for="schedule in currentProjectSchedules.slice(0, 6)" :key="schedule.id" class="compact-row">
               <div class="min-w-0">
@@ -1141,6 +1175,7 @@ onUnmounted(() => {
                 <span v-if="schedule.nextRunAt">next {{ schedule.nextRunAt }}</span>
               </div>
               <div class="flex flex-wrap justify-end gap-1">
+                <Button variant="outline" size="xs" @click="editSchedule(schedule)">Edit</Button>
                 <Button variant="outline" size="xs" @click="triggerSchedule(schedule.id).catch((error) => addMessage('error', errorMessage(error)))">Run</Button>
                 <Button v-if="schedule.status === 'active'" variant="ghost" size="xs" @click="pauseSchedule(schedule.id).catch((error) => addMessage('error', errorMessage(error)))">Pause</Button>
                 <Button v-else variant="ghost" size="xs" @click="resumeSchedule(schedule.id).catch((error) => addMessage('error', errorMessage(error)))">Resume</Button>

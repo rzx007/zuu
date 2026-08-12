@@ -6,6 +6,7 @@ import {
   parseOpenSession,
   parseStartWorkflow,
   parseUpdateProject,
+  parseUpdateSchedule,
   parseUpdateSession,
 } from "../request-validation";
 import type { RouteDeps } from "./types";
@@ -233,6 +234,17 @@ export function registerProjectRoutes({ app, daemon }: RouteDeps) {
       return c.json({ schedule: daemon.getSchedule(c.req.param("scheduleId"), c.req.param("projectId")) });
     } catch (error) {
       return c.json(jsonError(error, 404), toStatus(error, 404));
+    }
+  });
+
+  app.patch("/v1/projects/:projectId/schedules/:scheduleId", async (c) => {
+    try {
+      const body = parseUpdateSchedule(await readJson(c.req));
+      return c.json({
+        schedule: daemon.updateSchedule(c.req.param("scheduleId"), body, c.req.param("projectId")),
+      });
+    } catch (error) {
+      return c.json(jsonError(error, 400), toStatus(error, 400));
     }
   });
 

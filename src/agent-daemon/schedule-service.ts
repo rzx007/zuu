@@ -1,4 +1,4 @@
-import type { CreateScheduleRequest } from "@zuu/client";
+import type { CreateScheduleRequest, UpdateScheduleRequest } from "@zuu/client";
 import type { ProjectRegistry } from "./project-service";
 import { ScheduleStore, type ScheduleExecutor } from "./schedules";
 
@@ -28,6 +28,20 @@ export class ScheduleService {
         ...request.action,
         projectId,
       },
+    });
+  }
+
+  updateSchedule(scheduleId: string, request: UpdateScheduleRequest, projectIdOverride?: string) {
+    const existing = this.getSchedule(scheduleId, projectIdOverride);
+    const projectId = this.options.projects.get(projectIdOverride ?? request.action?.projectId ?? existing.action.projectId).id;
+    return this.store.update(scheduleId, {
+      ...request,
+      action: request.action
+        ? {
+            ...request.action,
+            projectId,
+          }
+        : undefined,
     });
   }
 

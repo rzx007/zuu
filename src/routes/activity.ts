@@ -1,7 +1,7 @@
 import type { EventStreamQuery, PromptStreamEvent } from "@zuu/client";
 import { streamSSE } from "hono/streaming";
 import { jsonError, readJson, toStatus } from "../http";
-import { parseCreateSchedule, parseStartWorkflow } from "../request-validation";
+import { parseCreateSchedule, parseStartWorkflow, parseUpdateSchedule } from "../request-validation";
 import { writePromptStreamEvent } from "./sse";
 import type { RouteDeps } from "./types";
 
@@ -187,6 +187,15 @@ export function registerActivityRoutes({ app, daemon }: RouteDeps) {
       return c.json({ schedule: daemon.getSchedule(c.req.param("scheduleId")) });
     } catch (error) {
       return c.json(jsonError(error, 404), toStatus(error, 404));
+    }
+  });
+
+  app.patch("/v1/schedules/:scheduleId", async (c) => {
+    try {
+      const body = parseUpdateSchedule(await readJson(c.req));
+      return c.json({ schedule: daemon.updateSchedule(c.req.param("scheduleId"), body) });
+    } catch (error) {
+      return c.json(jsonError(error, 400), toStatus(error, 400));
     }
   });
 

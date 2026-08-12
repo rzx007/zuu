@@ -397,6 +397,20 @@ async function main() {
   if (schedule.schedule.misfirePolicy !== "skip") {
     throw new Error("schedule misfire policy should default to skip");
   }
+  const updatedSchedule = await client.updateProjectSchedule(defaultProject.id, schedule.schedule.id, {
+    name: "updated workflow schedule",
+    trigger: { kind: "interval", everyMs: 120_000 },
+    misfirePolicy: "run_once",
+  });
+  if (
+    updatedSchedule.schedule.id !== schedule.schedule.id ||
+    updatedSchedule.schedule.name !== "updated workflow schedule" ||
+    updatedSchedule.schedule.trigger.everyMs !== 120_000 ||
+    updatedSchedule.schedule.misfirePolicy !== "run_once" ||
+    !updatedSchedule.schedule.nextRunAt
+  ) {
+    throw new Error("schedule update response is invalid");
+  }
   const filteredSchedules = await client.listProjectSchedules(defaultProject.id);
   if (!filteredSchedules.schedules.some((item) => item.id === schedule.schedule.id)) {
     throw new Error("project-filtered schedules should include the default project schedule");
@@ -436,6 +450,15 @@ async function main() {
   if (loadedSchedule.schedule.id !== schedule.schedule.id) {
     throw new Error("schedule lookup returned the wrong schedule");
   }
+  let unsupportedUpdateMisfireFailed = false;
+  try {
+    await client.updateProjectSchedule(defaultProject.id, schedule.schedule.id, {
+      misfirePolicy: "later" as never,
+    });
+  } catch {
+    unsupportedUpdateMisfireFailed = true;
+  }
+  if (!unsupportedUpdateMisfireFailed) throw new Error("unsupported update misfire policy should fail");
   const deletedSchedule = await client.deleteProjectSchedule(defaultProject.id, schedule.schedule.id);
   if (deletedSchedule.schedule.id !== schedule.schedule.id) {
     throw new Error("delete schedule returned the wrong schedule");

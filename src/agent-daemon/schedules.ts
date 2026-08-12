@@ -4,6 +4,7 @@ import type {
   ScheduleAction,
   ScheduleRun,
   ScheduleTrigger,
+  UpdateScheduleRequest,
 } from "@zuu/client";
 import { JsonFileStore } from "./json-file-store";
 
@@ -224,6 +225,30 @@ export class ScheduleStore {
     };
 
     this.schedules.set(schedule.id, schedule);
+    this.persist();
+    this.arm(schedule);
+    return schedule;
+  }
+
+  update(scheduleId: string, request: UpdateScheduleRequest) {
+    const schedule = this.get(scheduleId);
+    if (request.trigger !== undefined) validateTrigger(request.trigger);
+    if (request.action !== undefined) validateAction(request.action);
+    validateOverlapPolicy(request.overlapPolicy);
+    validateMisfirePolicy(request.misfirePolicy);
+
+    const triggerChanged = request.trigger !== undefined;
+    if (request.name !== undefined) schedule.name = request.name.trim() || defaultScheduleName(request.action ?? schedule.action);
+    if (request.trigger !== undefined) schedule.trigger = request.trigger;
+    if (request.action !== undefined) schedule.action = request.action;
+    if (request.overlapPolicy !== undefined) schedule.overlapPolicy = request.overlapPolicy;
+    if (request.misfirePolicy !== undefined) schedule.misfirePolicy = request.misfirePolicy;
+    schedule.updatedAt = new Date().toISOString();
+
+    this.clearTimer(schedule.id);
+    if (triggerChanged && schedule.status === "active") {
+      schedule.nextRunAt = computeNextRunAt(schedule.trigger);
+    }
     this.persist();
     this.arm(schedule);
     return schedule;
