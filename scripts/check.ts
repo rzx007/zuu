@@ -1433,6 +1433,17 @@ async function main() {
   if (!sensitiveApproval || sensitiveApproval.kind !== "filesystem" || sensitiveApproval.risk !== "high") {
     throw new Error("sensitive read approval should use a filesystem scoped approval");
   }
+  const sensitiveList = await toolCallHandlers[0]?.(
+    { type: "tool_call", toolName: "ls", toolCallId: "tool-call-sensitive-list", input: { path: ".ssh/id_ed25519" } },
+    toolCallContext,
+  );
+  if (!sensitiveList || typeof sensitiveList !== "object" || !("block" in sensitiveList) || sensitiveList.block !== true) {
+    throw new Error("approval extension should apply the filesystem policy matrix to sensitive list paths");
+  }
+  const sensitiveListApproval = extensionStore.list("pending").find((approval) => approval.scope === "tool:ls:sensitive_path");
+  if (!sensitiveListApproval || sensitiveListApproval.kind !== "filesystem" || sensitiveListApproval.risk !== "high") {
+    throw new Error("sensitive list approval should use the filesystem policy matrix");
+  }
   extensionStore.resolve(sensitiveApproval.id, { decision: "allow_session" });
   const allowedSensitiveRead = await toolCallHandlers[0]?.(
     { type: "tool_call", toolName: "read", toolCallId: "tool-call-sensitive-read-allowed", input: { path: ".env" } },

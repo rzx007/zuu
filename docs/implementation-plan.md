@@ -766,7 +766,7 @@ UI end-to-end
 - Package API 已能展示安装状态、信任状态、加载状态、显式触发安装/更新/删除，并通过持久化 operation 记录暴露任务进度和失败原因；WebUI 已能 trust/revoke package source 并展示 SDK resource diagnostics/collision。未信任 package 会保留在配置清单中，但已从 Pi `ResourceLoader` 和 `pi-package` workflow backend 的加载链路中过滤，diagnostics 会通过 `blockedPackages` 暴露被阻止加载的 source。
 - Approval 已接入 Pi tool call 拦截和 SSE 事件，但当前策略是 fail-closed：危险工具被阻断后需要用户 resolve 并重试 prompt，尚未实现挂起并恢复同一个 tool call 的交互式等待。
 - 当前 API token 已有 admin/read 最小权限分级和多 actor 本地 token 管理；审计日志已覆盖受保护只读 API、已授权写 API、auth token create/revoke、`authScope` details 和常用检索过滤；后续仍可继续细化更多 scope 和 actor 级审计字段。
-- 路径保护已有根目录级 allowlist，并已对默认只读工具增加敏感路径审批；尚未做到完整的按工具/动作策略矩阵。
+- 路径保护已有根目录级 allowlist，并已对默认只读工具增加敏感路径审批；tool-call approval policy 已收敛为按工具/动作声明的基础策略矩阵，覆盖 `bash/edit/write` 默认阻断以及 `read/grep/find/ls` 敏感路径阻断；后续可继续扩展更细的工具参数和动作级策略。
 - 默认工具集偏只读，`bash`、`edit`、`write` 需要 UI 显式启用。
 - 当前环境下真实模型 stream 可能因为网络返回 `Connection error`；daemon 已将 SDK assistant error 映射为 SSE error，并可通过模型 smoke test 把真实调用结果保存为 run/events。
 - Workflow/subagent package 在当前环境尚未安装，diagnostics 会明确报告缺口；`pi-package` adapter 已有 launch 桥接，但当前 Windows 原生环境会按 `@agwab/pi-workflow` 包页面说明标记为不可用。Scheduler 已有最小内置后端、基础 5 字段 cron、IANA timezone、skip/queue/parallel overlap、skip/run_once misfire、有限 retry policy 和 best-effort schedule run abort，但真实跨进程持久调度队列仍未落地。

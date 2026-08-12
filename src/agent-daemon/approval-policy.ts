@@ -13,12 +13,6 @@ import type { RunEventDraft } from "./run-events";
 
 const APPROVAL_EVENT_CHANNEL = "zuu:approval";
 const TOOL_INPUT_PREVIEW_LIMIT = 600;
-const APPROVAL_REQUIRED_TOOLS = new Map<string, ApprovalRisk>([
-  ["bash", "high"],
-  ["edit", "high"],
-  ["write", "high"],
-]);
-const SENSITIVE_READ_TOOLS = new Set(["read", "grep", "find", "ls"]);
 const SENSITIVE_PATH_FRAGMENTS = [
   ".env",
   "/.ssh/",
@@ -46,6 +40,30 @@ const SENSITIVE_PATH_FRAGMENTS = [
   ".netrc",
   ".pypirc",
 ];
+
+type ToolAction = "execute" | "modify" | "read" | "search" | "list";
+
+interface ToolApprovalRule {
+  risk: ApprovalRisk;
+  scopeSuffix?: string;
+}
+
+interface ToolPolicy {
+  action: ToolAction;
+  kind: CreateApprovalRequest["kind"];
+  defaultRule?: ToolApprovalRule;
+  sensitivePathRule?: ToolApprovalRule;
+}
+
+const TOOL_POLICY = new Map<string, ToolPolicy>([
+  ["bash", { action: "execute", kind: "command", defaultRule: { risk: "high" } }],
+  ["edit", { action: "modify", kind: "filesystem", defaultRule: { risk: "high" } }],
+  ["write", { action: "modify", kind: "filesystem", defaultRule: { risk: "high" } }],
+  ["read", { action: "read", kind: "filesystem", sensitivePathRule: { risk: "high", scopeSuffix: "sensitive_path" } }],
+  ["grep", { action: "search", kind: "filesystem", sensitivePathRule: { risk: "high", scopeSuffix: "sensitive_path" } }],
+  ["find", { action: "search", kind: "filesystem", sensitivePathRule: { risk: "high", scopeSuffix: "sensitive_path" } }],
+  ["ls", { action: "list", kind: "filesystem", sensitivePathRule: { risk: "high", scopeSuffix: "sensitive_path" } }],
+]);
 
 type ApprovalEvent =
   | { type: "approval_requested"; runId: string; approval: Approval }
@@ -78,13 +96,13 @@ export function createApprovalExtension(options: ApprovalExtensionOptions): Inli
     hidden: true,
     factory: (pi) => {
       pi.on("tool_call", (event, ctx) => {
-        const approvalRisk = approvalRiskForToolCall(event);
-        const requiresApproval = Boolean(approvalRisk);
+        const approvalDecision = approvalDecisionForToolCall(event);
+        const requiresApproval = Boolean(approvalDecision);
         const request = createToolApprovalRequest(
           event,
           ctx.sessionManager.getSessionId(),
           options.getActiveRunId,
-          approvalRisk,
+          approvalDecision,
         );
         if (!request) {
           return requiresApproval
@@ -127,35 +145,38 @@ function createToolApprovalRequest(
   event: ToolCallEvent,
   sessionId: string,
   getActiveRunId: (sessionId: string) => string | undefined,
-  risk: ApprovalRisk | undefined,
+  decision: ToolApprovalDecision | undefined,
 ): CreateApprovalRequest | undefined {
-  if (!risk) return undefined;
+  if (!decision) return undefined;
 
   const runId = getActiveRunId(sessionId);
   if (!runId) return undefined;
-  const sensitivePath = isSensitiveReadToolCall(event);
-  const scope = sensitivePath ? `tool:${event.toolName}:sensitive_path` : `tool:${event.toolName}`;
+  const scope = decision.scopeSuffix ? `tool:${event.toolName}:${decision.scopeSuffix}` : `tool:${event.toolName}`;
 
   return {
     sessionId,
     runId,
-    kind: event.toolName === "bash" ? "command" : "filesystem",
+    kind: decision.policy.kind,
     scope,
-    title: sensitivePath ? `Allow ${event.toolName} sensitive path access` : `Allow ${event.toolName}`,
-    description: sensitivePath
-      ? `The agent requested ${event.toolName} access to a sensitive path with input: ${previewInput(event.input)}`
-      : `The agent requested the ${event.toolName} tool with input: ${previewInput(event.input)}`,
-    risk,
+    title: decision.scopeSuffix ? `Allow ${event.toolName} sensitive path access` : `Allow ${event.toolName}`,
+    description: decision.scopeSuffix
+      ? `The agent requested ${event.toolName} ${decision.policy.action} access to a sensitive path with input: ${previewInput(event.input)}`
+      : `The agent requested the ${event.toolName} ${decision.policy.action} tool with input: ${previewInput(event.input)}`,
+    risk: decision.risk,
   };
 }
 
-function approvalRiskForToolCall(event: ToolCallEvent): ApprovalRisk | undefined {
-  return APPROVAL_REQUIRED_TOOLS.get(event.toolName) ?? (isSensitiveReadToolCall(event) ? "high" : undefined);
+interface ToolApprovalDecision extends ToolApprovalRule {
+  policy: ToolPolicy;
 }
 
-function isSensitiveReadToolCall(event: ToolCallEvent) {
-  if (!SENSITIVE_READ_TOOLS.has(event.toolName)) return false;
-  return inputReferencesSensitivePath(event.input);
+function approvalDecisionForToolCall(event: ToolCallEvent): ToolApprovalDecision | undefined {
+  const policy = TOOL_POLICY.get(event.toolName);
+  if (!policy) return undefined;
+  if (policy.sensitivePathRule && inputReferencesSensitivePath(event.input)) {
+    return { ...policy.sensitivePathRule, policy };
+  }
+  return policy.defaultRule ? { ...policy.defaultRule, policy } : undefined;
 }
 
 function inputReferencesSensitivePath(input: unknown) {
