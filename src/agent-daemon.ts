@@ -235,6 +235,14 @@ export class ZuuDaemon {
     return this.scheduleService.getSchedule(scheduleId, projectId);
   }
 
+  listScheduleRuns(scheduleId?: string, projectId?: string) {
+    return this.scheduleService.listScheduleRuns(scheduleId, projectId);
+  }
+
+  getScheduleRun(runId: string, projectId?: string) {
+    return this.scheduleService.getScheduleRun(runId, projectId);
+  }
+
   pauseSchedule(scheduleId: string, projectId?: string) {
     return this.scheduleService.pauseSchedule(scheduleId, projectId);
   }

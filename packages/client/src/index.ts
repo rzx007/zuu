@@ -28,6 +28,8 @@ import type {
   RunsResponse,
   ResolveApprovalRequest,
   ScheduleResponse,
+  ScheduleRunResponse,
+  ScheduleRunsResponse,
   SchedulesResponse,
   SessionActionResponse,
   SessionResponse,
@@ -94,6 +96,8 @@ export interface ZuuClient {
   listProjectSchedules(projectId: string): Promise<SchedulesResponse>;
   createProjectSchedule(projectId: string, input: CreateScheduleRequest): Promise<ScheduleResponse>;
   getProjectSchedule(projectId: string, scheduleId: string): Promise<ScheduleResponse>;
+  listProjectScheduleRuns(projectId: string, scheduleId: string): Promise<ScheduleRunsResponse>;
+  getProjectScheduleRun(projectId: string, runId: string): Promise<ScheduleRunResponse>;
   pauseProjectSchedule(projectId: string, scheduleId: string): Promise<ScheduleResponse>;
   resumeProjectSchedule(projectId: string, scheduleId: string): Promise<ScheduleResponse>;
   triggerProjectSchedule(projectId: string, scheduleId: string): Promise<ScheduleResponse>;
@@ -121,6 +125,8 @@ export interface ZuuClient {
   listSchedules(projectId?: string): Promise<SchedulesResponse>;
   createSchedule(input: CreateScheduleRequest): Promise<ScheduleResponse>;
   getSchedule(scheduleId: string): Promise<ScheduleResponse>;
+  listScheduleRuns(scheduleId: string): Promise<ScheduleRunsResponse>;
+  getScheduleRun(runId: string): Promise<ScheduleRunResponse>;
   pauseSchedule(scheduleId: string): Promise<ScheduleResponse>;
   resumeSchedule(scheduleId: string): Promise<ScheduleResponse>;
   triggerSchedule(scheduleId: string): Promise<ScheduleResponse>;
@@ -431,6 +437,22 @@ export function createZuuClient(options: ZuuClientOptions = {}): ZuuClient {
         undefined,
         apiToken,
       ),
+    listProjectScheduleRuns: (projectId, scheduleId) =>
+      requestJson<ScheduleRunsResponse>(
+        fetchImpl,
+        baseUrl,
+        `/v1/projects/${encodeURIComponent(projectId)}/schedules/${encodeURIComponent(scheduleId)}/runs`,
+        undefined,
+        apiToken,
+      ),
+    getProjectScheduleRun: (projectId, runId) =>
+      requestJson<ScheduleRunResponse>(
+        fetchImpl,
+        baseUrl,
+        `/v1/projects/${encodeURIComponent(projectId)}/schedule-runs/${encodeURIComponent(runId)}`,
+        undefined,
+        apiToken,
+      ),
     pauseProjectSchedule: (projectId, scheduleId) =>
       requestJson<ScheduleResponse>(
         fetchImpl,
@@ -567,6 +589,16 @@ export function createZuuClient(options: ZuuClientOptions = {}): ZuuClient {
       }, apiToken),
     getSchedule: (scheduleId) =>
       requestJson<ScheduleResponse>(fetchImpl, baseUrl, `/v1/schedules/${encodeURIComponent(scheduleId)}`, undefined, apiToken),
+    listScheduleRuns: (scheduleId) =>
+      requestJson<ScheduleRunsResponse>(
+        fetchImpl,
+        baseUrl,
+        `/v1/schedules/${encodeURIComponent(scheduleId)}/runs`,
+        undefined,
+        apiToken,
+      ),
+    getScheduleRun: (runId) =>
+      requestJson<ScheduleRunResponse>(fetchImpl, baseUrl, `/v1/schedule-runs/${encodeURIComponent(runId)}`, undefined, apiToken),
     pauseSchedule: (scheduleId) =>
       requestJson<ScheduleResponse>(fetchImpl, baseUrl, `/v1/schedules/${encodeURIComponent(scheduleId)}/pause`, {
         method: "POST",

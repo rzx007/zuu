@@ -182,6 +182,22 @@ export function registerProjectRoutes({ app, daemon }: RouteDeps) {
     }
   });
 
+  app.get("/v1/projects/:projectId/schedules/:scheduleId/runs", (c) => {
+    try {
+      return c.json({ runs: daemon.listScheduleRuns(c.req.param("scheduleId"), c.req.param("projectId")) });
+    } catch (error) {
+      return c.json(jsonError(error, 404), toStatus(error, 404));
+    }
+  });
+
+  app.get("/v1/projects/:projectId/schedule-runs/:runId", (c) => {
+    try {
+      return c.json({ run: daemon.getScheduleRun(c.req.param("runId"), c.req.param("projectId")) });
+    } catch (error) {
+      return c.json(jsonError(error, 404), toStatus(error, 404));
+    }
+  });
+
   app.post("/v1/projects/:projectId/schedules/:scheduleId/pause", (c) => {
     try {
       return c.json({ schedule: daemon.pauseSchedule(c.req.param("scheduleId"), c.req.param("projectId")) });

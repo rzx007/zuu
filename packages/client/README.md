@@ -58,6 +58,9 @@ const storedSessions = await client.listProjectStoredSessions(currentProjectId);
 const workflows = await client.listProjectWorkflows(currentProjectId);
 const workflowRuns = await client.listProjectWorkflowRuns(currentProjectId);
 const schedules = await client.listProjectSchedules(currentProjectId);
+const scheduleRuns = schedules.schedules[0]
+  ? await client.listProjectScheduleRuns(currentProjectId, schedules.schedules[0].id)
+  : { runs: [] };
 ```
 
 ## 错误处理

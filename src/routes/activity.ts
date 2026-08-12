@@ -166,6 +166,22 @@ export function registerActivityRoutes({ app, daemon }: RouteDeps) {
     }
   });
 
+  app.get("/v1/schedules/:scheduleId/runs", (c) => {
+    try {
+      return c.json({ runs: daemon.listScheduleRuns(c.req.param("scheduleId")) });
+    } catch (error) {
+      return c.json(jsonError(error, 404), toStatus(error, 404));
+    }
+  });
+
+  app.get("/v1/schedule-runs/:runId", (c) => {
+    try {
+      return c.json({ run: daemon.getScheduleRun(c.req.param("runId")) });
+    } catch (error) {
+      return c.json(jsonError(error, 404), toStatus(error, 404));
+    }
+  });
+
   app.post("/v1/schedules/:scheduleId/pause", (c) => {
     try {
       return c.json({ schedule: daemon.pauseSchedule(c.req.param("scheduleId")) });

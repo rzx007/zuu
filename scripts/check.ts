@@ -342,6 +342,14 @@ async function main() {
   if (scheduleRun?.status !== "done" || !scheduleRun.workflowRunId) {
     throw new Error("triggered schedule response is invalid");
   }
+  const scheduleRuns = await client.listProjectScheduleRuns(defaultProject.id, schedule.schedule.id);
+  if (!scheduleRuns.runs.some((run) => run.id === scheduleRun.id)) {
+    throw new Error("schedule run list should include the triggered run");
+  }
+  const loadedScheduleRun = await client.getProjectScheduleRun(defaultProject.id, scheduleRun.id);
+  if (loadedScheduleRun.run.id !== scheduleRun.id || loadedScheduleRun.run.scheduleId !== schedule.schedule.id) {
+    throw new Error("schedule run lookup returned the wrong run");
+  }
   if (triggeredSchedule.schedule.nextRunAt !== nextRunAtBeforeTrigger) {
     throw new Error("manual schedule trigger should preserve the next automatic run");
   }
@@ -642,6 +650,8 @@ async function main() {
   if (opened.session.id !== persisted.session.id) throw new Error("openSession returned the wrong session");
 
   await expectClientError(() => client.getRun("missing"), { status: 404, code: "not_found" });
+  await expectClientError(() => client.listScheduleRuns("missing"), { status: 404, code: "not_found" });
+  await expectClientError(() => client.getScheduleRun("missing"), { status: 404, code: "not_found" });
 
   console.log("ok");
 }

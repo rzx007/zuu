@@ -38,6 +38,19 @@ export class ScheduleService {
     return schedule;
   }
 
+  listScheduleRuns(scheduleId?: string, projectId?: string) {
+    if (scheduleId) {
+      return this.getSchedule(scheduleId, projectId).runs;
+    }
+    return this.listSchedules(projectId).flatMap((schedule) => schedule.runs).sort((a, b) => b.startedAt.localeCompare(a.startedAt));
+  }
+
+  getScheduleRun(runId: string, projectId?: string) {
+    const run = this.store.getRun(runId);
+    this.getSchedule(run.scheduleId, projectId);
+    return run;
+  }
+
   pauseSchedule(scheduleId: string, projectId?: string) {
     this.getSchedule(scheduleId, projectId);
     return this.store.pause(scheduleId);

@@ -62,6 +62,8 @@ ZUU_PI_WORKFLOW_RUN=1 pnpm check:pi-workflow
 - `GET /v1/projects/:projectId/schedules`
 - `POST /v1/projects/:projectId/schedules`
 - `GET /v1/projects/:projectId/schedules/:scheduleId`
+- `GET /v1/projects/:projectId/schedules/:scheduleId/runs`
+- `GET /v1/projects/:projectId/schedule-runs/:runId`
 - `POST /v1/projects/:projectId/schedules/:scheduleId/pause`
 - `POST /v1/projects/:projectId/schedules/:scheduleId/resume`
 - `POST /v1/projects/:projectId/schedules/:scheduleId/trigger`
@@ -90,6 +92,8 @@ ZUU_PI_WORKFLOW_RUN=1 pnpm check:pi-workflow
 - `GET /v1/schedules`
 - `POST /v1/schedules`
 - `GET /v1/schedules/:scheduleId`
+- `GET /v1/schedules/:scheduleId/runs`
+- `GET /v1/schedule-runs/:runId`
 - `POST /v1/schedules/:scheduleId/pause`
 - `POST /v1/schedules/:scheduleId/resume`
 - `POST /v1/schedules/:scheduleId/trigger`

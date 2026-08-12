@@ -420,6 +420,14 @@ export interface ScheduleResponse {
   schedule: Schedule;
 }
 
+export interface ScheduleRunsResponse {
+  runs: ScheduleRun[];
+}
+
+export interface ScheduleRunResponse {
+  run: ScheduleRun;
+}
+
 export interface ApprovalsResponse {
   approvals: Approval[];
 }

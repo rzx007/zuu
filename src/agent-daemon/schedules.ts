@@ -143,10 +143,21 @@ export class ScheduleStore {
     return this.sortedSchedules().filter((schedule) => !projectId || schedule.action.projectId === projectId);
   }
 
+  listRuns(scheduleId?: string) {
+    const schedules = scheduleId ? [this.get(scheduleId)] : this.sortedSchedules();
+    return schedules.flatMap((schedule) => schedule.runs).sort((a, b) => b.startedAt.localeCompare(a.startedAt));
+  }
+
   get(scheduleId: string) {
     const schedule = this.schedules.get(scheduleId);
     if (!schedule) throw new Error(`Unknown schedule: ${scheduleId}`);
     return schedule;
+  }
+
+  getRun(runId: string) {
+    const run = this.listRuns().find((item) => item.id === runId);
+    if (!run) throw new Error(`Unknown schedule run: ${runId}`);
+    return run;
   }
 
   create(request: CreateScheduleRequest) {
