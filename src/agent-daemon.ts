@@ -1,33 +1,6 @@
 import { fileURLToPath } from "node:url";
-import {
-  createEventBus,
-  type EventBusController,
-} from "@earendil-works/pi-coding-agent";
 import type { AuditService } from "./agent-daemon/audit-service";
-import {
-  getApprovalStorePath,
-  getPackageOperationStorePath,
-  getPackageTrustStorePath,
-  getProjectStorePath,
-  getRunEventStorePath,
-  getRunStorePath,
-  getScheduleLeaseStorePath,
-  getScheduleStorePath,
-  getZuuAgentDir,
-} from "./agent-daemon/environment";
-import { ApprovalService } from "./agent-daemon/approval-service";
-import { ApprovalApiService } from "./agent-daemon/approval-api-service";
-import { ModelService } from "./agent-daemon/model-service";
-import { ModelApiService } from "./agent-daemon/model-api-service";
-import { ProjectApiService } from "./agent-daemon/project-api-service";
-import { ProjectService } from "./agent-daemon/project-service";
-import { ScheduleApiService } from "./agent-daemon/schedule-api-service";
-import { ScheduleService } from "./agent-daemon/schedule-service";
-import { PackageApiService } from "./agent-daemon/package-api-service";
-import { PackageService } from "./agent-daemon/packages";
-import { PromptService } from "./agent-daemon/prompt-service";
-import { WorkflowApiService } from "./agent-daemon/workflow-api-service";
-import { WorkflowService } from "./agent-daemon/workflow-service";
+import { DaemonServiceRegistry } from "./agent-daemon/daemon-service-registry";
 import type {
   CreateScheduleRequest,
   CreateSessionRequest,
@@ -51,344 +24,272 @@ import type {
   UpdateScheduleRequest,
   UpdateSessionRequest,
 } from "@zuu/client";
-import { RunApiService } from "./agent-daemon/run-api-service";
-import { RunService } from "./agent-daemon/run-service";
-import { createDaemonScheduleExecutor, launchPromptAsRun } from "./agent-daemon/schedule-executor";
-import { SessionApiService } from "./agent-daemon/session-api-service";
 import { SessionService } from "./agent-daemon/session-service";
 
 export class ZuuDaemon {
-  private readonly approvalApiService: ApprovalApiService;
-  private readonly modelApiService: ModelApiService;
-  private readonly packageApiService: PackageApiService;
-  private readonly projectApiService: ProjectApiService;
-  private readonly runApiService: RunApiService;
-  private readonly scheduleApiService: ScheduleApiService;
-  private readonly sessionApiService: SessionApiService;
-  private readonly workflowApiService: WorkflowApiService;
+  private readonly services: DaemonServiceRegistry;
 
   constructor(options: { audit?: AuditService } = {}) {
-    this.approvalApiService = new ApprovalApiService(this.approvalService, options.audit);
-    this.modelApiService = new ModelApiService(this.modelService, {
-      workflowBackend: () => this.workflowService.getBackendInfo(),
-      activeModel: () => this.listSessions()[0]?.model,
-      prompt: (request) => this.prompt(request),
-      abortSession: (sessionId) => this.abort(sessionId),
-      deleteSession: (sessionId) => this.deleteSession(sessionId),
-    });
-    this.packageApiService = new PackageApiService(this.packageService, options.audit);
-    this.projectApiService = new ProjectApiService(this.projectService);
-    this.runApiService = new RunApiService(this.runService, this.sessionService);
-    this.scheduleApiService = new ScheduleApiService(this.scheduleService);
-    this.sessionApiService = new SessionApiService(this.sessionService, this.runService);
-    this.workflowApiService = new WorkflowApiService(this.workflowService);
-  }
-
-  private readonly agentDir = getZuuAgentDir();
-  private readonly runService = new RunService(getRunStorePath(this.agentDir), getRunEventStorePath(this.agentDir));
-  private readonly projectService = new ProjectService(getProjectStorePath(this.agentDir), this.agentDir);
-  private readonly approvalService = new ApprovalService(getApprovalStorePath(this.agentDir));
-  private readonly modelService = new ModelService();
-  private readonly activeRunBySessionId = new Map<string, string>();
-  private readonly approvalWaitBySessionId = new Map<string, boolean>();
-  private readonly eventBus: EventBusController = createEventBus();
-  private readonly packageService = new PackageService(
-    process.cwd(),
-    this.agentDir,
-    getPackageOperationStorePath(this.agentDir),
-    getPackageTrustStorePath(this.agentDir),
-  );
-  private readonly workflowService = new WorkflowService({
-    agentDir: this.agentDir,
-    packageService: this.packageService,
-    projects: this.projectService,
-    launchPrompt: (request) => this.launchWorkflowPrompt(request),
-  });
-  private readonly startedAt = new Date().toISOString();
-  private readonly sessionService = new SessionService({
-    agentDir: this.agentDir,
-    projects: this.projectService,
-    packageService: this.packageService,
-    modelRuntimePromise: this.modelService.getRuntimePromise(),
-    approvals: this.approvalService,
-    activeRunBySessionId: this.activeRunBySessionId,
-    approvalWaitBySessionId: this.approvalWaitBySessionId,
-    eventBus: this.eventBus,
-    startedAt: this.startedAt,
-  });
-  private readonly promptService = new PromptService({
-    sessions: this.sessionService,
-    runs: this.runService,
-    eventBus: this.eventBus,
-    activeRunBySessionId: this.activeRunBySessionId,
-    approvalWaitBySessionId: this.approvalWaitBySessionId,
-  });
-  private readonly scheduleService = new ScheduleService({
-    path: getScheduleStorePath(this.agentDir),
-    leasePath: getScheduleLeaseStorePath(this.agentDir),
-    projects: this.projectService,
-    executor: createDaemonScheduleExecutor({
+    this.services = new DaemonServiceRegistry({
       prompt: (request) => this.prompt(request),
       startWorkflow: (workflowId, request) => this.startWorkflow(workflowId, request),
-    }),
-  });
+      abortSession: (sessionId) => this.abort(sessionId),
+      deleteSession: (sessionId) => this.deleteSession(sessionId),
+    }, options);
+  }
 
   listProjects() {
-    return this.projectApiService.listProjects();
+    return this.services.projectApiService.listProjects();
   }
 
   getProject(projectId: string) {
-    return this.projectApiService.getProject(projectId);
+    return this.services.projectApiService.getProject(projectId);
   }
 
   createProject(request: CreateProjectRequest) {
-    return this.projectApiService.createProject(request);
+    return this.services.projectApiService.createProject(request);
   }
 
   updateProject(projectId: string, request: UpdateProjectRequest) {
-    return this.projectApiService.updateProject(projectId, request);
+    return this.services.projectApiService.updateProject(projectId, request);
   }
 
   deleteProject(projectId: string) {
-    return this.projectApiService.deleteProject(projectId);
+    return this.services.projectApiService.deleteProject(projectId);
   }
 
   async createSession(options: CreateSessionRequest = {}) {
-    return this.sessionApiService.createSession(options);
+    return this.services.sessionApiService.createSession(options);
   }
 
   async openSession(options: OpenSessionRequest) {
-    return this.sessionApiService.openSession(options);
+    return this.services.sessionApiService.openSession(options);
   }
 
   listSessions(projectId?: string) {
-    return this.sessionApiService.listSessions(projectId);
+    return this.services.sessionApiService.listSessions(projectId);
   }
 
   getSession(sessionId: string, projectId?: string) {
-    return this.sessionApiService.getSession(sessionId, projectId);
+    return this.services.sessionApiService.getSession(sessionId, projectId);
   }
 
   updateSession(sessionId: string, request: UpdateSessionRequest, projectId?: string) {
-    return this.sessionApiService.updateSession(sessionId, request, projectId);
+    return this.services.sessionApiService.updateSession(sessionId, request, projectId);
   }
 
   deleteSession(sessionId: string, projectId?: string) {
-    return this.sessionApiService.deleteSession(sessionId, projectId);
+    return this.services.sessionApiService.deleteSession(sessionId, projectId);
   }
 
   async listStoredSessions(cwd?: string, projectId?: string) {
-    return this.sessionApiService.listStoredSessions(cwd, projectId);
+    return this.services.sessionApiService.listStoredSessions(cwd, projectId);
   }
 
   listRuns(sessionId?: string, projectId?: string) {
-    return this.runApiService.listRuns(sessionId, projectId);
+    return this.services.runApiService.listRuns(sessionId, projectId);
   }
 
   getRun(runId: string, projectId?: string) {
-    return this.runApiService.getRun(runId, projectId);
+    return this.services.runApiService.getRun(runId, projectId);
   }
 
   async abortRun(runId: string, projectId?: string) {
-    return this.runApiService.abortRun(runId, projectId);
+    return this.services.runApiService.abortRun(runId, projectId);
   }
 
   listRunEvents(runId: string, afterEventId?: string, projectId?: string) {
-    return this.runApiService.listRunEvents(runId, afterEventId, projectId);
+    return this.services.runApiService.listRunEvents(runId, afterEventId, projectId);
   }
 
   listEvents(query: EventStreamQuery = {}) {
-    return this.runApiService.listEvents(query);
+    return this.services.runApiService.listEvents(query);
   }
 
   subscribeEvents(query: EventStreamQuery, listener: (event: PromptStreamEvent) => void) {
-    return this.runApiService.subscribeEvents(query, listener);
+    return this.services.runApiService.subscribeEvents(query, listener);
   }
 
   createApproval(request: CreateApprovalRequest) {
-    return this.approvalApiService.createApproval(request);
+    return this.services.approvalApiService.createApproval(request);
   }
 
   listApprovals(status?: ApprovalStatus) {
-    return this.approvalApiService.listApprovals(status);
+    return this.services.approvalApiService.listApprovals(status);
   }
 
   getApproval(approvalId: string) {
-    return this.approvalApiService.getApproval(approvalId);
+    return this.services.approvalApiService.getApproval(approvalId);
   }
 
   resolveApproval(approvalId: string, request: ResolveApprovalRequest) {
-    return this.approvalApiService.resolveApproval(approvalId, request);
+    return this.services.approvalApiService.resolveApproval(approvalId, request);
   }
 
   listWorkflows(projectId?: string) {
-    return this.workflowApiService.listWorkflows(projectId);
+    return this.services.workflowApiService.listWorkflows(projectId);
   }
 
   startWorkflow(workflowId: string, request: StartWorkflowRequest = {}, projectId?: string) {
-    return this.workflowApiService.startWorkflow(workflowId, request, projectId);
+    return this.services.workflowApiService.startWorkflow(workflowId, request, projectId);
   }
 
   async listWorkflowRuns(projectId?: string) {
-    return this.workflowApiService.listWorkflowRuns(projectId);
+    return this.services.workflowApiService.listWorkflowRuns(projectId);
   }
 
   async getWorkflowRun(runId: string, projectId?: string) {
-    return this.workflowApiService.getWorkflowRun(runId, projectId);
+    return this.services.workflowApiService.getWorkflowRun(runId, projectId);
   }
 
   async listWorkflowStages(runId: string, projectId?: string) {
-    return this.workflowApiService.listWorkflowStages(runId, projectId);
+    return this.services.workflowApiService.listWorkflowStages(runId, projectId);
   }
 
   async listWorkflowTasks(runId: string, projectId?: string) {
-    return this.workflowApiService.listWorkflowTasks(runId, projectId);
+    return this.services.workflowApiService.listWorkflowTasks(runId, projectId);
   }
 
   async getWorkflowArtifact(artifactId: string, projectId?: string) {
-    return this.workflowApiService.getWorkflowArtifact(artifactId, projectId);
+    return this.services.workflowApiService.getWorkflowArtifact(artifactId, projectId);
   }
 
   async abortWorkflowRun(runId: string, projectId?: string) {
-    return this.workflowApiService.abortWorkflowRun(runId, projectId);
-  }
-
-  private async launchWorkflowPrompt(request: PromptRequest) {
-    return launchPromptAsRun((promptRequest) => this.prompt(promptRequest), request);
+    return this.services.workflowApiService.abortWorkflowRun(runId, projectId);
   }
 
   listSchedules(projectId?: string) {
-    return this.scheduleApiService.listSchedules(projectId);
+    return this.services.scheduleApiService.listSchedules(projectId);
   }
 
   createSchedule(request: CreateScheduleRequest, projectIdOverride?: string) {
-    return this.scheduleApiService.createSchedule(request, projectIdOverride);
+    return this.services.scheduleApiService.createSchedule(request, projectIdOverride);
   }
 
   updateSchedule(scheduleId: string, request: UpdateScheduleRequest, projectIdOverride?: string) {
-    return this.scheduleApiService.updateSchedule(scheduleId, request, projectIdOverride);
+    return this.services.scheduleApiService.updateSchedule(scheduleId, request, projectIdOverride);
   }
 
   getSchedule(scheduleId: string, projectId?: string) {
-    return this.scheduleApiService.getSchedule(scheduleId, projectId);
+    return this.services.scheduleApiService.getSchedule(scheduleId, projectId);
   }
 
   listScheduleRuns(scheduleId?: string, projectId?: string) {
-    return this.scheduleApiService.listScheduleRuns(scheduleId, projectId);
+    return this.services.scheduleApiService.listScheduleRuns(scheduleId, projectId);
   }
 
   getScheduleRun(runId: string, projectId?: string) {
-    return this.scheduleApiService.getScheduleRun(runId, projectId);
+    return this.services.scheduleApiService.getScheduleRun(runId, projectId);
   }
 
   abortScheduleRun(runId: string, projectId?: string) {
-    return this.scheduleApiService.abortScheduleRun(runId, projectId);
+    return this.services.scheduleApiService.abortScheduleRun(runId, projectId);
   }
 
   pauseSchedule(scheduleId: string, projectId?: string) {
-    return this.scheduleApiService.pauseSchedule(scheduleId, projectId);
+    return this.services.scheduleApiService.pauseSchedule(scheduleId, projectId);
   }
 
   resumeSchedule(scheduleId: string, projectId?: string) {
-    return this.scheduleApiService.resumeSchedule(scheduleId, projectId);
+    return this.services.scheduleApiService.resumeSchedule(scheduleId, projectId);
   }
 
   triggerSchedule(scheduleId: string, projectId?: string) {
-    return this.scheduleApiService.triggerSchedule(scheduleId, projectId);
+    return this.services.scheduleApiService.triggerSchedule(scheduleId, projectId);
   }
 
   deleteSchedule(scheduleId: string, projectId?: string) {
-    return this.scheduleApiService.deleteSchedule(scheduleId, projectId);
+    return this.services.scheduleApiService.deleteSchedule(scheduleId, projectId);
   }
 
   summarizeSessionTree(sessionId: string) {
-    return this.sessionApiService.summarizeSessionTree(sessionId);
+    return this.services.sessionApiService.summarizeSessionTree(sessionId);
   }
 
   summarizeSession(session: Parameters<SessionService["summarizeSession"]>[0]) {
-    return this.sessionApiService.summarizeSession(session);
+    return this.services.sessionApiService.summarizeSession(session);
   }
 
   prompt(request: PromptRequest): AsyncGenerator<PromptStreamEvent> {
-    return this.promptService.prompt(request);
+    return this.services.promptService.prompt(request);
   }
 
   async abort(sessionId: string) {
-    return this.sessionApiService.abortSession(sessionId);
+    return this.services.sessionApiService.abortSession(sessionId);
   }
 
   async compact(sessionId: string, instructions?: string) {
-    return this.sessionApiService.compactSession(sessionId, instructions);
+    return this.services.sessionApiService.compactSession(sessionId, instructions);
   }
 
   async newSession(sessionId: string, options: NewSessionRequest = {}) {
-    return this.sessionApiService.newSession(sessionId, options);
+    return this.services.sessionApiService.newSession(sessionId, options);
   }
 
   async switchSession(sessionId: string, options: SwitchSessionRequest) {
-    return this.sessionApiService.switchSession(sessionId, options);
+    return this.services.sessionApiService.switchSession(sessionId, options);
   }
 
   async forkSession(sessionId: string, options: ForkSessionRequest) {
-    return this.sessionApiService.forkSession(sessionId, options);
+    return this.services.sessionApiService.forkSession(sessionId, options);
   }
 
   async importSession(sessionId: string, options: ImportSessionRequest) {
-    return this.sessionApiService.importSession(sessionId, options);
+    return this.services.sessionApiService.importSession(sessionId, options);
   }
 
   async diagnostics() {
-    return this.modelApiService.diagnostics();
+    return this.services.diagnostics();
   }
 
   async listModels() {
-    return this.modelApiService.listModels();
+    return this.services.listModels();
   }
 
   async smokeModel(request: ModelSmokeRequest = {}): Promise<ModelSmokeResponse> {
-    return this.modelApiService.smokeModel(request);
+    return this.services.smokeModel(request);
   }
 
   listPackages() {
-    return this.packageApiService.listPackages();
+    return this.services.packageApiService.listPackages();
   }
 
   async addPackage(request: PackageMutationRequest) {
-    return this.packageApiService.addPackage(request);
+    return this.services.packageApiService.addPackage(request);
   }
 
   async installPackage(request: PackageMutationRequest) {
-    return this.packageApiService.installPackage(request);
+    return this.services.packageApiService.installPackage(request);
   }
 
   async removePackage(request: PackageMutationRequest) {
-    return this.packageApiService.removePackage(request);
+    return this.services.packageApiService.removePackage(request);
   }
 
   async updatePackage(request: PackageMutationRequest) {
-    return this.packageApiService.updatePackage(request);
+    return this.services.packageApiService.updatePackage(request);
   }
 
   async trustPackage(request: PackageMutationRequest) {
-    return this.packageApiService.trustPackage(request);
+    return this.services.packageApiService.trustPackage(request);
   }
 
   async revokePackageTrust(request: PackageMutationRequest) {
-    return this.packageApiService.revokePackageTrust(request);
+    return this.services.packageApiService.revokePackageTrust(request);
   }
 
   listPackageOperations() {
-    return this.packageApiService.listPackageOperations();
+    return this.services.packageApiService.listPackageOperations();
   }
 
   getPackageOperation(operationId: string) {
-    return this.packageApiService.getPackageOperation(operationId);
+    return this.services.packageApiService.getPackageOperation(operationId);
   }
 
   async dispose() {
-    this.scheduleService.dispose();
-    await this.sessionService.dispose();
-    this.runService.clear();
+    this.services.scheduleService.dispose();
+    await this.services.sessionService.dispose();
+    this.services.runService.clear();
   }
 }
 
