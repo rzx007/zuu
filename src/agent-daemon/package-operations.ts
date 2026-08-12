@@ -119,7 +119,7 @@ export class PackageOperationStore {
         id: crypto.randomUUID(),
         operationId: operation.id,
         type: "error",
-        action: "install",
+        action: operation.action,
         source: operation.source,
         message,
         createdAt: now,

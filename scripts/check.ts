@@ -4,6 +4,7 @@ import { join } from "node:path";
 import app from "../src/index";
 import { ApprovalStore } from "../src/agent-daemon/approval-store";
 import { createApprovalExtension } from "../src/agent-daemon/approval-policy";
+import { PackageService } from "../src/agent-daemon/packages";
 import { PackageTrustStore } from "../src/agent-daemon/package-trust";
 import { createWorkflowBackend } from "../src/agent-daemon/workflows";
 import { createZuuClient } from "@zuu/client";
@@ -21,6 +22,9 @@ async function main() {
   const diagnostics = await client.diagnostics();
   if (!Array.isArray(diagnostics.resources.resourceDiagnostics)) {
     throw new Error("resource diagnostics response is invalid");
+  }
+  if (!Array.isArray(diagnostics.resources.blockedPackages)) {
+    throw new Error("blocked packages response is invalid");
   }
 
   let sawAuthHeader = false;
@@ -280,6 +284,9 @@ async function main() {
   if (packages.packages.some((item) => typeof item.trusted !== "boolean" || !item.trustStatus)) {
     throw new Error("packages trust response is invalid");
   }
+  if (packages.packages.some((item) => !item.loadStatus)) {
+    throw new Error("packages load status response is invalid");
+  }
   const packageOperations = await client.listPackageOperations();
   if (!Array.isArray(packageOperations.operations)) throw new Error("package operations response is invalid");
   let missingPackageOperationFailed = false;
@@ -306,6 +313,21 @@ async function main() {
     emptyPackageInstallFailed = true;
   }
   if (!emptyPackageInstallFailed) throw new Error("empty package install source should fail");
+  const untrustedSource = `npm:zuu-check-untrusted-${crypto.randomUUID()}`;
+  let untrustedPackageInstallFailed = false;
+  try {
+    await client.installPackage({ source: untrustedSource });
+  } catch {
+    untrustedPackageInstallFailed = true;
+  }
+  if (!untrustedPackageInstallFailed) throw new Error("untrusted package install should fail before network work starts");
+  let untrustedPackageUpdateFailed = false;
+  try {
+    await client.updatePackage({ source: untrustedSource });
+  } catch {
+    untrustedPackageUpdateFailed = true;
+  }
+  if (!untrustedPackageUpdateFailed) throw new Error("untrusted package update should fail before network work starts");
   let emptyPackageTrustFailed = false;
   try {
     await client.trustPackage({ source: " " });
@@ -322,6 +344,23 @@ async function main() {
   const untrustedPackage = trustStore.revoke("npm:check-package");
   if (untrustedPackage.status !== "untrusted" || trustStore.isTrusted("npm:check-package")) {
     throw new Error("package trust was not revoked");
+  }
+  const packageServiceAgentDir = mkdtempSync(join(tmpdir(), "zuu-package-service-check-"));
+  const packageService = new PackageService(
+    process.cwd(),
+    packageServiceAgentDir,
+    join(packageServiceAgentDir, "operations.json"),
+    join(packageServiceAgentDir, "trust.json"),
+  );
+  await packageService.add({ source: "npm:zuu-check-package" });
+  const blockedPackage = packageService.list().packages.find((item) => item.source === "npm:zuu-check-package");
+  if (blockedPackage?.loadStatus !== "blocked" || packageService.listTrustedPackageSources().length !== 0) {
+    throw new Error("untrusted package should be blocked from the trusted settings view");
+  }
+  packageService.trustPackage({ source: "npm:zuu-check-package" });
+  const enabledPackage = packageService.list().packages.find((item) => item.source === "npm:zuu-check-package");
+  if (enabledPackage?.loadStatus !== "enabled" || packageService.listTrustedPackageSources()[0] !== "npm:zuu-check-package") {
+    throw new Error("trusted package should be enabled in the trusted settings view");
   }
 
   const storedBefore = await client.listStoredSessions();

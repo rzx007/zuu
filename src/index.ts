@@ -93,10 +93,19 @@ app.post("/api/packages/install", async (c) => {
   }
 });
 
+app.post("/api/packages/update", async (c) => {
+  try {
+    const body = (await c.req.json()) as PackageMutationRequest;
+    return c.json(daemon.updatePackage(body));
+  } catch (error) {
+    return c.json(jsonError(error, 400), 400);
+  }
+});
+
 app.delete("/api/packages", async (c) => {
   try {
     const body = (await c.req.json()) as PackageMutationRequest;
-    return c.json(await daemon.removePackage(body));
+    return c.json(daemon.removePackage(body));
   } catch (error) {
     return c.json(jsonError(error, 400), 400);
   }

@@ -385,9 +385,23 @@ Daemon 启动时必须：
 
 Health 至少返回 Daemon 状态、版本、协议版本、uptime。
 
-Diagnostics 返回模型认证状态、Package 加载错误、Project 错误和 Scheduler 状态；不得返回密钥。Package 安装、更新或删除必须有可查询的 operation 记录，至少包含来源、进度事件、结束状态和失败原因。
+Diagnostics 返回模型认证状态、Package 加载错误、Project 错误和 Scheduler 状态；不得返回密钥。资源诊断必须区分已信任且会参与加载的 packages，以及因未信任而被阻止加载的 blocked packages。Package 安装、更新或删除必须有可查询的 operation 记录，至少包含来源、动作、进度事件、结束状态和失败原因。
 
-### 7.3 Projects
+### 7.3 Packages
+
+- `GET /v1/packages`
+- `POST /v1/packages`
+- `POST /v1/packages/install`
+- `POST /v1/packages/update`
+- `DELETE /v1/packages`
+- `POST /v1/packages/trust`
+- `DELETE /v1/packages/trust`
+- `GET /v1/package-operations`
+- `GET /v1/package-operations/:operationId`
+
+`POST /v1/packages` 只登记 package source，不安装、不信任、不加载。Package summary 必须返回 configured/installed/filtered 状态、trusted/untrusted 状态、enabled/blocked 加载状态和可用安装路径。未信任 package 可以保留在配置中用于审查，但不得进入 Pi `ResourceLoader`、Workflow/Subagent adapter 或任何 Extension binding 链路。
+
+### 7.4 Projects
 
 - `POST /v1/projects`
 - `GET /v1/projects`
@@ -395,7 +409,7 @@ Diagnostics 返回模型认证状态、Package 加载错误、Project 错误和 
 - `PATCH /v1/projects/:projectId`
 - `DELETE /v1/projects/:projectId`
 
-### 7.4 Sessions
+### 7.5 Sessions
 
 - `POST /v1/projects/:projectId/sessions`
 - `GET /v1/projects/:projectId/sessions`
@@ -405,7 +419,7 @@ Diagnostics 返回模型认证状态、Package 加载错误、Project 错误和 
 - `POST /v1/sessions/:sessionId/compact`
 - `DELETE /v1/sessions/:sessionId`
 
-### 7.5 Prompt 与运行控制
+### 7.6 Prompt 与运行控制
 
 - `POST /v1/sessions/:sessionId/prompts`
 - `POST /v1/sessions/:sessionId/steer`
@@ -426,7 +440,7 @@ interface PromptRequest {
 
 当 Session 正在运行且没有指定合法 `streamingBehavior` 时，返回 `409 session_busy`。
 
-### 7.6 Workflows
+### 7.7 Workflows
 
 - `GET /v1/projects/:projectId/workflows`
 - `POST /v1/projects/:projectId/workflow-runs`
@@ -439,7 +453,7 @@ interface PromptRequest {
 
 Daemon 必须通过 Adapter 隔离 `pi-workflow`、`pi-crew` 等后端差异。
 
-### 7.7 Approvals
+### 7.8 Approvals
 
 - `GET /v1/approvals?status=pending`
 - `GET /v1/approvals/:approvalId`
@@ -453,7 +467,7 @@ interface ResolveApprovalRequest {
 }
 ```
 
-### 7.8 Schedules
+### 7.9 Schedules
 
 - `POST /v1/schedules`
 - `GET /v1/schedules`
@@ -593,6 +607,16 @@ client.sessions.fork()
 
 client.runs.get()
 client.runs.abort()
+
+client.packages.list()
+client.packages.add()
+client.packages.install()
+client.packages.update()
+client.packages.remove()
+client.packages.trust()
+client.packages.revokeTrust()
+client.packages.listOperations()
+client.packages.getOperation()
 
 client.workflows.list()
 client.workflows.run()
@@ -817,6 +841,10 @@ Pi Packages 和 Extensions 具有本机代码执行权限。必须：
 - 记录安装来源与校验信息
 - 记录安装 operation、进度事件和失败原因
 - 安装前必须有用户或策略产生的 package source 信任记录
+- 更新前必须复用同一 package source 信任边界
+- 删除必须有 operation 记录，删除成功后应撤销对应 package source 的信任记录
+- 未信任 package 必须从 ResourceLoader、Workflow/Subagent adapter 和 Extension binding 链路中过滤
+- diagnostics 必须同时暴露 trusted packages 与 blocked packages，不得让 blocked package 只在静默状态中存在
 - 资源加载 warning、error 和 name collision 必须能通过 diagnostics 查询
 - 项目首次加载前获得信任
 - 升级后重新运行安全和集成测试

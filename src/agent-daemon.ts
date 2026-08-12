@@ -5,7 +5,6 @@ import {
   createAgentSessionRuntime,
   createAgentSessionServices,
   SessionManager,
-  SettingsManager,
   type AgentSession,
   type AgentSessionRuntime,
   type CreateAgentSessionRuntimeFactory,
@@ -117,7 +116,7 @@ export class ZuuDaemon {
 
   private createRuntimeFactory(options: CreateSessionOptions): CreateAgentSessionRuntimeFactory {
     return async ({ cwd, agentDir, sessionManager, sessionStartEvent }) => {
-      const settingsManager = SettingsManager.create(cwd, agentDir, { projectTrusted: true });
+      const settingsManager = this.packageService.createTrustedSettingsManager(cwd);
       const modelRuntime = await this.modelRuntimePromise;
       const services = await createAgentSessionServices({
         cwd,
@@ -302,7 +301,7 @@ export class ZuuDaemon {
   private createWorkflowBackend() {
     return createWorkflowBackend({
       path: getWorkflowStorePath(this.agentDir),
-      packages: this.listPackages().packages.map((item) => item.source),
+      packages: this.packageService.listTrustedPackageSources(),
       requestedKind: process.env.ZUU_WORKFLOW_BACKEND,
       agentDir: this.agentDir,
       launchPrompt: (request) => this.launchWorkflowPrompt(request),
@@ -625,8 +624,12 @@ export class ZuuDaemon {
     return this.packageService.install(request);
   }
 
-  async removePackage(request: PackageMutationRequest) {
+  removePackage(request: PackageMutationRequest) {
     return this.packageService.remove(request);
+  }
+
+  updatePackage(request: PackageMutationRequest) {
+    return this.packageService.update(request);
   }
 
   trustPackage(request: PackageMutationRequest) {

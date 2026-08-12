@@ -95,6 +95,7 @@ const flatTree = computed(() => flattenTree(sessionTree.value))
 const statusText = computed(() => (isRunning.value ? 'running' : 'ready'))
 const configuredProviders = computed(() => diagnostics.value?.models.configuredProviders.join(', ') || 'none')
 const resourceDiagnostics = computed(() => diagnostics.value?.resources.resourceDiagnostics || [])
+const blockedPackages = computed(() => diagnostics.value?.resources.blockedPackages || [])
 const selectedWorkflow = computed(() => workflows.value.find((workflow) => workflow.id === selectedWorkflowId.value))
 const runningPackageOperations = computed(() => packageOperations.value.filter((operation) => operation.status === 'running'))
 
@@ -250,8 +251,27 @@ async function installPackage(source: string) {
 }
 
 async function removePackage(source: string) {
-  await client.removePackage({ source })
-  await Promise.all([loadPackages(), loadDiagnostics()])
+  const response = await client.removePackage({ source })
+  packages.value = response.packages
+  packageOperations.value = [
+    response.operation,
+    ...packageOperations.value.filter((operation) => operation.id !== response.operation.id),
+  ]
+  addMessage('event', `package remove started: ${source}`)
+  schedulePackageOperationPoll()
+  await Promise.all([loadPackageOperations(), loadDiagnostics(), loadWorkflows()])
+}
+
+async function updatePackage(source: string) {
+  const response = await client.updatePackage({ source })
+  packages.value = response.packages
+  packageOperations.value = [
+    response.operation,
+    ...packageOperations.value.filter((operation) => operation.id !== response.operation.id),
+  ]
+  addMessage('event', `package update started: ${source}`)
+  schedulePackageOperationPoll()
+  await Promise.all([loadPackageOperations(), loadDiagnostics(), loadWorkflows()])
 }
 
 async function trustPackage(source: string) {
@@ -410,7 +430,7 @@ function latestPackageOperation(source: string) {
   return packageOperations.value.find((operation) => operation.source === source)
 }
 
-function isPackageInstalling(source: string) {
+function isPackageOperating(source: string) {
   return packageOperations.value.some((operation) => operation.source === source && operation.status === 'running')
 }
 
@@ -532,6 +552,7 @@ onUnmounted(() => {
             <div><dt>Skills</dt><dd>{{ diagnostics?.resources.skills ?? 0 }}</dd></div>
           </dl>
           <p v-if="resourceDiagnostics.length" class="text-destructive text-xs">{{ resourceDiagnostics.length }} resource diagnostics</p>
+          <p v-if="blockedPackages.length" class="text-destructive text-xs">{{ blockedPackages.length }} blocked packages</p>
           <p v-if="diagnostics?.gaps.length" class="text-destructive text-xs">{{ diagnostics.gaps.join(' / ') }}</p>
           <label class="field-label">
             API token
@@ -601,16 +622,17 @@ onUnmounted(() => {
                 <span v-if="item.trustedAt">trusted {{ item.trustedAt }}</span>
                 <span v-if="item.installedPath">{{ item.installedPath }}</span>
                 <span v-if="latestPackageOperation(item.source)">
-                  install {{ latestPackageOperation(item.source)?.status }} / {{ packageOperationMessage(latestPackageOperation(item.source)) }}
+                  {{ latestPackageOperation(item.source)?.action }} {{ latestPackageOperation(item.source)?.status }} / {{ packageOperationMessage(latestPackageOperation(item.source)) }}
                 </span>
               </div>
               <div class="flex flex-wrap justify-end gap-1">
                 <Button v-if="!item.trusted" variant="outline" size="xs" @click="trustPackage(item.source).catch((error) => addMessage('error', errorMessage(error)))">Trust</Button>
                 <Button v-else variant="ghost" size="xs" @click="revokePackageTrust(item.source).catch((error) => addMessage('error', errorMessage(error)))">Revoke</Button>
-                <Button v-if="item.status !== 'installed'" variant="outline" size="xs" :disabled="!item.trusted || isPackageInstalling(item.source)" @click="installPackage(item.source).catch((error) => addMessage('error', errorMessage(error)))">
-                  {{ isPackageInstalling(item.source) ? 'Installing' : 'Install' }}
+                <Button v-if="item.status === 'installed'" variant="outline" size="xs" :disabled="!item.trusted || isPackageOperating(item.source)" @click="updatePackage(item.source).catch((error) => addMessage('error', errorMessage(error)))">Update</Button>
+                <Button v-if="item.status !== 'installed'" variant="outline" size="xs" :disabled="!item.trusted || isPackageOperating(item.source)" @click="installPackage(item.source).catch((error) => addMessage('error', errorMessage(error)))">
+                  {{ isPackageOperating(item.source) ? 'Working' : 'Install' }}
                 </Button>
-                <Button variant="ghost" size="xs" @click="removePackage(item.source).catch((error) => addMessage('error', errorMessage(error)))">Remove</Button>
+                <Button variant="ghost" size="xs" :disabled="isPackageOperating(item.source)" @click="removePackage(item.source).catch((error) => addMessage('error', errorMessage(error)))">Remove</Button>
               </div>
             </div>
           </div>

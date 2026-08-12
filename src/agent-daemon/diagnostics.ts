@@ -1,9 +1,10 @@
 import {
   DefaultResourceLoader,
-  SettingsManager,
   type ModelRuntime,
 } from "@earendil-works/pi-coding-agent";
-import { getZuuAgentDir, packageSourceToString, sdkVersion } from "./environment";
+import { getPackageTrustStorePath, getZuuAgentDir, sdkVersion } from "./environment";
+import { createTrustedSettingsView } from "./package-settings";
+import { PackageTrustStore } from "./package-trust";
 import type { Diagnostics, ResourceDiagnostic, WorkflowBackendInfo } from "@zuu/client";
 
 let sdkInfo: ReturnType<typeof sdkVersion> | undefined;
@@ -20,7 +21,9 @@ export async function buildDiagnostics(
 ): Promise<Diagnostics> {
   const cwd = process.cwd();
   const agentDir = getZuuAgentDir();
-  const settingsManager = SettingsManager.create(cwd, agentDir, { projectTrusted: true });
+  const trustStore = new PackageTrustStore(getPackageTrustStorePath(agentDir));
+  const packageView = createTrustedSettingsView(cwd, agentDir, trustStore);
+  const settingsManager = packageView.settingsManager;
   const resourceLoader = new DefaultResourceLoader({ cwd, agentDir, settingsManager });
   await resourceLoader.reload();
 
@@ -35,8 +38,12 @@ export async function buildDiagnostics(
     .filter((provider) => modelRuntime.hasConfiguredAuth(provider.id))
     .map((provider) => provider.id);
 
-  const packages = settingsManager.getPackages().map(packageSourceToString);
+  const packages = packageView.trustedPackages;
+  const blockedPackages = packageView.blockedPackages;
   const gaps: string[] = [];
+  if (blockedPackages.length > 0) {
+    gaps.push(`${blockedPackages.length} package source(s) are configured but blocked until trusted.`);
+  }
   if (!packages.some((item) => item.includes("@agwab/pi-workflow"))) {
     gaps.push("Workflow/subagent orchestration is not installed; add npm:@agwab/pi-workflow for reusable workflows.");
   }
@@ -88,6 +95,7 @@ export async function buildDiagnostics(
       extensionErrors: extensionResult.errors,
       resourceDiagnostics,
       packages,
+      blockedPackages,
       workflowBackend,
     },
     gaps,

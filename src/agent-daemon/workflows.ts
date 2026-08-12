@@ -71,10 +71,10 @@ function probePiWorkflowPackage(options: {
     agentDir: options.agentDir,
     settingsManager,
   });
-  const configured = packageManager
-    .listConfiguredPackages()
-    .find((item) => item.source.includes("@agwab/pi-workflow"));
-  const packageSource = options.packageSource ?? configured?.source;
+  const packageSource = options.packageSource;
+  const configured = packageSource
+    ? packageManager.listConfiguredPackages().find((item) => item.source === packageSource)
+    : undefined;
   const installedPath =
     configured?.installedPath ??
     (configured ? packageManager.getInstalledPath(configured.source, configured.scope) : undefined);

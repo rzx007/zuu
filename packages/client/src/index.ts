@@ -10,6 +10,7 @@ import type {
   ApprovalsResponse,
   PackageMutationRequest,
   PackageInstallResponse,
+  PackageOperationStartResponse,
   PackageOperationResponse,
   PackageOperationsResponse,
   PackagesResponse,
@@ -53,7 +54,8 @@ export interface ZuuClient {
   listModels(): Promise<ModelsResponse>;
   addPackage(input: PackageMutationRequest): Promise<PackagesResponse>;
   installPackage(input: PackageMutationRequest): Promise<PackageInstallResponse>;
-  removePackage(input: PackageMutationRequest): Promise<PackagesResponse>;
+  updatePackage(input: PackageMutationRequest): Promise<PackageOperationStartResponse>;
+  removePackage(input: PackageMutationRequest): Promise<PackageOperationStartResponse>;
   trustPackage(input: PackageMutationRequest): Promise<PackagesResponse>;
   revokePackageTrust(input: PackageMutationRequest): Promise<PackagesResponse>;
   listPackageOperations(): Promise<PackageOperationsResponse>;
@@ -166,8 +168,13 @@ export function createZuuClient(options: ZuuClientOptions = {}): ZuuClient {
         method: "POST",
         body: JSON.stringify(input),
       }, apiToken),
+    updatePackage: (input) =>
+      requestJson<PackageOperationStartResponse>(fetchImpl, baseUrl, "/api/packages/update", {
+        method: "POST",
+        body: JSON.stringify(input),
+      }, apiToken),
     removePackage: (input) =>
-      requestJson<PackagesResponse>(fetchImpl, baseUrl, "/api/packages", {
+      requestJson<PackageOperationStartResponse>(fetchImpl, baseUrl, "/api/packages", {
         method: "DELETE",
         body: JSON.stringify(input),
       }, apiToken),

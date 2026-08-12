@@ -42,6 +42,7 @@ ZUU_PI_WORKFLOW_RUN=1 pnpm check:pi-workflow
 - `GET /api/packages`
 - `POST /api/packages`
 - `POST /api/packages/install`
+- `POST /api/packages/update`
 - `DELETE /api/packages`
 - `POST /api/packages/trust`
 - `DELETE /api/packages/trust`
@@ -81,11 +82,11 @@ ZUU_PI_WORKFLOW_RUN=1 pnpm check:pi-workflow
 
 默认情况下，Zuu 会把 Pi 应用状态存放在 `.zuu/pi-agent`，嵌入式应用不需要写入 `~/.pi/agent`。可以通过 `ZUU_AGENT_DIR` 覆盖。
 
-Packages 面板会区分 `configured`、`installed`、`filtered` 和 `trusted` / `untrusted`，`GET /api/packages` 返回结构化 package 列表。`POST /api/packages` 只登记 package source；安装前需要先通过 `POST /api/packages/trust` 或 WebUI 的 Trust 按钮信任 source，只有 `POST /api/packages/install` 或 WebUI 的 Install 按钮会调用 Pi package manager 执行安装。
+Packages 面板会区分 `configured`、`installed`、`filtered`、`trusted` / `untrusted` 和 `enabled` / `blocked`，`GET /api/packages` 返回结构化 package 列表。`POST /api/packages` 只登记 package source；安装或更新前需要先通过 `POST /api/packages/trust` 或 WebUI 的 Trust 按钮信任 source。未信任 package 会保留在配置清单中，但不会进入 Pi `ResourceLoader` 或 workflow backend 的加载链路。
 
-安装会创建后台 operation 并立即返回 `operation.id`；WebUI 通过 `GET /api/package-operations` 轮询最近安装任务，展示 SDK progress callback 的事件、完成状态和失败原因。operation 记录默认持久化在 `.zuu/pi-agent/package-operations.json`，package trust 记录默认持久化在 `.zuu/pi-agent/package-trust.json`。
+安装、更新和删除都会创建后台 operation 并立即返回 `operation.id`；WebUI 通过 `GET /api/package-operations` 轮询最近任务，展示 SDK progress callback 的事件、完成状态和失败原因。删除成功后会同步撤销对应 source 的信任记录。operation 记录默认持久化在 `.zuu/pi-agent/package-operations.json`，package trust 记录默认持久化在 `.zuu/pi-agent/package-trust.json`。
 
-`GET /api/diagnostics` 会返回 SDK resource diagnostics，WebUI 的 Resources 面板会展示 extension/skill/prompt/theme 的加载错误、warning 和 name collision。
+`GET /api/diagnostics` 会返回 SDK resource diagnostics；其中 `resources.packages` 只列出已信任且会参与加载的 package，`resources.blockedPackages` 列出因未信任而被阻止加载的 package。WebUI 的 Resources 面板会展示 extension/skill/prompt/theme 的加载错误、warning 和 name collision。
 
 ## 当前能力边界
 

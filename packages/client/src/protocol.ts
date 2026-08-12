@@ -387,6 +387,7 @@ export interface Diagnostics {
     extensionErrors: Array<{ path: string; error: string }>;
     resourceDiagnostics: ResourceDiagnostic[];
     packages: string[];
+    blockedPackages: string[];
     workflowBackend: WorkflowBackendInfo;
   };
   gaps: string[];
@@ -416,6 +417,10 @@ export interface PackageInstallResponse extends PackagesResponse {
   operation: PackageOperation;
 }
 
+export interface PackageOperationStartResponse extends PackagesResponse {
+  operation: PackageOperation;
+}
+
 export interface PackageOperationsResponse {
   operations: PackageOperation[];
 }
@@ -431,7 +436,8 @@ export interface PackageMutationRequest {
 export type PackageStatus = "configured" | "installed" | "filtered";
 export type PackageScope = "user" | "project";
 export type PackageTrustStatus = "trusted" | "untrusted";
-export type PackageOperationAction = "install";
+export type PackageLoadStatus = "enabled" | "blocked";
+export type PackageOperationAction = "install" | "remove" | "update";
 export type PackageOperationStatus = "running" | "done" | "error";
 export type PackageProgressAction = "install" | "remove" | "update" | "clone" | "pull";
 export type PackageProgressEventType = "start" | "progress" | "complete" | "error";
@@ -445,6 +451,8 @@ export interface PackageSummary {
   trustStatus: PackageTrustStatus;
   trusted: boolean;
   trustedAt?: string;
+  loadStatus: PackageLoadStatus;
+  blockedReason?: string;
 }
 
 export interface PackageTrustRecord {
