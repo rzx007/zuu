@@ -72,6 +72,8 @@ const countedEventOrder: string[] = []
 
 const apiToken = ref(localStorage.getItem(tokenKey) || '')
 const authStatus = ref<AuthStatus>()
+const newAuthTokenActor = ref('webui')
+const newAuthTokenScope = ref<AuthScope>('read')
 const auditEvents = ref<AuditEvent[]>([])
 const auditAction = ref<'' | AuditEventAction>('')
 const auditOutcome = ref<'' | AuditEventOutcome>('')
@@ -165,6 +167,7 @@ const currentProjectWorkflowRuns = computed(() =>
   workflowRuns.value.filter((run) => run.projectId === currentProjectId()),
 )
 const runningPackageOperations = computed(() => packageOperations.value.filter((operation) => operation.status === 'running'))
+const authAdminTokenCount = computed(() => authStatus.value?.tokens.filter((token) => token.scope === 'admin').length ?? 0)
 const eventStatusVariant = computed(() => {
   if (eventStreamStatus.value === 'live') return 'secondary'
   if (eventStreamStatus.value === 'error') return 'destructive'
@@ -508,6 +511,23 @@ async function rotateAuthToken() {
   addMessage('event', `API token rotated: ${result.auth.tokenPreview}`)
   startEventStream()
   await refreshAll()
+}
+
+async function createAuthToken() {
+  const result = await client.createAuthToken({
+    actor: newAuthTokenActor.value.trim() || undefined,
+    scope: newAuthTokenScope.value,
+  })
+  authStatus.value = result.auth
+  await loadAuditEvents()
+  addMessage('event', `API token created for ${result.token.actor}: ${result.apiToken}`)
+}
+
+async function revokeAuthToken(tokenId: string) {
+  const result = await client.revokeAuthToken(tokenId)
+  authStatus.value = result.auth
+  await loadAuditEvents()
+  addMessage('event', `API token revoked: ${result.revoked.actor} / ${result.revoked.scope}`)
 }
 
 function chooseModel() {
@@ -1125,11 +1145,33 @@ onUnmounted(() => {
           <p v-if="authStatus" class="empty-text">
             {{ authStatus.tokenPreview }}{{ authStatus.tokenFile ? ` / ${authStatus.tokenFile}` : '' }}
           </p>
+          <div v-if="authStatus?.canRotate" class="project-create">
+            <input v-model="newAuthTokenActor" class="field-input min-w-0" placeholder="actor">
+            <select v-model="newAuthTokenScope" class="field-input min-w-0">
+              <option value="read">read</option>
+              <option value="admin">admin</option>
+            </select>
+            <Button size="sm" @click="createAuthToken().catch((error) => addMessage('error', errorMessage(error)))">Create token</Button>
+          </div>
           <div v-if="authStatus?.tokens.length" class="list-stack">
-            <div v-for="token in authStatus.tokens" :key="token.scope" class="workflow-row">
+            <div v-for="token in authStatus.tokens" :key="token.id" class="workflow-row">
               <div class="flex items-center justify-between gap-2">
-                <Badge variant="outline">{{ token.scope }}</Badge>
-                <span>{{ token.tokenPreview }}</span>
+                <div class="min-w-0">
+                  <div class="flex flex-wrap items-center gap-2">
+                    <Badge variant="outline">{{ token.scope }}</Badge>
+                    <span>{{ token.actor }}</span>
+                  </div>
+                  <p class="empty-text">{{ token.tokenPreview }} / {{ token.id }}</p>
+                </div>
+                <Button
+                  v-if="authStatus.canRotate"
+                  variant="ghost"
+                  size="xs"
+                  :disabled="token.scope === 'admin' && authAdminTokenCount <= 1"
+                  @click="revokeAuthToken(token.id).catch((error) => addMessage('error', errorMessage(error)))"
+                >
+                  Revoke
+                </Button>
               </div>
             </div>
           </div>
@@ -1488,6 +1530,8 @@ onUnmounted(() => {
                   <option value="api.read">api.read</option>
                   <option value="api.mutate">api.mutate</option>
                   <option value="auth.rotate">auth.rotate</option>
+                  <option value="auth.token_create">auth.token_create</option>
+                  <option value="auth.token_revoke">auth.token_revoke</option>
                   <option value="approval.resolve">approval.resolve</option>
                   <option value="package.add">package.add</option>
                   <option value="package.install">package.install</option>

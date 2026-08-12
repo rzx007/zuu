@@ -52,6 +52,9 @@ import type {
   ApiErrorResponse,
   AuthRotateResponse,
   AuthStatusResponse,
+  AuthCreateTokenRequest,
+  AuthCreateTokenResponse,
+  AuthRevokeTokenResponse,
   AuditEventsQuery,
   AuditEventsResponse,
 } from "./protocol.js";
@@ -81,6 +84,8 @@ export interface ZuuClient {
   health(): Promise<HealthResponse>;
   authStatus(): Promise<AuthStatusResponse>;
   rotateAuthToken(): Promise<AuthRotateResponse>;
+  createAuthToken(input: AuthCreateTokenRequest): Promise<AuthCreateTokenResponse>;
+  revokeAuthToken(tokenId: string): Promise<AuthRevokeTokenResponse>;
   listAuditEvents(query?: number | AuditEventsQuery): Promise<AuditEventsResponse>;
   diagnostics(): Promise<Diagnostics>;
   listPackages(): Promise<PackagesResponse>;
@@ -356,6 +361,15 @@ export function createZuuClient(options: ZuuClientOptions = {}): ZuuClient {
     rotateAuthToken: () =>
       requestJson<AuthRotateResponse>(fetchImpl, baseUrl, "/v1/auth/rotate", {
         method: "POST",
+      }, apiToken),
+    createAuthToken: (input) =>
+      requestJson<AuthCreateTokenResponse>(fetchImpl, baseUrl, "/v1/auth/tokens", {
+        method: "POST",
+        body: JSON.stringify(input),
+      }, apiToken),
+    revokeAuthToken: (tokenId) =>
+      requestJson<AuthRevokeTokenResponse>(fetchImpl, baseUrl, `/v1/auth/tokens/${encodeURIComponent(tokenId)}`, {
+        method: "DELETE",
       }, apiToken),
     listAuditEvents: (query) =>
       requestJson<AuditEventsResponse>(

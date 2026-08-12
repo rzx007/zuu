@@ -94,6 +94,9 @@ async function main() {
   if (!authStatus.auth.tokens.some((token) => token.scope === "admin") || !authStatus.auth.tokens.some((token) => token.scope === "read")) {
     throw new Error("auth status should expose admin and read token previews");
   }
+  if (authStatus.auth.tokens.some((token) => !token.id || !token.actor || !token.createdAt)) {
+    throw new Error("auth token status should include token id, actor, and createdAt");
+  }
   const readOnlyClient = createZuuClient({ baseUrl: "http://zuu.local", fetch: fetchFromApp, apiToken: auth.currentToken("read") });
   const readOnlyProjects = await readOnlyClient.listProjects();
   if (!Array.isArray(readOnlyProjects.projects)) {
@@ -125,6 +128,30 @@ async function main() {
     status: 403,
     code: "forbidden",
   });
+  const createdReadToken = await client.createAuthToken({ scope: "read", actor: "check-reader" });
+  if (!createdReadToken.apiToken || createdReadToken.token.actor !== "check-reader" || createdReadToken.token.scope !== "read") {
+    throw new Error("auth token creation should return the new token once");
+  }
+  const createdReadClient = createZuuClient({ baseUrl: "http://zuu.local", fetch: fetchFromApp, apiToken: createdReadToken.apiToken });
+  if (!(await createdReadClient.listProjects()).projects.length) {
+    throw new Error("created read token should be able to call protected GET routes");
+  }
+  await expectClientError(() => createdReadClient.createProject({ cwd: process.cwd(), name: "created read token write check" }), {
+    status: 403,
+    code: "forbidden",
+  });
+  const revokedReadToken = await client.revokeAuthToken(createdReadToken.token.id);
+  if (
+    revokedReadToken.revoked.id !== createdReadToken.token.id ||
+    revokedReadToken.auth.tokens.some((token) => token.id === createdReadToken.token.id)
+  ) {
+    throw new Error("auth token revoke should remove the token from local auth status");
+  }
+  await expectClientError(() => createdReadClient.listProjects(), { status: 401, code: "unauthorized" });
+  const tokenAuditEvents = await client.listAuditEvents({ action: "auth.token_create", target: createdReadToken.token.id, limit: 10 });
+  if (!tokenAuditEvents.events.some((event) => event.details?.actor === "check-reader" && event.details?.scope === "read")) {
+    throw new Error("auth token creation should be audited without recording the raw token");
+  }
   const diagnostics = await client.diagnostics();
   if (!Array.isArray(diagnostics.resources.resourceDiagnostics)) {
     throw new Error("resource diagnostics response is invalid");
@@ -187,6 +214,46 @@ async function main() {
   if (!sawRotateRoute || rotateResponse.apiToken !== "zuu_check_new_token") {
     throw new Error("rotate auth token client method should call the rotate route");
   }
+  let sawCreateTokenRoute = false;
+  let sawRevokeTokenRoute = false;
+  const tokenClient = createZuuClient({
+    baseUrl: "http://zuu.local",
+    apiToken: "check-token",
+    fetch: async (input, init) => {
+      const request = input instanceof Request ? input : new Request(input, init);
+      sawCreateTokenRoute ||= request.url === "http://zuu.local/v1/auth/tokens" && request.method === "POST";
+      sawRevokeTokenRoute ||= request.url === "http://zuu.local/v1/auth/tokens/token-1" && request.method === "DELETE";
+      return Response.json({
+        auth: {
+          enabled: true,
+          source: "local",
+          canRotate: true,
+          tokenPreview: "zuu_chec...oken",
+          tokens: [],
+        },
+        token: {
+          id: "token-1",
+          actor: "client-check",
+          scope: "read",
+          tokenPreview: "zuu_read...oken",
+          createdAt: "2026-08-12T00:00:00.000Z",
+        },
+        revoked: {
+          id: "token-1",
+          actor: "client-check",
+          scope: "read",
+          tokenPreview: "zuu_read...oken",
+          createdAt: "2026-08-12T00:00:00.000Z",
+        },
+        apiToken: "zuu_read_client_check",
+      });
+    },
+  });
+  const tokenResponse = await tokenClient.createAuthToken({ scope: "read", actor: "client-check" });
+  await tokenClient.revokeAuthToken("token-1");
+  if (!sawCreateTokenRoute || !sawRevokeTokenRoute || tokenResponse.apiToken !== "zuu_read_client_check") {
+    throw new Error("auth token client methods should call create and revoke routes");
+  }
   let sawAuditRoute = false;
   const auditClient = createZuuClient({
     baseUrl: "http://zuu.local",
@@ -223,9 +290,34 @@ async function main() {
     localAuth.currentToken() !== rotatedLocalAuth.apiToken ||
     localAuth.currentToken("read") !== rotatedLocalAuth.readApiToken ||
     !localAuth.status().canRotate ||
-    !localAuth.status().tokens.some((token) => token.scope === "read")
+    !localAuth.status().tokens.some((token) => token.scope === "read" && token.actor === "local")
   ) {
     throw new Error("local auth tokens should be generated and rotated");
+  }
+  const extraReadToken = localAuth.createToken({ scope: "read", actor: "service-check" });
+  if (
+    !extraReadToken.apiToken ||
+    extraReadToken.token.actor !== "service-check" ||
+    localAuth.scopeForAuthorization(`Bearer ${extraReadToken.apiToken}`) !== "read"
+  ) {
+    throw new Error("local auth service should create additional actor-scoped tokens");
+  }
+  const revokedExtraReadToken = localAuth.revokeToken(extraReadToken.token.id);
+  if (
+    revokedExtraReadToken.revoked.id !== extraReadToken.token.id ||
+    localAuth.scopeForAuthorization(`Bearer ${extraReadToken.apiToken}`) !== undefined
+  ) {
+    throw new Error("local auth service should revoke additional tokens");
+  }
+  const extraAdminToken = localAuth.createToken({ scope: "admin", actor: "admin-check" });
+  localAuth.revokeToken(extraAdminToken.token.id);
+  try {
+    localAuth.revokeToken("local-admin");
+    throw new Error("last local admin token should not be revoked");
+  } catch (error) {
+    if (!(error instanceof ApiError) || error.status !== 409) {
+      throw new Error("last local admin token revoke should fail with conflict");
+    }
   }
   const envAuth = new AuthService(join(authServiceDir, "env-auth-token.json"), "env-token");
   if (envAuth.status().source !== "env" || envAuth.status().canRotate || envAuth.status().tokens[0]?.scope !== "admin") {
@@ -275,6 +367,14 @@ async function main() {
   } catch (error) {
     if (!(error instanceof ApiError) || error.status !== 409) {
       throw new Error("env auth token rotation should fail with conflict");
+    }
+  }
+  try {
+    envAuth.createToken({ scope: "read", actor: "env-check" });
+    throw new Error("env auth token creation should fail");
+  } catch (error) {
+    if (!(error instanceof ApiError) || error.status !== 409) {
+      throw new Error("env auth token creation should fail with conflict");
     }
   }
 

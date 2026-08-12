@@ -39,6 +39,10 @@ if (status.auth.canRotate) {
   const rotated = await client.rotateAuthToken();
   console.log(rotated.apiToken);
   console.log(rotated.readApiToken);
+
+  const created = await client.createAuthToken({ scope: "read", actor: "readonly-dashboard" });
+  console.log(created.apiToken);
+  await client.revokeAuthToken(created.token.id);
 }
 ```
 

@@ -186,9 +186,11 @@ export interface HealthResponse {
 export type AuthScope = "admin" | "read";
 
 export interface AuthTokenStatus {
+  id: string;
+  actor: string;
   scope: AuthScope;
   tokenPreview: string;
-  createdAt?: string;
+  createdAt: string;
   rotatedAt?: string;
 }
 
@@ -212,10 +214,26 @@ export interface AuthRotateResponse extends AuthStatusResponse {
   readApiToken?: string;
 }
 
+export interface AuthCreateTokenRequest {
+  scope: AuthScope;
+  actor?: string;
+}
+
+export interface AuthCreateTokenResponse extends AuthStatusResponse {
+  token: AuthTokenStatus;
+  apiToken: string;
+}
+
+export interface AuthRevokeTokenResponse extends AuthStatusResponse {
+  revoked: AuthTokenStatus;
+}
+
 export type AuditEventAction =
   | "api.read"
   | "api.mutate"
   | "auth.rotate"
+  | "auth.token_create"
+  | "auth.token_revoke"
   | "approval.resolve"
   | "package.add"
   | "package.install"
