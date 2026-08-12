@@ -3,7 +3,6 @@ import type {
   CreateScheduleRequest,
   CreateSessionRequest,
   Diagnostics,
-  EventStreamQuery,
   ForkSessionRequest,
   HealthResponse,
   ImportSessionRequest,
@@ -49,7 +48,6 @@ import type {
   WorkflowStagesResponse,
   WorkflowTasksResponse,
   WorkflowsResponse,
-  ApiErrorResponse,
   AuthRotateResponse,
   AuthStatusResponse,
   AuthCreateTokenRequest,
@@ -58,8 +56,16 @@ import type {
   AuditEventsQuery,
   AuditEventsResponse,
 } from "./protocol.js";
+import { requestJson, withAuditQuery, withQuery } from "./http.js";
+import {
+  streamEvents,
+  streamPrompt,
+  type EventStreamOptions,
+  type PromptStreamOptions,
+} from "./streams.js";
 
 export type * from "./protocol.js";
+export { ZuuClientError } from "./http.js";
 
 export interface ZuuClientOptions {
   baseUrl?: string;
@@ -67,18 +73,7 @@ export interface ZuuClientOptions {
   apiToken?: string;
 }
 
-export interface PromptStreamOptions {
-  signal?: AbortSignal;
-}
-
-export interface EventStreamOptions extends EventStreamQuery {
-  signal?: AbortSignal;
-  reconnect?: boolean;
-  reconnectDelayMs?: number;
-  maxReconnectDelayMs?: number;
-  onOpen?: () => void;
-  onReconnect?: (attempt: number, afterEventId: string | undefined) => void;
-}
+export type { EventStreamOptions, PromptStreamOptions } from "./streams.js";
 
 export interface ZuuClient {
   health(): Promise<HealthResponse>;
@@ -195,178 +190,6 @@ export interface ZuuClient {
   switchSession(sessionId: string, input: SwitchSessionRequest): Promise<SessionActionResponse>;
   forkSession(sessionId: string, input: ForkSessionRequest): Promise<SessionActionResponse>;
   importSession(sessionId: string, input: ImportSessionRequest): Promise<SessionActionResponse>;
-}
-
-export class ZuuClientError extends Error {
-  readonly status: number;
-  readonly code?: string;
-  readonly details?: unknown;
-  readonly retryable: boolean;
-
-  constructor(message: string, options: { status: number; retryable?: boolean; code?: string; details?: unknown }) {
-    super(message);
-    this.name = "ZuuClientError";
-    this.status = options.status;
-    this.code = options.code;
-    this.details = options.details;
-    this.retryable = options.retryable ?? false;
-  }
-}
-
-function joinUrl(baseUrl: string, path: string) {
-  const normalizedBase = baseUrl.replace(/\/+$/, "");
-  return `${normalizedBase}${path}`;
-}
-
-function withQuery(path: string, query: Record<string, string | undefined>) {
-  const params = new URLSearchParams();
-  for (const [key, value] of Object.entries(query)) {
-    if (value) params.set(key, value);
-  }
-  return params.size ? `${path}?${params}` : path;
-}
-
-function withAuditQuery(query: number | AuditEventsQuery | undefined) {
-  if (typeof query === "number") return withQuery("/v1/audit-events", { limit: String(query) });
-  return withQuery("/v1/audit-events", {
-    limit: query?.limit === undefined ? undefined : String(query.limit),
-    action: query?.action,
-    outcome: query?.outcome,
-    target: query?.target,
-    authScope: query?.authScope,
-    authActor: query?.authActor,
-    authTokenId: query?.authTokenId,
-    since: query?.since,
-    until: query?.until,
-  });
-}
-
-async function parseJsonResponse<T>(response: Response): Promise<T> {
-  const text = await response.text();
-  const data = parseJson(text);
-
-  if (!response.ok) {
-    const error = isApiErrorResponse(data) ? data.error : undefined;
-    throw new ZuuClientError(String(error?.message ?? response.statusText), {
-      status: error?.status ?? response.status,
-      retryable: error?.retryable,
-      code: error?.code,
-      details: error?.details,
-    });
-  }
-
-  return data as T;
-}
-
-function parseJson(text: string) {
-  if (!text) return undefined;
-  try {
-    return JSON.parse(text) as unknown;
-  } catch {
-    return undefined;
-  }
-}
-
-function isApiErrorResponse(value: unknown): value is ApiErrorResponse {
-  return Boolean(
-    value &&
-      typeof value === "object" &&
-      "error" in value &&
-      value.error &&
-      typeof value.error === "object" &&
-      "message" in value.error,
-  );
-}
-
-const PROMPT_STREAM_EVENT_TYPES = new Set<PromptStreamEvent["type"]>([
-  "session",
-  "text_delta",
-  "tool_start",
-  "tool_update",
-  "tool_end",
-  "agent_event",
-  "approval_requested",
-  "approval_resolved",
-  "done",
-  "error",
-]);
-
-function hasPromptStreamEnvelope(value: unknown): value is Pick<PromptStreamEvent, "id" | "createdAt" | "runId"> & { type: string } {
-  return Boolean(
-    value &&
-      typeof value === "object" &&
-      "id" in value &&
-      typeof value.id === "string" &&
-      "createdAt" in value &&
-      typeof value.createdAt === "string" &&
-      "runId" in value &&
-      typeof value.runId === "string" &&
-      "type" in value &&
-      typeof value.type === "string",
-  );
-}
-
-function isPromptStreamEvent(value: unknown): value is PromptStreamEvent {
-  return hasPromptStreamEnvelope(value) && PROMPT_STREAM_EVENT_TYPES.has(value.type as PromptStreamEvent["type"]);
-}
-
-function isAbortError(error: unknown) {
-  return error instanceof Error && error.name === "AbortError";
-}
-
-async function requestJson<T>(
-  fetchImpl: typeof fetch,
-  baseUrl: string,
-  path: string,
-  init?: RequestInit,
-  apiToken?: string,
-): Promise<T> {
-  const response = await fetchImpl(joinUrl(baseUrl, path), {
-    ...init,
-    headers: {
-      ...(init?.body ? { "content-type": "application/json" } : {}),
-      ...(apiToken ? { authorization: `Bearer ${apiToken}` } : {}),
-      ...init?.headers,
-    },
-  });
-
-  return parseJsonResponse<T>(response);
-}
-
-function parseSseEvents(buffer: string) {
-  const frames = buffer.split("\n\n");
-  const rest = frames.pop() ?? "";
-  const events: PromptStreamEvent[] = [];
-
-  for (const frame of frames) {
-    const eventName = frame
-      .split("\n")
-      .find((line) => line.startsWith("event:"))
-      ?.slice(6)
-      .trimStart();
-    if (eventName === "heartbeat") continue;
-
-    const id = frame
-      .split("\n")
-      .find((line) => line.startsWith("id:"))
-      ?.slice(3)
-      .trimStart();
-    const data = frame
-      .split("\n")
-      .filter((line) => line.startsWith("data:"))
-      .map((line) => line.slice(5).trimStart())
-      .join("\n");
-
-    if (data) {
-      const event = JSON.parse(data) as unknown;
-      if (!id || !hasPromptStreamEnvelope(event) || event.id !== id) {
-        throw new Error("Invalid SSE event frame");
-      }
-      if (isPromptStreamEvent(event)) events.push(event);
-    }
-  }
-
-  return { events, rest };
 }
 
 export function createZuuClient(options: ZuuClientOptions = {}): ZuuClient {
@@ -916,169 +739,4 @@ export function createZuuClient(options: ZuuClientOptions = {}): ZuuClient {
       streamPrompt(fetchImpl, baseUrl, apiToken, `/v1/sessions/${encodeURIComponent(sessionId)}/follow-ups`, input, options),
     subscribeEvents: (input = {}) => streamEvents(fetchImpl, baseUrl, apiToken, input),
   };
-}
-
-async function* streamPrompt(
-  fetchImpl: typeof fetch,
-  baseUrl: string,
-  apiToken: string | undefined,
-  path: string,
-  input: PromptRequest | Omit<PromptRequest, "sessionId" | "streamingBehavior">,
-  options: PromptStreamOptions,
-): AsyncGenerator<PromptStreamEvent> {
-  const response = await fetchImpl(joinUrl(baseUrl, path), {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      ...(apiToken ? { authorization: `Bearer ${apiToken}` } : {}),
-    },
-    body: JSON.stringify(input),
-    signal: options.signal,
-  });
-
-  if (!response.ok || !response.body) {
-    await parseJsonResponse(response);
-    return;
-  }
-
-  const reader = response.body.pipeThrough(new TextDecoderStream()).getReader();
-  let buffer = "";
-
-  try {
-    while (true) {
-      const { value, done } = await reader.read();
-      if (done) break;
-
-      const parsed = parseSseEvents(buffer + value);
-      buffer = parsed.rest;
-      for (const event of parsed.events) {
-        yield event;
-      }
-    }
-
-    const parsed = parseSseEvents(`${buffer}\n\n`);
-    for (const event of parsed.events) {
-      yield event;
-    }
-  } finally {
-    await reader.cancel().catch(() => {});
-  }
-}
-
-async function* streamEvents(
-  fetchImpl: typeof fetch,
-  baseUrl: string,
-  apiToken: string | undefined,
-  options: EventStreamOptions,
-): AsyncGenerator<PromptStreamEvent> {
-  const reconnect = options.reconnect ?? true;
-  const reconnectDelayMs = options.reconnectDelayMs ?? 500;
-  const maxReconnectDelayMs = options.maxReconnectDelayMs ?? 5_000;
-  const seenEventIds = new Set<string>();
-  const seenEventOrder: string[] = [];
-  let afterEventId = options.afterEventId;
-  let attempt = 0;
-
-  while (!options.signal?.aborted) {
-    try {
-      for await (const event of openEventStream(fetchImpl, baseUrl, apiToken, { ...options, afterEventId })) {
-        afterEventId = event.id;
-        attempt = 0;
-        if (rememberEventId(seenEventIds, seenEventOrder, event.id)) {
-          yield event;
-        }
-      }
-    } catch (error) {
-      if (options.signal?.aborted || isAbortError(error)) return;
-      if (!reconnect || (error instanceof ZuuClientError && !error.retryable)) throw error;
-      attempt += 1;
-      options.onReconnect?.(attempt, afterEventId);
-      await waitForReconnect(backoffDelay(reconnectDelayMs, maxReconnectDelayMs, attempt), options.signal);
-      continue;
-    }
-
-    if (!reconnect) return;
-    attempt += 1;
-    options.onReconnect?.(attempt, afterEventId);
-    await waitForReconnect(backoffDelay(reconnectDelayMs, maxReconnectDelayMs, attempt), options.signal);
-  }
-}
-
-async function* openEventStream(
-  fetchImpl: typeof fetch,
-  baseUrl: string,
-  apiToken: string | undefined,
-  options: EventStreamOptions,
-): AsyncGenerator<PromptStreamEvent> {
-  const path = withQuery("/v1/events", {
-    runId: options.runId,
-    sessionId: options.sessionId,
-    afterEventId: options.afterEventId,
-  });
-  const response = await fetchImpl(joinUrl(baseUrl, path), {
-    headers: {
-      ...(apiToken ? { authorization: `Bearer ${apiToken}` } : {}),
-      ...(options.afterEventId ? { "last-event-id": options.afterEventId } : {}),
-    },
-    signal: options.signal,
-  });
-
-  if (!response.ok || !response.body) {
-    await parseJsonResponse(response);
-    return;
-  }
-
-  options.onOpen?.();
-  const reader = response.body.pipeThrough(new TextDecoderStream()).getReader();
-  let buffer = "";
-
-  try {
-    while (true) {
-      const { value, done } = await reader.read();
-      if (done) break;
-
-      const parsed = parseSseEvents(buffer + value);
-      buffer = parsed.rest;
-      for (const event of parsed.events) {
-        yield event;
-      }
-    }
-
-    const parsed = parseSseEvents(`${buffer}\n\n`);
-    for (const event of parsed.events) {
-      yield event;
-    }
-  } finally {
-    await reader.cancel().catch(() => {});
-  }
-}
-
-function rememberEventId(seenEventIds: Set<string>, seenEventOrder: string[], eventId: string) {
-  if (seenEventIds.has(eventId)) return false;
-  seenEventIds.add(eventId);
-  seenEventOrder.push(eventId);
-  if (seenEventOrder.length > 1_024) {
-    const expiredEventId = seenEventOrder.shift();
-    if (expiredEventId) seenEventIds.delete(expiredEventId);
-  }
-  return true;
-}
-
-function backoffDelay(baseMs: number, maxMs: number, attempt: number) {
-  return Math.min(maxMs, baseMs * 2 ** Math.max(0, attempt - 1));
-}
-
-function waitForReconnect(delayMs: number, signal?: AbortSignal) {
-  if (signal?.aborted) return Promise.resolve();
-  return new Promise<void>((resolve) => {
-    const timeout = setTimeout(resolve, delayMs);
-    signal?.addEventListener(
-      "abort",
-      () => {
-        clearTimeout(timeout);
-        resolve();
-      },
-      { once: true },
-    );
-  });
 }
