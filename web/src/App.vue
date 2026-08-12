@@ -26,9 +26,12 @@ import {
   type SessionTreeEntry,
   type StoredSessionSummary,
   type ThinkingLevel,
+  type WorkflowArtifact,
   type WorkflowBackendInfo,
   type WorkflowDefinition,
   type WorkflowRun,
+  type WorkflowStage,
+  type WorkflowTask,
 } from '@zuu/client'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -55,6 +58,11 @@ interface LiveEventItem {
   runId: string
   createdAt: string
   text: string
+}
+
+interface WorkflowStageRow {
+  stage: WorkflowStage
+  tasks: WorkflowTask[]
 }
 
 const tokenKey = 'zuu.apiToken'
@@ -111,6 +119,10 @@ const workflows = ref<WorkflowDefinition[]>([])
 const workflowBackend = ref<WorkflowBackendInfo>()
 const workflowRuns = ref<WorkflowRun[]>([])
 const selectedWorkflowId = ref('')
+const selectedWorkflowRunId = ref('')
+const workflowRunStages = ref<WorkflowStage[]>([])
+const workflowRunTasks = ref<WorkflowTask[]>([])
+const workflowRunArtifacts = ref<WorkflowArtifact[]>([])
 const workflowPrompt = ref('Review the current Zuu agent platform slice and produce a workflow artifact.')
 const schedules = ref<Schedule[]>([])
 const scheduleName = ref('Scheduled Zuu run')
@@ -130,6 +142,7 @@ const messages = ref<MessageItem[]>([])
 const isRunning = ref(false)
 const isRefreshing = ref(false)
 const isSmokingModel = ref(false)
+const isLoadingWorkflowRunDetail = ref(false)
 const controller = ref<AbortController>()
 const runEventCounts = reactive<Record<string, number>>({})
 const liveEvents = ref<LiveEventItem[]>([])
@@ -168,6 +181,19 @@ const currentProjectSchedules = computed(() =>
 const currentProjectWorkflowRuns = computed(() =>
   workflowRuns.value.filter((run) => run.projectId === currentProjectId()),
 )
+const selectedWorkflowRun = computed(() =>
+  currentProjectWorkflowRuns.value.find((run) => run.id === selectedWorkflowRunId.value),
+)
+const workflowStageRows = computed<WorkflowStageRow[]>(() =>
+  workflowRunStages.value.map((stage) => ({
+    stage,
+    tasks: workflowRunTasks.value.filter((task) => task.stageId === stage.id),
+  })),
+)
+const workflowUnstagedTasks = computed(() => {
+  const stageIds = new Set(workflowRunStages.value.map((stage) => stage.id))
+  return workflowRunTasks.value.filter((task) => !stageIds.has(task.stageId))
+})
 const runningPackageOperations = computed(() => packageOperations.value.filter((operation) => operation.status === 'running'))
 const authAdminTokenCount = computed(() => authStatus.value?.tokens.filter((token) => token.scope === 'admin').length ?? 0)
 const eventStatusVariant = computed(() => {
@@ -192,6 +218,21 @@ function nextId() {
 
 function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : String(error)
+}
+
+function formatUnknown(value: unknown) {
+  if (value === undefined || value === null) return ''
+  if (typeof value === 'string') return value
+  try {
+    return JSON.stringify(value, null, 2)
+  } catch {
+    return String(value)
+  }
+}
+
+function previewText(value: unknown, limit = 180) {
+  const text = formatUnknown(value).trim()
+  return text.length > limit ? `${text.slice(0, limit)}...` : text
 }
 
 function isAbortError(error: unknown) {
@@ -462,8 +503,59 @@ async function loadWorkflows() {
   }
 }
 
+function clearWorkflowRunDetail() {
+  selectedWorkflowRunId.value = ''
+  workflowRunStages.value = []
+  workflowRunTasks.value = []
+  workflowRunArtifacts.value = []
+}
+
 async function loadWorkflowRuns() {
   workflowRuns.value = (await client.listProjectWorkflowRuns(currentProjectId())).runs
+  const nextRunId =
+    currentProjectWorkflowRuns.value.find((run) => run.id === selectedWorkflowRunId.value)?.id ||
+    currentProjectWorkflowRuns.value[0]?.id ||
+    ''
+  if (!nextRunId) {
+    clearWorkflowRunDetail()
+    return
+  }
+  await loadWorkflowRunDetail(nextRunId)
+}
+
+async function loadWorkflowRunDetail(runId = selectedWorkflowRunId.value) {
+  if (!runId) {
+    clearWorkflowRunDetail()
+    return
+  }
+
+  const projectId = currentProjectId()
+  selectedWorkflowRunId.value = runId
+  isLoadingWorkflowRunDetail.value = true
+  try {
+    const [runResponse, stagesResponse, tasksResponse] = await Promise.all([
+      client.getProjectWorkflowRun(projectId, runId),
+      client.listProjectWorkflowStages(projectId, runId),
+      client.listProjectWorkflowTasks(projectId, runId),
+    ])
+    const artifacts = await Promise.all(
+      runResponse.run.artifacts.slice(0, 8).map(async (artifact) => {
+        const response = await client.getProjectWorkflowArtifact(projectId, artifact.id)
+        return response.artifact
+      }),
+    )
+    if (selectedWorkflowRunId.value !== runId || currentProjectId() !== projectId) return
+    workflowRuns.value = [runResponse.run, ...workflowRuns.value.filter((run) => run.id !== runResponse.run.id)].sort((a, b) =>
+      b.startedAt.localeCompare(a.startedAt),
+    )
+    workflowRunStages.value = stagesResponse.stages
+    workflowRunTasks.value = tasksResponse.tasks
+    workflowRunArtifacts.value = artifacts
+  } finally {
+    if (selectedWorkflowRunId.value === runId) {
+      isLoadingWorkflowRunDetail.value = false
+    }
+  }
 }
 
 async function loadSchedules() {
@@ -771,12 +863,14 @@ async function startWorkflow() {
     },
   })
   addMessage('event', `workflow ${result.run.status}: ${result.run.workflowName} (${result.run.id.slice(0, 8)})`)
+  selectedWorkflowRunId.value = result.run.id
   await loadWorkflowRuns()
 }
 
 async function abortWorkflowRun(runId: string) {
   const result = await client.abortProjectWorkflowRun(currentProjectId(), runId)
   addMessage('event', `workflow ${result.run.status}: ${result.run.workflowName}`)
+  selectedWorkflowRunId.value = result.run.id
   await loadWorkflowRuns()
 }
 
@@ -1640,7 +1734,13 @@ onUnmounted(() => {
                 <Button variant="ghost" size="xs" @click="loadWorkflowRuns">Refresh</Button>
               </div>
               <div v-if="currentProjectWorkflowRuns.length" class="list-stack overflow-auto">
-                <div v-for="run in currentProjectWorkflowRuns.slice(0, 8)" :key="run.id" class="workflow-row">
+                <div
+                  v-for="run in currentProjectWorkflowRuns.slice(0, 8)"
+                  :key="run.id"
+                  class="workflow-row cursor-pointer"
+                  :class="run.id === selectedWorkflowRunId ? 'border-primary/50 bg-primary/5' : ''"
+                  @click="loadWorkflowRunDetail(run.id).catch((error) => addMessage('error', errorMessage(error)))"
+                >
                   <div class="flex items-center justify-between gap-2">
                     <strong>{{ run.workflowName }}</strong>
                     <Badge :variant="run.status === 'completed' ? 'secondary' : run.status === 'failed' || run.status === 'aborted' ? 'destructive' : 'outline'">{{ run.status }}</Badge>
@@ -1652,11 +1752,83 @@ onUnmounted(() => {
                     <span>{{ run.tasks.length }} tasks</span>
                     <span>{{ run.artifacts.length }} artifacts</span>
                   </div>
-                  <p v-if="run.artifacts[0]?.content">{{ String(run.artifacts[0].content).slice(0, 180) }}</p>
-                  <Button v-if="run.status === 'queued' || run.status === 'running'" variant="outline" size="xs" @click="abortWorkflowRun(run.id).catch((error) => addMessage('error', errorMessage(error)))">Abort</Button>
+                  <p v-if="run.artifacts[0]?.content">{{ previewText(run.artifacts[0].content) }}</p>
+                  <Button v-if="run.status === 'queued' || run.status === 'running'" variant="outline" size="xs" @click.stop="abortWorkflowRun(run.id).catch((error) => addMessage('error', errorMessage(error)))">Abort</Button>
                 </div>
               </div>
               <p v-else class="empty-text">No workflow runs yet.</p>
+            </section>
+
+            <section class="side-panel">
+              <div class="section-title">
+                <h2>Workflow Detail</h2>
+                <Badge v-if="selectedWorkflowRun" :variant="selectedWorkflowRun.status === 'completed' ? 'secondary' : selectedWorkflowRun.status === 'failed' || selectedWorkflowRun.status === 'aborted' ? 'destructive' : 'outline'">{{ selectedWorkflowRun.status }}</Badge>
+              </div>
+              <div v-if="selectedWorkflowRun" class="list-stack overflow-auto">
+                <div class="workflow-row">
+                  <strong>{{ selectedWorkflowRun.workflowName }}</strong>
+                  <span>{{ selectedWorkflowRun.id }}</span>
+                  <span v-if="isLoadingWorkflowRunDetail">Loading...</span>
+                  <p v-if="selectedWorkflowRun.prompt">{{ selectedWorkflowRun.prompt }}</p>
+                  <p v-if="selectedWorkflowRun.error">{{ selectedWorkflowRun.error }}</p>
+                </div>
+
+                <div class="workflow-row">
+                  <div class="section-title">
+                    <strong>Stages</strong>
+                    <span>{{ workflowRunStages.length }}</span>
+                  </div>
+                  <div v-if="workflowStageRows.length" class="list-stack">
+                    <div v-for="row in workflowStageRows" :key="row.stage.id" class="compact-row">
+                      <div class="min-w-0">
+                        <strong>{{ row.stage.name }}</strong>
+                        <span>{{ row.stage.summary || row.stage.id }}</span>
+                        <span>{{ row.tasks.length }} tasks</span>
+                      </div>
+                      <Badge :variant="row.stage.status === 'completed' ? 'secondary' : row.stage.status === 'failed' || row.stage.status === 'aborted' ? 'destructive' : 'outline'">{{ row.stage.status }}</Badge>
+                    </div>
+                  </div>
+                  <p v-else class="empty-text">No stages.</p>
+                </div>
+
+                <div class="workflow-row">
+                  <div class="section-title">
+                    <strong>Tasks</strong>
+                    <span>{{ workflowRunTasks.length }}</span>
+                  </div>
+                  <div v-if="workflowRunTasks.length" class="list-stack">
+                    <div v-for="task in workflowRunTasks" :key="task.id" class="compact-row">
+                      <div class="min-w-0">
+                        <strong>{{ task.name }}</strong>
+                        <span>{{ task.id.slice(0, 12) }}</span>
+                        <span v-if="task.artifactIds.length">{{ task.artifactIds.length }} artifacts</span>
+                        <p v-if="previewText(task.output ?? task.input, 120)">{{ previewText(task.output ?? task.input, 120) }}</p>
+                      </div>
+                      <Badge :variant="task.status === 'completed' ? 'secondary' : task.status === 'failed' || task.status === 'aborted' ? 'destructive' : 'outline'">{{ task.status }}</Badge>
+                    </div>
+                  </div>
+                  <p v-else class="empty-text">No tasks.</p>
+                  <p v-if="workflowUnstagedTasks.length" class="empty-text">{{ workflowUnstagedTasks.length }} unstaged tasks.</p>
+                </div>
+
+                <div class="workflow-row">
+                  <div class="section-title">
+                    <strong>Artifacts</strong>
+                    <span>{{ workflowRunArtifacts.length }}</span>
+                  </div>
+                  <div v-if="workflowRunArtifacts.length" class="list-stack">
+                    <div v-for="artifact in workflowRunArtifacts" :key="artifact.id" class="compact-row">
+                      <div class="min-w-0">
+                        <strong>{{ artifact.name }}</strong>
+                        <span>{{ artifact.kind }} 路 {{ artifact.createdAt }}</span>
+                        <pre v-if="artifact.content !== undefined" class="mt-2 max-h-44 overflow-auto whitespace-pre-wrap rounded border p-2 text-xs">{{ previewText(artifact.content, 1200) }}</pre>
+                      </div>
+                    </div>
+                  </div>
+                  <p v-else class="empty-text">No artifacts.</p>
+                </div>
+              </div>
+              <p v-else class="empty-text">No workflow run selected.</p>
             </section>
 
             <section class="side-panel">
