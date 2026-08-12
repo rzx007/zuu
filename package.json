@@ -3,7 +3,9 @@
   "type": "module",
   "packageManager": "pnpm@11.21.0",
   "scripts": {
+    "build:web": "pnpm --filter web build",
     "dev": "node --env-file-if-exists=.env --import tsx src/index.ts",
+    "dev:web": "pnpm --filter web dev -- --host 127.0.0.1",
     "start": "node --env-file-if-exists=.env --import tsx src/index.ts",
     "check": "node --env-file-if-exists=.env --import tsx scripts/check.ts",
     "typecheck": "tsc --noEmit"

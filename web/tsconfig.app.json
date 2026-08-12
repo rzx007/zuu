@@ -10,10 +10,19 @@
     "noUnusedParameters": true,
     "erasableSyntaxOnly": true,
     "noFallthroughCasesInSwitch": true,
+    "ignoreDeprecations": "6.0",
     "baseUrl": ".",
     "paths": {
       "@/*": ["./src/*"]
     }
   },
-  "include": ["src/**/*.ts", "src/**/*.tsx", "src/**/*.vue"]
+  "include": [
+    "src/main.ts",
+    "src/App.vue",
+    "src/**/*.d.ts",
+    "src/lib/**/*.ts",
+    "src/components/ui/badge/**/*",
+    "src/components/ui/button/**/*",
+    "src/components/ui/textarea/**/*"
+  ]
 }

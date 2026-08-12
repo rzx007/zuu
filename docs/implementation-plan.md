@@ -713,10 +713,10 @@ UI end-to-end
 
 本仓库已先行实现一个最小可运行切片，用于验证 Pi SDK 嵌入方式和文档假设：
 
-- `src/index.ts`：Hono daemon、浏览器 UI、health、diagnostics、model、package、active session、stored session、session tree、run、prompt、abort、compact、new、switch、fork、import API。
+- `src/index.ts`：Hono daemon、health、diagnostics、model、package、active session、stored session、session tree、run、prompt、abort、compact、new、switch、fork、import API，以及生产态 WebUI 静态托管。
 - `src/agent-daemon.ts`：封装 `ModelRuntime`、`DefaultResourceLoader`、`SettingsManager`、`SessionManager`、`createAgentSessionServices`、`createAgentSessionFromServices`、`createAgentSessionRuntime` 和 runtime lifecycle 编排；daemon 辅助逻辑统一放在 `src/agent-daemon/`。
 - `packages/client`：workspace 包 `@zuu/client`，封装协议 DTO、health、diagnostics、models、packages、active sessions、stored sessions、session tree、runs、prompt SSE、abort、compact 和 runtime lifecycle 操作。
-- `/client.js`：由 `packages/client/src/index.ts` 转译生成的浏览器端 client module，当前 WebUI 通过它调用 daemon。
+- `web/`：Vue + Vite WebUI，浏览器侧直接 bundle `@zuu/client`，用于 diagnostics、model 选择、package source、prompt SSE、session 文件、session tree、runs 和 approval 操作。
 - `.zuu/pi-agent`：默认 Pi app state 目录，可通过 `ZUU_AGENT_DIR` 覆盖，避免嵌入式运行时写入 `~/.pi/agent`。
 - `README.md`：当前运行方式和 API 入口。
 
@@ -745,7 +745,7 @@ UI end-to-end
 
 - `@zuu/client` 已是 workspace 包，但还没有独立构建产物、版本发布流程和第三方示例。
 - run registry 已有文件持久化，但还没有 SSE 重连 replay、事件明细存档或跨进程写入协调。
-- WebUI 已支持打开持久化 session、查看当前 session tree、按 entry fork，以及从本地 JSONL 路径 import。
+- WebUI 已迁移到 Vue + Vite，并支持打开持久化 session、查看当前 session tree、按 entry fork、从本地 JSONL 路径 import，以及处理 pending approvals。
 - Package API 只维护 source 列表，尚未接入 package 安装进度、信任确认和资源冲突 UI。
 - Approval 已接入 Pi tool call 拦截和 SSE 事件，但当前策略是 fail-closed：危险工具被阻断后需要用户 resolve 并重试 prompt，尚未实现挂起并恢复同一个 tool call 的交互式等待。
 - 当前 API token 是单 token 配置，尚未实现 token 轮换、权限分级和审计日志。
@@ -754,5 +754,5 @@ UI end-to-end
 - 当前环境下真实模型 stream 可能因为网络返回 `Connection error`；daemon 已将 SDK assistant error 映射为 SSE error。
 - Workflow/subagent/scheduler 尚未安装 packages，diagnostics 会明确报告缺口。
 
-后续计划应从此切片继续收敛，而不是另起炉灶：Client workspace 包、run registry 持久化、package source 管理和 approval tool-call 拦截已经落地，接下来应优先补 WebUI approval 操作面，再推进 workflow adapter 和 scheduler backend。
+后续计划应从此切片继续收敛，而不是另起炉灶：Client workspace 包、run registry 持久化、package source 管理、approval tool-call 拦截和 Vue WebUI approval 操作面已经落地，接下来应优先推进 workflow adapter 和 scheduler backend。
 
