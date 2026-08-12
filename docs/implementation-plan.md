@@ -734,7 +734,7 @@ UI end-to-end
 - `pnpm run check` 可以加载应用入口并验证 health/models/packages/runs/stored sessions/session tree/runtime lifecycle client 合同。
 - `pnpm run typecheck` 可以完成 TypeScript `noEmit` 校验。
 - `pnpm run check:pi-workflow` 已作为真实环境验证入口，但只应在 `ZUU_WORKFLOW_BACKEND=pi-package` 的 WSL2/Linux daemon 旁运行。
-- `GET /v1/health` 正常且作为公开探针；除 health 外的 `/v1/*` 默认要求 Bearer token。
+- `GET /v1/health` 正常且作为公开探针，已返回 `ok/status/protocolVersion/version/startedAt/uptimeMs/node/platform`；除 health 外的 `/v1/*` 默认要求 Bearer token。
 - API 错误响应已统一为 `{ error: { message, status, retryable, code?, details? } }`；`@zuu/client` 会把非 2xx 响应映射为 `ZuuClientError`。
 - `GET /v1/auth/status` 与 `POST /v1/auth/rotate` 已支持本地 access token 状态查询和轮换；`ZUU_API_TOKEN` 仍可作为环境变量覆盖，此时 token 由进程外管理且 API 不允许轮换。
 - `GET /v1/audit-events` 已支持查询最近审计事件，并可按 `action`、`outcome`、`target` 和 `limit` 过滤；当前记录 auth rotate、approval resolve 和 package add/trust/install/update/remove 等治理动作，并避免写入 token/provider key 等密钥。

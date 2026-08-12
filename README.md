@@ -153,6 +153,8 @@ Packages 面板会区分 `configured`、`installed`、`filtered`、`trusted` / `
 
 `GET /v1/models` 只说明当前认证和模型目录看起来可用；需要确认 DeepSeek 等 provider 是否真的能流式返回时，使用 `POST /v1/models/smoke` 或 WebUI 模型区的 Smoke test。该接口会创建一个临时 in-memory session，发送极小 prompt，并返回 `ok/status/runId/error/durationMs`；失败也会写入 run/events，方便继续排查网络、代理或 provider 错误。
 
+`GET /v1/health` 是公开探针，返回 `ok`、`status`、`protocolVersion`、`version`、`startedAt`、`uptimeMs`、`node` 和 `platform`，用于本地壳、反向代理或第三方应用判断 daemon 是否已就绪。
+
 API 错误统一返回 `error.message`、`error.status`、`error.retryable`、`error.code` 和可选 `error.details`。`@zuu/client` 会把非 2xx 响应映射成 `ZuuClientError`，调用方可以直接读取 `status`、`code`、`retryable` 和 `details`，不需要解析错误文案。
 
 Prompt SSE 事件会带稳定 `id` 和 `createdAt`，并按 run 写入 `.zuu/pi-agent/run-events.json`。断线后可通过 `GET /v1/runs/:runId/events?afterEventId=<event-id>` 或 `@zuu/client` 的 `listRunEvents(runId, afterEventId)` 补拉事件窗口；也可以通过 `GET /v1/events` 或 `@zuu/client.subscribeEvents()` 先 replay 历史事件再订阅 live 事件。`subscribeEvents()` 默认会保存最后事件 ID、用指数退避自动重连，并去重重复事件。已有 Session 可通过 `client.promptSession()` 发送普通 prompt，也可在 Session 运行中通过 `client.steerSession()` 或 `client.followUpSession()` 显式传递 Pi SDK 的 `streamingBehavior`。WebUI 会用全局 Event Stream 面板展示 daemon live 事件，并用该事件流节流刷新 runs、approvals、session tree、schedule 和 workflow run 状态。

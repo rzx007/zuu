@@ -390,7 +390,7 @@ Daemon 启动时必须：
 - `GET /v1/audit-events`
 - `GET /v1/diagnostics`
 
-Health 至少返回 Daemon 状态、版本、协议版本、uptime。
+Health 至少返回 Daemon 状态、版本、协议版本、启动时间、uptime、Node 版本和平台。
 
 Diagnostics 返回模型认证状态、Package 加载错误、Project 错误和 Scheduler 状态；不得返回密钥。资源诊断必须区分已信任且会参与加载的 packages，以及因未信任而被阻止加载的 blocked packages。Package 安装、更新或删除必须有可查询的 operation 记录，至少包含来源、动作、进度事件、结束状态和失败原因。
 

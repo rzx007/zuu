@@ -60,6 +60,11 @@ async function main() {
   const client = createZuuClient({ baseUrl: "http://zuu.local", fetch: fetchFromApp, apiToken: currentApiToken });
   const health = await client.health();
   if (!health.ok) throw new Error("health check failed");
+  if (health.status !== "ready" || health.protocolVersion !== "v1" || typeof health.uptimeMs !== "number" || !health.startedAt) {
+    throw new Error("health response should include runtime status, protocol version, and uptime");
+  }
+  const publicHealth = await fetchFromApp("http://zuu.local/v1/health");
+  if (publicHealth.status !== 200) throw new Error("health should be public");
   const legacyApi = await fetchFromApp("http://zuu.local/api/health");
   if (legacyApi.status !== 404) throw new Error("legacy /api routes should not be served");
   const legacyApiBody = await legacyApi.json() as { error?: { code?: string } };

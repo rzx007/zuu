@@ -1,4 +1,5 @@
 import type { AuditEventAction, AuditEventOutcome } from "@zuu/client";
+import { buildHealth } from "../agent-daemon/health";
 import { ApiError, jsonError, toStatus } from "../http";
 import { readJson } from "../http";
 import { parseModelSmoke } from "../request-validation";
@@ -17,7 +18,7 @@ const AUDIT_ACTIONS = new Set([
 const AUDIT_OUTCOMES = new Set(["success", "failure"]);
 
 export function registerCoreRoutes({ app, audit, auth, daemon }: RouteDeps) {
-  app.get("/v1/health", (c) => c.json({ ok: true }));
+  app.get("/v1/health", (c) => c.json(buildHealth()));
 
   app.get("/v1/audit-events", (c) => {
     try {

@@ -174,6 +174,13 @@ export interface PromptStreamEvent {
 
 export interface HealthResponse {
   ok: boolean;
+  status: "ready" | "degraded";
+  protocolVersion: "v1";
+  version: string;
+  startedAt: string;
+  uptimeMs: number;
+  node: string;
+  platform: string;
 }
 
 export interface AuthStatus {
