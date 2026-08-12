@@ -10,6 +10,7 @@ import type {
   PackageSummary,
   PackagesResponse,
 } from "@zuu/client";
+import { ApiError } from "../http";
 import { assertPinnedPackageSource, normalizePackageSource, packageSourceToString } from "./environment";
 import { createSettingsManager, createTrustedSettingsView } from "./package-settings";
 import { PackageOperationStore } from "./package-operations";
@@ -203,7 +204,11 @@ export class PackageService {
 
   private assertTrusted(source: string) {
     if (!this.trust.isTrusted(source)) {
-      throw new Error("Package source must be trusted before this operation");
+      throw new ApiError("Package source must be trusted before this operation", {
+        status: 403,
+        code: "package_untrusted",
+        details: { source },
+      });
     }
   }
 }

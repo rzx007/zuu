@@ -2423,13 +2423,11 @@ async function main() {
     code: "validation_failed",
     details: (details) => Boolean(details && typeof details === "object" && "field" in details),
   });
-  let emptyPackageInstallFailed = false;
-  try {
-    await client.installPackage({ source: " " });
-  } catch {
-    emptyPackageInstallFailed = true;
-  }
-  if (!emptyPackageInstallFailed) throw new Error("empty package install source should fail");
+  await expectClientError(() => client.installPackage({ source: " " }), {
+    status: 400,
+    code: "validation_failed",
+    details: hasErrorField("source"),
+  });
   const unpinnedSource = `npm:zuu-check-unpinned-${crypto.randomUUID()}`;
   await expectClientError(() => client.addPackage({ source: unpinnedSource }), {
     status: 400,
@@ -2442,27 +2440,19 @@ async function main() {
     details: (details) => Boolean(details && typeof details === "object" && "field" in details),
   });
   const untrustedSource = `npm:zuu-check-untrusted-${crypto.randomUUID()}@0.0.0`;
-  let untrustedPackageInstallFailed = false;
-  try {
-    await client.installPackage({ source: untrustedSource });
-  } catch {
-    untrustedPackageInstallFailed = true;
-  }
-  if (!untrustedPackageInstallFailed) throw new Error("untrusted package install should fail before network work starts");
-  let untrustedPackageUpdateFailed = false;
-  try {
-    await client.updatePackage({ source: untrustedSource });
-  } catch {
-    untrustedPackageUpdateFailed = true;
-  }
-  if (!untrustedPackageUpdateFailed) throw new Error("untrusted package update should fail before network work starts");
-  let emptyPackageTrustFailed = false;
-  try {
-    await client.trustPackage({ source: " " });
-  } catch {
-    emptyPackageTrustFailed = true;
-  }
-  if (!emptyPackageTrustFailed) throw new Error("empty package trust source should fail");
+  await expectClientError(() => client.installPackage({ source: untrustedSource }), {
+    status: 403,
+    code: "package_untrusted",
+  });
+  await expectClientError(() => client.updatePackage({ source: untrustedSource }), {
+    status: 403,
+    code: "package_untrusted",
+  });
+  await expectClientError(() => client.trustPackage({ source: " " }), {
+    status: 400,
+    code: "validation_failed",
+    details: hasErrorField("source"),
+  });
 
   const trustStore = new PackageTrustStore(join(mkdtempSync(join(tmpdir(), "zuu-package-trust-check-")), "trust.json"));
   const trustedPackage = trustStore.trust("npm:check-package");
