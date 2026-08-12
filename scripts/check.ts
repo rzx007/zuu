@@ -411,6 +411,37 @@ async function main() {
   if (!expiredTokenStatus?.expired) {
     throw new Error("local auth service should expose expired token status");
   }
+  const activeAdminGuardDir = mkdtempSync(join(tmpdir(), "zuu-auth-active-admin-check-"));
+  const activeAdminGuardPath = join(activeAdminGuardDir, "auth-token.json");
+  const activeAdminGuardAuth = new AuthService(activeAdminGuardPath, "");
+  const activeAdminToken = activeAdminGuardAuth.createToken({ scope: "admin", actor: "active-admin" });
+  const expiringAdminToken = activeAdminGuardAuth.createToken({
+    scope: "admin",
+    actor: "expired-admin",
+    expiresAt: new Date(Date.now() + 60_000).toISOString(),
+  });
+  const activeAdminPayload = JSON.parse(readFileSync(activeAdminGuardPath, "utf8")) as {
+    data: { tokens: Array<{ id: string; scope: string; expiresAt?: string }> };
+  };
+  activeAdminPayload.data.tokens = activeAdminPayload.data.tokens.map((token) =>
+    token.scope === "admin" && token.id !== activeAdminToken.token.id
+      ? { ...token, expiresAt: new Date(Date.now() - 1000).toISOString() }
+      : token,
+  );
+  writeFileSync(activeAdminGuardPath, `${JSON.stringify(activeAdminPayload, null, 2)}\n`, "utf8");
+  const activeAdminGuardReloaded = new AuthService(activeAdminGuardPath, "");
+  try {
+    activeAdminGuardReloaded.revokeToken(activeAdminToken.token.id);
+    throw new Error("last active admin token should not be revoked");
+  } catch (error) {
+    if (!(error instanceof ApiError) || error.status !== 409 || error.code !== "auth_last_admin_token") {
+      throw new Error("last active admin token revoke should fail with auth_last_admin_token");
+    }
+  }
+  const revokedExpiredAdmin = activeAdminGuardReloaded.revokeToken(expiringAdminToken.token.id);
+  if (!revokedExpiredAdmin.revoked.expired) {
+    throw new Error("expired admin token should still be revocable when an active admin remains");
+  }
   try {
     localAuth.revokeToken("local-admin");
     throw new Error("last local admin token should not be revoked");

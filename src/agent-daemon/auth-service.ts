@@ -221,7 +221,10 @@ export class AuthService {
     if (!revoked) {
       throw new ApiError("Auth token not found", { status: 404, code: "not_found", details: { tokenId } });
     }
-    if (revoked.scope === "admin" && record.tokens.filter((token) => token.scope === "admin").length <= 1) {
+    const remainingActiveAdminCount = record.tokens.filter((token) => {
+      return token.id !== tokenId && token.scope === "admin" && !isTokenExpired(token);
+    }).length;
+    if (revoked.scope === "admin" && remainingActiveAdminCount < 1) {
       throw new ApiError("Cannot revoke the last admin token", {
         status: 409,
         code: "auth_last_admin_token",
