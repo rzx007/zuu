@@ -24,6 +24,7 @@ import { ScheduleService } from "./agent-daemon/schedule-service";
 import { PackageApiService } from "./agent-daemon/package-api-service";
 import { PackageService } from "./agent-daemon/packages";
 import { PromptService } from "./agent-daemon/prompt-service";
+import { WorkflowApiService } from "./agent-daemon/workflow-api-service";
 import { WorkflowService } from "./agent-daemon/workflow-service";
 import type {
   CreateScheduleRequest,
@@ -60,6 +61,7 @@ export class ZuuDaemon {
   private readonly packageApiService: PackageApiService;
   private readonly runApiService: RunApiService;
   private readonly sessionApiService: SessionApiService;
+  private readonly workflowApiService: WorkflowApiService;
 
   constructor(options: { audit?: AuditService } = {}) {
     this.approvalApiService = new ApprovalApiService(this.approvalService, options.audit);
@@ -73,6 +75,7 @@ export class ZuuDaemon {
     this.packageApiService = new PackageApiService(this.packageService, options.audit);
     this.runApiService = new RunApiService(this.runService, this.sessionService);
     this.sessionApiService = new SessionApiService(this.sessionService, this.runService);
+    this.workflowApiService = new WorkflowApiService(this.workflowService);
   }
 
   private readonly agentDir = getZuuAgentDir();
@@ -210,35 +213,35 @@ export class ZuuDaemon {
   }
 
   listWorkflows(projectId?: string) {
-    return this.workflowService.listWorkflows(projectId);
+    return this.workflowApiService.listWorkflows(projectId);
   }
 
   startWorkflow(workflowId: string, request: StartWorkflowRequest = {}, projectId?: string) {
-    return this.workflowService.startWorkflow(workflowId, request, projectId);
+    return this.workflowApiService.startWorkflow(workflowId, request, projectId);
   }
 
   async listWorkflowRuns(projectId?: string) {
-    return this.workflowService.listWorkflowRuns(projectId);
+    return this.workflowApiService.listWorkflowRuns(projectId);
   }
 
   async getWorkflowRun(runId: string, projectId?: string) {
-    return this.workflowService.getWorkflowRun(runId, projectId);
+    return this.workflowApiService.getWorkflowRun(runId, projectId);
   }
 
   async listWorkflowStages(runId: string, projectId?: string) {
-    return this.workflowService.listWorkflowStages(runId, projectId);
+    return this.workflowApiService.listWorkflowStages(runId, projectId);
   }
 
   async listWorkflowTasks(runId: string, projectId?: string) {
-    return this.workflowService.listWorkflowTasks(runId, projectId);
+    return this.workflowApiService.listWorkflowTasks(runId, projectId);
   }
 
   async getWorkflowArtifact(artifactId: string, projectId?: string) {
-    return this.workflowService.getWorkflowArtifact(artifactId, projectId);
+    return this.workflowApiService.getWorkflowArtifact(artifactId, projectId);
   }
 
   async abortWorkflowRun(runId: string, projectId?: string) {
-    return this.workflowService.abortWorkflowRun(runId, projectId);
+    return this.workflowApiService.abortWorkflowRun(runId, projectId);
   }
 
   private async launchWorkflowPrompt(request: PromptRequest) {

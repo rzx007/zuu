@@ -25,6 +25,8 @@ import { RunEventStore } from "../src/agent-daemon/run-events";
 import { loadRunHistory, saveRunHistory } from "../src/agent-daemon/run-history";
 import { ScheduleStore } from "../src/agent-daemon/schedules";
 import { createWorkflowBackend } from "../src/agent-daemon/workflows";
+import { WorkflowApiService } from "../src/agent-daemon/workflow-api-service";
+import { WorkflowService } from "../src/agent-daemon/workflow-service";
 import { createZuuClient, ZuuClientError } from "@zuu/client";
 import { createEventBus } from "@earendil-works/pi-coding-agent";
 import { ApiError } from "../src/http";
@@ -682,6 +684,109 @@ async function main() {
     missingWorkflowFailed = true;
   }
   if (!missingWorkflowFailed) throw new Error("missing workflow should fail");
+  const workflowApiCalls: string[] = [];
+  const workflowApi = new WorkflowApiService({
+    listWorkflows: async (projectId?: string) => {
+      workflowApiCalls.push(`list:${projectId ?? ""}`);
+      return {
+        workflows: [{ id: "wf", name: "Workflow", description: "check", version: "1", tags: [] }],
+        backend: { kind: "fake", status: "ready", label: "Fake", packageInstalled: false },
+      };
+    },
+    startWorkflow: async (workflowId: string, request: unknown, projectId?: string) => {
+      workflowApiCalls.push(`start:${workflowId}:${projectId}:${(request as { prompt?: string }).prompt}`);
+      return {
+        id: "wf-run",
+        workflowId,
+        workflowName: "Workflow",
+        status: "completed",
+        source: "api",
+        projectId,
+        prompt: (request as { prompt?: string }).prompt,
+        startedAt: "2026-08-12T00:00:00.000Z",
+        stages: [],
+        tasks: [],
+        artifacts: [],
+      };
+    },
+    listWorkflowRuns: async (projectId?: string) => {
+      workflowApiCalls.push(`runs:${projectId ?? ""}`);
+      return [];
+    },
+    getWorkflowRun: async (runId: string, projectId?: string) => {
+      workflowApiCalls.push(`get:${runId}:${projectId ?? ""}`);
+      return {
+        id: runId,
+        workflowId: "wf",
+        workflowName: "Workflow",
+        status: "completed",
+        source: "api",
+        projectId,
+        startedAt: "2026-08-12T00:00:00.000Z",
+        stages: [],
+        tasks: [],
+        artifacts: [],
+      };
+    },
+    listWorkflowStages: async (runId: string, projectId?: string) => {
+      workflowApiCalls.push(`stages:${runId}:${projectId ?? ""}`);
+      return [];
+    },
+    listWorkflowTasks: async (runId: string, projectId?: string) => {
+      workflowApiCalls.push(`tasks:${runId}:${projectId ?? ""}`);
+      return [];
+    },
+    getWorkflowArtifact: async (artifactId: string, projectId?: string) => {
+      workflowApiCalls.push(`artifact:${artifactId}:${projectId ?? ""}`);
+      return {
+        id: artifactId,
+        runId: "wf-run",
+        name: "artifact",
+        kind: "json",
+        content: {},
+        createdAt: "2026-08-12T00:00:00.000Z",
+      };
+    },
+    abortWorkflowRun: async (runId: string, projectId?: string) => {
+      workflowApiCalls.push(`abort:${runId}:${projectId ?? ""}`);
+      return {
+        id: runId,
+        workflowId: "wf",
+        workflowName: "Workflow",
+        status: "aborted",
+        source: "api",
+        projectId,
+        startedAt: "2026-08-12T00:00:00.000Z",
+        stages: [],
+        tasks: [],
+        artifacts: [],
+      };
+    },
+  } as unknown as WorkflowService);
+  await workflowApi.listWorkflows("project-check");
+  await workflowApi.startWorkflow("wf", { prompt: "go" }, "project-check");
+  await workflowApi.listWorkflowRuns("project-check");
+  await workflowApi.getWorkflowRun("wf-run", "project-check");
+  await workflowApi.listWorkflowStages("wf-run", "project-check");
+  await workflowApi.listWorkflowTasks("wf-run", "project-check");
+  await workflowApi.getWorkflowArtifact("artifact", "project-check");
+  const workflowApiAbort = await workflowApi.abortWorkflowRun("wf-run", "project-check");
+  if (
+    workflowApiAbort.status !== "aborted" ||
+    workflowApiCalls.join("|") !==
+      [
+        "list:project-check",
+        "start:wf:project-check:go",
+        "runs:project-check",
+        "get:wf-run:project-check",
+        "stages:wf-run:project-check",
+        "tasks:wf-run:project-check",
+        "artifact:artifact:project-check",
+        "abort:wf-run:project-check",
+      ].join("|")
+  ) {
+    throw new Error("workflow API service should delegate workflow calls with project scoping");
+  }
 
   const piBackend = createWorkflowBackend({
     path: join(mkdtempSync(join(tmpdir(), "zuu-pi-workflow-check-")), "workflow-runs.json"),
