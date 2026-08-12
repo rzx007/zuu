@@ -21,7 +21,7 @@ import {
   getSessionDir,
   getZuuAgentDir,
 } from "./agent-daemon/environment";
-import { ApprovalStore, assertApprovalStatus } from "./agent-daemon/approval-store";
+import { ApprovalService } from "./agent-daemon/approval-service";
 import { subscribeApprovalEvents } from "./agent-daemon/approval-policy";
 import { buildDiagnostics } from "./agent-daemon/diagnostics";
 import { compactAgentEvent, entryRole, entryText } from "./agent-daemon/events";
@@ -69,7 +69,7 @@ export class ZuuDaemon {
   private readonly agentDir = getZuuAgentDir();
   private readonly runService = new RunService(getRunStorePath(this.agentDir), getRunEventStorePath(this.agentDir));
   private readonly projectService = new ProjectService(getProjectStorePath(this.agentDir), this.agentDir);
-  private readonly approvalStore = new ApprovalStore(getApprovalStorePath(this.agentDir));
+  private readonly approvalService = new ApprovalService(getApprovalStorePath(this.agentDir));
   private readonly activeRunBySessionId = new Map<string, string>();
   private readonly eventBus: EventBusController = createEventBus();
   private readonly packageService = new PackageService(
@@ -159,7 +159,7 @@ export class ZuuDaemon {
       {
         packageService: this.packageService,
         modelRuntimePromise: this.modelRuntimePromise,
-        approvalStore: this.approvalStore,
+        approvals: this.approvalService,
         activeRunBySessionId: this.activeRunBySessionId,
         eventBus: this.eventBus,
         startedAt: this.startedAt,
@@ -260,20 +260,19 @@ export class ZuuDaemon {
   }
 
   createApproval(request: CreateApprovalRequest) {
-    return this.approvalStore.create(request);
+    return this.approvalService.create(request);
   }
 
   listApprovals(status?: ApprovalStatus) {
-    assertApprovalStatus(status);
-    return this.approvalStore.list(status);
+    return this.approvalService.listApprovals(status);
   }
 
   getApproval(approvalId: string) {
-    return this.approvalStore.get(approvalId);
+    return this.approvalService.getApproval(approvalId);
   }
 
   resolveApproval(approvalId: string, request: ResolveApprovalRequest) {
-    return this.approvalStore.resolve(approvalId, request);
+    return this.approvalService.resolveApproval(approvalId, request);
   }
 
   listWorkflows(projectId?: string) {

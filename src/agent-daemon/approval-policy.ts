@@ -8,7 +8,7 @@ import type {
   InlineExtension,
   ToolCallEvent,
 } from "@earendil-works/pi-coding-agent";
-import type { ApprovalStore } from "./approval-store";
+import type { ApprovalRegistry } from "./approval-service";
 import type { RunEventDraft } from "./run-events";
 
 const APPROVAL_EVENT_CHANNEL = "zuu:approval";
@@ -24,7 +24,7 @@ type ApprovalEvent =
   | { type: "approval_resolved"; runId: string; approval: Approval };
 
 interface ApprovalExtensionOptions {
-  approvalStore: ApprovalStore;
+  approvals: ApprovalRegistry;
   getActiveRunId(sessionId: string): string | undefined;
 }
 
@@ -66,7 +66,7 @@ export function createApprovalExtension(options: ApprovalExtensionOptions): Inli
             : undefined;
         }
 
-        const grant = options.approvalStore.consumeGrant(request);
+        const grant = options.approvals.consumeGrant(request);
         if (grant) {
           pi.events.emit(APPROVAL_EVENT_CHANNEL, {
             type: "approval_resolved",
@@ -76,7 +76,7 @@ export function createApprovalExtension(options: ApprovalExtensionOptions): Inli
           return undefined;
         }
 
-        const approval = options.approvalStore.create(request);
+        const approval = options.approvals.create(request);
         pi.events.emit(APPROVAL_EVENT_CHANNEL, {
           type: "approval_requested",
           runId: request.runId,

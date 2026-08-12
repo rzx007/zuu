@@ -10,7 +10,7 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import type { CreateSessionRequest } from "@zuu/client";
 import { createApprovalExtension } from "./approval-policy";
-import type { ApprovalStore } from "./approval-store";
+import type { ApprovalRegistry } from "./approval-service";
 import { assertAllowedPath, DEFAULT_READ_ONLY_TOOLS } from "./environment";
 import type { PackageService } from "./packages";
 import { createStatusTool } from "./status-tool";
@@ -28,7 +28,7 @@ export type CreateSessionOptions = CreateSessionRequest;
 export interface RuntimeFactoryDeps {
   packageService: PackageService;
   modelRuntimePromise: Promise<ModelRuntime>;
-  approvalStore: ApprovalStore;
+  approvals: ApprovalRegistry;
   activeRunBySessionId: Map<string, string>;
   eventBus: EventBusController;
   startedAt: string;
@@ -51,7 +51,7 @@ export function createZuuRuntimeFactory(
         eventBus: deps.eventBus,
         extensionFactories: [
           createApprovalExtension({
-            approvalStore: deps.approvalStore,
+            approvals: deps.approvals,
             getActiveRunId: (sessionId) => deps.activeRunBySessionId.get(sessionId),
           }),
         ],

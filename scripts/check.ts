@@ -427,7 +427,7 @@ async function main() {
 
   const extensionStore = new ApprovalStore(join(mkdtempSync(join(tmpdir(), "zuu-approval-extension-check-")), "approvals.json"));
   const extension = createApprovalExtension({
-    approvalStore: extensionStore,
+    approvals: extensionStore,
     getActiveRunId: (sessionId) => (sessionId === "extension-session" ? "extension-run" : undefined),
   });
   const toolCallHandlers: Array<(event: unknown, ctx: unknown) => unknown> = [];
