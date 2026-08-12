@@ -40,6 +40,8 @@ ZUU_PI_WORKFLOW_RUN=1 pnpm check:pi-workflow
 - `GET /v1/health`
 - `GET /v1/auth/status`
 - `POST /v1/auth/rotate`
+- `POST /v1/auth/tokens`
+- `DELETE /v1/auth/tokens/:tokenId`
 - `GET /v1/audit-events`
 - `GET /v1/diagnostics`
 - `GET /v1/events`：以 SSE 方式订阅 daemon 级事件，支持 `runId`、`sessionId`、`afterEventId` 和 `Last-Event-ID`
@@ -170,6 +172,13 @@ Project 推荐使用成组路径作为主入口：Session 用 `client.createProj
 ```sh
 pnpm example:client
 ZUU_EXAMPLE_PROMPT="介绍一下当前项目" pnpm example:client
+```
+
+发布前运行：
+
+```sh
+pnpm client:release:check
+pnpm --filter @zuu/client pack:dry
 ```
 
 更多用法见 [packages/client/README.md](packages/client/README.md)。

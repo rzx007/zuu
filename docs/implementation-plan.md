@@ -760,7 +760,7 @@ UI end-to-end
 
 当前限制：
 
-- `@zuu/client` 已是可独立构建的 workspace 包，具备 `dist` 产物、包入口、类型声明、包内中文 README 和第三方示例；尚未接入自动版本发布、changelog 和 npm publish 流程。
+- `@zuu/client` 已是可独立构建的 workspace 包，具备 `dist` 产物、包入口、类型声明、包内中文 README、CHANGELOG、第三方示例、`client:release:prepare` 版本/changelog 准备脚本和 `client:release:check` 发布门禁；真正 `npm publish` 仍需在具备 registry/token 的发布环境执行。
 - JSON store 已有原子写和损坏恢复，prompt run 事件已有最小存档、按 run 补拉、daemon 级 `/v1/events` replay/live stream 和 SDK 自动 SSE 重连，但还没有 SQLite migration 或跨进程写入协调。
 - WebUI 已迁移到 Vue + Vite，并支持打开持久化 session、查看当前 session tree、按 entry fork、从本地 JSONL 路径 import、处理 pending approvals、启动/查看 fake workflow runs、创建/暂停/恢复/触发/删除 schedule、模型 smoke test、查看 audit events，以及通过 daemon 级 `subscribeEvents()` 实时展示事件并节流刷新 runs、approvals、session tree、schedule 和 workflow run 状态。
 - Package API 已能展示安装状态、信任状态、加载状态、显式触发安装/更新/删除，并通过持久化 operation 记录暴露任务进度和失败原因；WebUI 已能 trust/revoke package source 并展示 SDK resource diagnostics/collision。未信任 package 会保留在配置清单中，但已从 Pi `ResourceLoader` 和 `pi-package` workflow backend 的加载链路中过滤，diagnostics 会通过 `blockedPackages` 暴露被阻止加载的 source。

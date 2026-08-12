@@ -14,6 +14,18 @@ pnpm add @zuu/client
 pnpm --filter @zuu/client build
 ```
 
+## 发布流程
+
+发布前先准备版本号和更新日志，再跑发布门禁：
+
+```sh
+pnpm client:release:prepare --version 0.1.1
+pnpm client:release:check
+pnpm --filter @zuu/client pack:dry
+```
+
+`client:release:check` 会确认 `dist`、`README.md`、`CHANGELOG.md`、package exports、`files` 清单和当前版本的 changelog 条目都完整。真正发布 npm 前，再人工确认 npm token、registry 和 tag。
+
 ## 基础用法
 
 ```ts
