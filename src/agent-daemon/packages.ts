@@ -7,13 +7,13 @@ import type {
   PackageMutationRequest,
   PackageOperationAction,
   PackageOperationStartResponse,
-  PackageSummary,
   PackagesResponse,
 } from "@zuu/client";
 import { ApiError } from "../http";
 import { assertPinnedPackageSource, normalizePackageSource, packageSourceToString } from "./environment";
 import { createSettingsManager, createTrustedSettingsView } from "./package-settings";
 import { PackageOperationStore } from "./package-operations";
+import { listPackageSummaries } from "./package-summary";
 import { PackageTrustStore } from "./package-trust";
 
 export class PackageService {
@@ -106,36 +106,10 @@ export class PackageService {
     return createTrustedSettingsView(cwd, this.agentDir, this.trust).blockedPackages;
   }
 
-  private listDetails(): PackageSummary[] {
+  private listDetails() {
     const settingsManager = this.createSettingsManager();
     const packageManager = this.createPackageManager(settingsManager);
-    const configured = packageManager.listConfiguredPackages();
-    const sources = new Set([
-      ...settingsManager.getPackages().map(packageSourceToString),
-      ...configured.map((item) => item.source),
-    ]);
-
-    return [...sources]
-      .map((source): PackageSummary => {
-        const item = configured.find((candidate) => candidate.source === source);
-        const scope = item?.scope ?? "user";
-        const installedPath = item?.installedPath ?? packageManager.getInstalledPath(source, scope);
-        const filtered = item?.filtered ?? false;
-        const trust = this.trust.get(source);
-        return {
-          source,
-          scope,
-          filtered,
-          installedPath,
-          status: filtered ? "filtered" : installedPath ? "installed" : "configured",
-          trustStatus: trust.status,
-          trusted: trust.status === "trusted",
-          trustedAt: trust.trustedAt,
-          loadStatus: trust.status === "trusted" ? "enabled" : "blocked",
-          blockedReason: trust.status === "trusted" ? undefined : "Package source is not trusted.",
-        };
-      })
-      .sort((a, b) => a.source.localeCompare(b.source));
+    return listPackageSummaries(settingsManager, packageManager, this.trust);
   }
 
   private createSettingsManager() {
