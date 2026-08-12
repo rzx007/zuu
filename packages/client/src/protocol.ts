@@ -246,6 +246,8 @@ export interface AuditEventsQuery {
   outcome?: AuditEventOutcome;
   target?: string;
   authScope?: AuthScope;
+  since?: string;
+  until?: string;
 }
 
 export interface SessionsResponse {

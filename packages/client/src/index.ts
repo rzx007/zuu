@@ -229,6 +229,8 @@ function withAuditQuery(query: number | AuditEventsQuery | undefined) {
     outcome: query?.outcome,
     target: query?.target,
     authScope: query?.authScope,
+    since: query?.since,
+    until: query?.until,
   });
 }
 

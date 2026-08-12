@@ -94,11 +94,22 @@ async function main() {
     throw new Error("read token API audit events should include authScope");
   }
   const readScopeFilteredAuditEvents = await client.listAuditEvents({ action: "api.read", authScope: "read", target: "GET /v1/projects", limit: 20 });
+  const readScopeFilteredEvent = readScopeFilteredAuditEvents.events.find((event) => event.target === "GET /v1/projects");
   if (
-    !readScopeFilteredAuditEvents.events.some((event) => event.target === "GET /v1/projects") ||
+    !readScopeFilteredEvent ||
     readScopeFilteredAuditEvents.events.some((event) => event.details?.authScope !== "read")
   ) {
     throw new Error("audit events should be filterable by authScope");
+  }
+  const readSince = new Date(Date.parse(readScopeFilteredEvent.createdAt) - 1).toISOString();
+  const readUntil = new Date(Date.parse(readScopeFilteredEvent.createdAt) - 1).toISOString();
+  const readTimeFilteredAuditEvents = await client.listAuditEvents({ action: "api.read", authScope: "read", target: "GET /v1/projects", since: readSince, limit: 20 });
+  if (!readTimeFilteredAuditEvents.events.some((event) => event.id === readScopeFilteredEvent.id)) {
+    throw new Error("audit events should be filterable by since");
+  }
+  const readBeforeAuditEvents = await client.listAuditEvents({ action: "api.read", authScope: "read", target: "GET /v1/projects", until: readUntil, limit: 20 });
+  if (readBeforeAuditEvents.events.some((event) => event.id === readScopeFilteredEvent.id)) {
+    throw new Error("audit events should be filterable by until");
   }
   await expectClientError(() => readOnlyClient.createProject({ cwd: process.cwd(), name: "read token write check" }), {
     status: 403,
@@ -173,11 +184,20 @@ async function main() {
     fetch: async (input) => {
       const request = input instanceof Request ? input : new Request(input);
       sawAuditRoute =
-        request.url === "http://zuu.local/v1/audit-events?limit=5&action=package.trust&outcome=success&target=npm%3Acheck&authScope=admin";
+        request.url ===
+        "http://zuu.local/v1/audit-events?limit=5&action=package.trust&outcome=success&target=npm%3Acheck&authScope=admin&since=2026-08-12T00%3A00%3A00.000Z&until=2026-08-13T00%3A00%3A00.000Z";
       return Response.json({ events: [] });
     },
   });
-  await auditClient.listAuditEvents({ limit: 5, action: "package.trust", outcome: "success", target: "npm:check", authScope: "admin" });
+  await auditClient.listAuditEvents({
+    limit: 5,
+    action: "package.trust",
+    outcome: "success",
+    target: "npm:check",
+    authScope: "admin",
+    since: "2026-08-12T00:00:00.000Z",
+    until: "2026-08-13T00:00:00.000Z",
+  });
   if (!sawAuditRoute) throw new Error("audit event client method should call the audit route");
 
   const authServiceDir = mkdtempSync(join(tmpdir(), "zuu-auth-service-check-"));
@@ -212,9 +232,11 @@ async function main() {
     auditService.list({ action: "package.trust", outcome: "success", target: "check" }).length !== 1 ||
     auditService.list({ action: "package.trust", outcome: "failure" }).length !== 0 ||
     auditService.list({ authScope: "admin" }).length !== 1 ||
-    auditService.list({ authScope: "read" }).length !== 0
+    auditService.list({ authScope: "read" }).length !== 0 ||
+    auditService.list({ target: "check", since: new Date(Date.parse(auditEvent.createdAt) - 1).toISOString() }).length !== 1 ||
+    auditService.list({ target: "check", until: new Date(Date.parse(auditEvent.createdAt) - 1).toISOString() }).length !== 0
   ) {
-    throw new Error("audit service should filter by action, outcome, target, and authScope");
+    throw new Error("audit service should filter by action, outcome, target, authScope, and time window");
   }
   try {
     envAuth.rotate();
@@ -1387,6 +1409,10 @@ async function main() {
     code: "validation_failed",
   });
   await expectClientError(() => client.listAuditEvents({ authScope: "invalid" as never }), {
+    status: 400,
+    code: "validation_failed",
+  });
+  await expectClientError(() => client.listAuditEvents({ since: "invalid" }), {
     status: 400,
     code: "validation_failed",
   });

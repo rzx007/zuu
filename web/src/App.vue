@@ -77,6 +77,8 @@ const auditAction = ref<'' | AuditEventAction>('')
 const auditOutcome = ref<'' | AuditEventOutcome>('')
 const auditAuthScope = ref<'' | AuthScope>('')
 const auditTarget = ref('')
+const auditSince = ref('')
+const auditUntil = ref('')
 const diagnostics = ref<Diagnostics>()
 const projects = ref<ProjectSummary[]>([])
 const selectedProjectId = ref(localStorage.getItem(projectKey) || '')
@@ -172,6 +174,10 @@ const eventStatusVariant = computed(() => {
 function toDatetimeLocal(date: Date) {
   const localDate = new Date(date.getTime() - date.getTimezoneOffset() * 60_000)
   return localDate.toISOString().slice(0, 16)
+}
+
+function optionalDatetimeIso(value: string) {
+  return value ? new Date(value).toISOString() : undefined
 }
 
 function nextId() {
@@ -382,6 +388,8 @@ async function loadAuditEvents() {
     outcome: auditOutcome.value || undefined,
     authScope: auditAuthScope.value || undefined,
     target: auditTarget.value.trim() || undefined,
+    since: optionalDatetimeIso(auditSince.value),
+    until: optionalDatetimeIso(auditUntil.value),
   })).events
 }
 
@@ -1500,6 +1508,10 @@ onUnmounted(() => {
                 </select>
               </div>
               <input v-model="auditTarget" class="field-input" placeholder="Target contains" @keydown.enter="loadAuditEvents">
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
+                <input v-model="auditSince" class="field-input" type="datetime-local" aria-label="Audit since" @keydown.enter="loadAuditEvents">
+                <input v-model="auditUntil" class="field-input" type="datetime-local" aria-label="Audit until" @keydown.enter="loadAuditEvents">
+              </div>
               <div v-if="auditEvents.length" class="list-stack overflow-auto">
                 <div v-for="event in auditEvents.slice(0, 10)" :key="event.id" class="workflow-row">
                   <div class="flex items-center justify-between gap-2">
