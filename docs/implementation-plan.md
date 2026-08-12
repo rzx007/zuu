@@ -738,6 +738,7 @@ UI end-to-end
 - `GET /api/models` 已支持列出当前已认证可用模型，WebUI 可直接下拉选择。
 - 可选 `ZUU_API_TOKEN` 已支持保护 `/api/*`，client 和 WebUI 都能发送 Bearer token。
 - 默认路径保护已限制 `cwd`、session 文件和 import 文件在当前项目根内；可通过 `ZUU_ALLOWED_CWD` 追加允许根目录。
+- Node server 已支持 SIGINT/SIGTERM graceful shutdown，会关闭 HTTP server 并 dispose active runtime。
 
 当前限制：
 

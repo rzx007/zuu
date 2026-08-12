@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
 import { serve } from "@hono/node-server";
+import type { ServerType } from "@hono/node-server";
 import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
 import ts from "typescript";
@@ -1021,10 +1022,41 @@ app.post("/api/sessions/:sessionId/import", async (c) => {
   }
 });
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  const port = Number(process.env.PORT ?? 3000);
-  serve({ fetch: app.fetch, port });
+function closeServer(server: ServerType) {
+  return new Promise<void>((resolve, reject) => {
+    server.close((error) => {
+      if (error) reject(error);
+      else resolve();
+    });
+  });
+}
+
+export function startServer(port = Number(process.env.PORT ?? 3000)) {
+  const server = serve({ fetch: app.fetch, port });
   console.log(`Zuu Agent listening on http://localhost:${port}`);
+  return server;
+}
+
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  const server = startServer();
+  let shuttingDown = false;
+  const shutdown = async (signal: NodeJS.Signals) => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    console.log(`Received ${signal}; shutting down Zuu Agent...`);
+
+    try {
+      await closeServer(server);
+      await daemon.dispose();
+      process.exit(0);
+    } catch (error) {
+      console.error(error);
+      process.exit(1);
+    }
+  };
+
+  process.once("SIGINT", shutdown);
+  process.once("SIGTERM", shutdown);
 }
 
 export default app;
