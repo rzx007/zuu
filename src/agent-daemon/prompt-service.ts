@@ -12,6 +12,7 @@ interface PromptServiceOptions {
   runs: RunService;
   eventBus: EventBus;
   activeRunBySessionId: Map<string, string>;
+  approvalWaitBySessionId: Map<string, boolean>;
 }
 
 export class PromptService {
@@ -39,6 +40,7 @@ export class PromptService {
     });
     const runId = run.id;
     this.options.activeRunBySessionId.set(session.sessionId, runId);
+    this.options.approvalWaitBySessionId.set(session.sessionId, request.source !== "schedule");
     const recordAndPublish = this.options.runs.createEventRecorder(runId);
 
     yield recordAndPublish({
@@ -126,6 +128,7 @@ export class PromptService {
       if (this.options.activeRunBySessionId.get(session.sessionId) === runId) {
         this.options.activeRunBySessionId.delete(session.sessionId);
       }
+      this.options.approvalWaitBySessionId.delete(session.sessionId);
       unsubscribeApprovalEvents();
       unsubscribe();
     }

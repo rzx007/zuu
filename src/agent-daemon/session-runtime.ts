@@ -30,6 +30,7 @@ export interface RuntimeFactoryDeps {
   modelRuntimePromise: Promise<ModelRuntime>;
   approvals: ApprovalRegistry;
   activeRunBySessionId: Map<string, string>;
+  approvalWaitBySessionId: Map<string, boolean>;
   eventBus: EventBusController;
   startedAt: string;
   getSessionCount: () => number;
@@ -53,6 +54,7 @@ export function createZuuRuntimeFactory(
           createApprovalExtension({
             approvals: deps.approvals,
             getActiveRunId: (sessionId) => deps.activeRunBySessionId.get(sessionId),
+            canWaitForApproval: (sessionId) => deps.approvalWaitBySessionId.get(sessionId) ?? true,
           }),
         ],
         appendSystemPrompt: [

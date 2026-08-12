@@ -73,6 +73,7 @@ type ApprovalEvent =
 interface ApprovalExtensionOptions {
   approvals: ApprovalRegistry;
   getActiveRunId(sessionId: string): string | undefined;
+  canWaitForApproval?(sessionId: string): boolean;
 }
 
 export function subscribeApprovalEvents(
@@ -99,11 +100,13 @@ export function createApprovalExtension(options: ApprovalExtensionOptions): Inli
       pi.on("tool_call", async (event, ctx) => {
         const approvalDecision = approvalDecisionForToolCall(event);
         const requiresApproval = Boolean(approvalDecision);
+        const sessionId = ctx.sessionManager.getSessionId();
         const request = createToolApprovalRequest(
           event,
-          ctx.sessionManager.getSessionId(),
+          sessionId,
           options.getActiveRunId,
           approvalDecision,
+          options.canWaitForApproval?.(sessionId) ?? true,
         );
         if (!request) {
           return requiresApproval
@@ -162,6 +165,7 @@ function createToolApprovalRequest(
   sessionId: string,
   getActiveRunId: (sessionId: string) => string | undefined,
   decision: ToolApprovalDecision | undefined,
+  canWaitForApproval: boolean,
 ): CreateApprovalRequest | undefined {
   if (!decision) return undefined;
 
@@ -179,7 +183,7 @@ function createToolApprovalRequest(
       ? `The agent requested ${event.toolName} ${decision.policy.action} access to a sensitive path with input: ${previewInput(event.input)}`
       : `The agent requested the ${event.toolName} ${decision.policy.action} tool with input: ${previewInput(event.input)}`,
     risk: decision.risk,
-    expiresAt: new Date(Date.now() + TOOL_APPROVAL_TIMEOUT_MS).toISOString(),
+    expiresAt: new Date(Date.now() + (canWaitForApproval ? TOOL_APPROVAL_TIMEOUT_MS : 0)).toISOString(),
   };
 }
 

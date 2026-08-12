@@ -90,6 +90,7 @@ export class ZuuDaemon {
   private readonly approvalService = new ApprovalService(getApprovalStorePath(this.agentDir));
   private readonly modelService = new ModelService();
   private readonly activeRunBySessionId = new Map<string, string>();
+  private readonly approvalWaitBySessionId = new Map<string, boolean>();
   private readonly eventBus: EventBusController = createEventBus();
   private readonly packageService = new PackageService(
     process.cwd(),
@@ -111,6 +112,7 @@ export class ZuuDaemon {
     modelRuntimePromise: this.modelService.getRuntimePromise(),
     approvals: this.approvalService,
     activeRunBySessionId: this.activeRunBySessionId,
+    approvalWaitBySessionId: this.approvalWaitBySessionId,
     eventBus: this.eventBus,
     startedAt: this.startedAt,
   });
@@ -119,6 +121,7 @@ export class ZuuDaemon {
     runs: this.runService,
     eventBus: this.eventBus,
     activeRunBySessionId: this.activeRunBySessionId,
+    approvalWaitBySessionId: this.approvalWaitBySessionId,
   });
   private readonly scheduleService = new ScheduleService({
     path: getScheduleStorePath(this.agentDir),

@@ -1943,6 +1943,43 @@ async function main() {
   if (!missingRunBlocked || typeof missingRunBlocked !== "object" || !("block" in missingRunBlocked) || missingRunBlocked.block !== true) {
     throw new Error("approval extension should block when no active run is registered");
   }
+  const nonInteractiveStore = new ApprovalStore(join(mkdtempSync(join(tmpdir(), "zuu-approval-noninteractive-check-")), "approvals.json"));
+  const nonInteractiveEvents: unknown[] = [];
+  const nonInteractiveEventBus = createEventBus();
+  nonInteractiveEventBus.on("zuu:approval", (event) => nonInteractiveEvents.push(event));
+  const nonInteractiveHandlers: Array<(event: unknown, ctx: unknown) => unknown> = [];
+  const nonInteractiveExtension = createApprovalExtension({
+    approvals: nonInteractiveStore,
+    getActiveRunId: (sessionId) => (sessionId === "schedule-session" ? "schedule-run" : undefined),
+    canWaitForApproval: () => false,
+  });
+  const nonInteractiveFactory = typeof nonInteractiveExtension === "function" ? nonInteractiveExtension : nonInteractiveExtension.factory;
+  await nonInteractiveFactory({
+    on: (event: string, handler: (event: unknown, ctx: unknown) => unknown) => {
+      if (event === "tool_call") nonInteractiveHandlers.push(handler);
+    },
+    events: nonInteractiveEventBus,
+  } as never);
+  const nonInteractiveBlocked = await nonInteractiveHandlers[0]?.(
+    { type: "tool_call", toolName: "bash", toolCallId: "tool-call-noninteractive", input: { command: "echo scheduled" } },
+    {
+      sessionManager: {
+        getSessionId: () => "schedule-session",
+      },
+    },
+  );
+  if (
+    !nonInteractiveBlocked ||
+    typeof nonInteractiveBlocked !== "object" ||
+    !("block" in nonInteractiveBlocked) ||
+    nonInteractiveBlocked.block !== true
+  ) {
+    throw new Error("non-interactive approval extension should fail closed without waiting");
+  }
+  const expiredNonInteractiveApproval = nonInteractiveStore.list("expired")[0];
+  if (!expiredNonInteractiveApproval || nonInteractiveEvents.length !== 2) {
+    throw new Error("non-interactive approval should be requested and immediately expired");
+  }
 
   const packages = await client.listPackages();
   if (!Array.isArray(packages.packages)) throw new Error("packages response is invalid");
@@ -2383,6 +2420,7 @@ async function main() {
     },
     eventBus: { on: () => () => {} },
     activeRunBySessionId: new Map<string, string>(),
+    approvalWaitBySessionId: new Map<string, boolean>(),
   } as never);
   try {
     await promptService.prompt({ sessionId: "busy-session", prompt: "busy" }).next();

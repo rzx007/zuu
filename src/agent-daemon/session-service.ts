@@ -41,6 +41,7 @@ export interface SessionServiceOptions {
   modelRuntimePromise: Promise<ModelRuntime>;
   approvals: ApprovalRegistry;
   activeRunBySessionId: Map<string, string>;
+  approvalWaitBySessionId: Map<string, boolean>;
   eventBus: EventBusController;
   startedAt: string;
 }
@@ -75,6 +76,7 @@ export class SessionService {
         modelRuntimePromise: this.options.modelRuntimePromise,
         approvals: this.options.approvals,
         activeRunBySessionId: this.options.activeRunBySessionId,
+        approvalWaitBySessionId: this.options.approvalWaitBySessionId,
         eventBus: this.options.eventBus,
         startedAt: this.options.startedAt,
         getSessionCount: () => this.runtimes.size,
