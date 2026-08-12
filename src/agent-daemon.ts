@@ -19,6 +19,7 @@ import { ApprovalService } from "./agent-daemon/approval-service";
 import { ApprovalApiService } from "./agent-daemon/approval-api-service";
 import { ModelService } from "./agent-daemon/model-service";
 import { ModelApiService } from "./agent-daemon/model-api-service";
+import { ProjectApiService } from "./agent-daemon/project-api-service";
 import { ProjectService } from "./agent-daemon/project-service";
 import { ScheduleApiService } from "./agent-daemon/schedule-api-service";
 import { ScheduleService } from "./agent-daemon/schedule-service";
@@ -60,6 +61,7 @@ export class ZuuDaemon {
   private readonly approvalApiService: ApprovalApiService;
   private readonly modelApiService: ModelApiService;
   private readonly packageApiService: PackageApiService;
+  private readonly projectApiService: ProjectApiService;
   private readonly runApiService: RunApiService;
   private readonly scheduleApiService: ScheduleApiService;
   private readonly sessionApiService: SessionApiService;
@@ -75,6 +77,7 @@ export class ZuuDaemon {
       deleteSession: (sessionId) => this.deleteSession(sessionId),
     });
     this.packageApiService = new PackageApiService(this.packageService, options.audit);
+    this.projectApiService = new ProjectApiService(this.projectService);
     this.runApiService = new RunApiService(this.runService, this.sessionService);
     this.scheduleApiService = new ScheduleApiService(this.scheduleService);
     this.sessionApiService = new SessionApiService(this.sessionService, this.runService);
@@ -128,23 +131,23 @@ export class ZuuDaemon {
   });
 
   listProjects() {
-    return this.projectService.listProjects();
+    return this.projectApiService.listProjects();
   }
 
   getProject(projectId: string) {
-    return this.projectService.get(projectId);
+    return this.projectApiService.getProject(projectId);
   }
 
   createProject(request: CreateProjectRequest) {
-    return this.projectService.createProject(request);
+    return this.projectApiService.createProject(request);
   }
 
   updateProject(projectId: string, request: UpdateProjectRequest) {
-    return this.projectService.updateProject(projectId, request);
+    return this.projectApiService.updateProject(projectId, request);
   }
 
   deleteProject(projectId: string) {
-    return this.projectService.deleteProject(projectId);
+    return this.projectApiService.deleteProject(projectId);
   }
 
   async createSession(options: CreateSessionRequest = {}) {

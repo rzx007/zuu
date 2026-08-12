@@ -13,6 +13,8 @@ import { ModelService } from "../src/agent-daemon/model-service";
 import { PackageApiService } from "../src/agent-daemon/package-api-service";
 import { PackageService } from "../src/agent-daemon/packages";
 import { PackageTrustStore } from "../src/agent-daemon/package-trust";
+import { ProjectApiService } from "../src/agent-daemon/project-api-service";
+import { ProjectService } from "../src/agent-daemon/project-service";
 import { PromptService } from "../src/agent-daemon/prompt-service";
 import { RunApiService } from "../src/agent-daemon/run-api-service";
 import { RunService } from "../src/agent-daemon/run-service";
@@ -528,6 +530,78 @@ async function main() {
   const deletedProject = await client.deleteProject(project.project.id);
   if (deletedProject.project.id !== project.project.id) {
     throw new Error("project delete returned the wrong project");
+  }
+  const projectApiCalls: string[] = [];
+  const projectApi = new ProjectApiService({
+    listProjects: () => {
+      projectApiCalls.push("list");
+      return [];
+    },
+    get: (projectId?: string) => {
+      projectApiCalls.push(`get:${projectId ?? ""}`);
+      return {
+        id: projectId ?? "default",
+        name: "Project",
+        cwd: process.cwd(),
+        agentDir: join(process.cwd(), ".zuu", "pi-agent"),
+        status: "ready",
+        createdAt: "2026-08-12T00:00:00.000Z",
+        updatedAt: "2026-08-12T00:00:00.000Z",
+      };
+    },
+    createProject: (request: unknown) => {
+      projectApiCalls.push(`create:${(request as { name?: string }).name}:${(request as { cwd?: string }).cwd}`);
+      return {
+        id: "project-api",
+        name: (request as { name?: string }).name ?? "Project",
+        cwd: (request as { cwd?: string }).cwd ?? process.cwd(),
+        agentDir: join(process.cwd(), ".zuu", "pi-agent"),
+        status: "ready",
+        createdAt: "2026-08-12T00:00:00.000Z",
+        updatedAt: "2026-08-12T00:00:00.000Z",
+      };
+    },
+    updateProject: (projectId: string, request: unknown) => {
+      projectApiCalls.push(`update:${projectId}:${(request as { name?: string }).name}`);
+      return {
+        id: projectId,
+        name: (request as { name?: string }).name ?? "Project",
+        cwd: process.cwd(),
+        agentDir: join(process.cwd(), ".zuu", "pi-agent"),
+        status: "ready",
+        createdAt: "2026-08-12T00:00:00.000Z",
+        updatedAt: "2026-08-12T00:00:01.000Z",
+      };
+    },
+    deleteProject: (projectId: string) => {
+      projectApiCalls.push(`delete:${projectId}`);
+      return {
+        id: projectId,
+        name: "Project",
+        cwd: process.cwd(),
+        agentDir: join(process.cwd(), ".zuu", "pi-agent"),
+        status: "ready",
+        createdAt: "2026-08-12T00:00:00.000Z",
+        updatedAt: "2026-08-12T00:00:01.000Z",
+      };
+    },
+  } as unknown as ProjectService);
+  projectApi.listProjects();
+  projectApi.getProject("project-api");
+  projectApi.createProject({ name: "api project", cwd: process.cwd() });
+  projectApi.updateProject("project-api", { name: "renamed api project" });
+  projectApi.deleteProject("project-api");
+  if (
+    projectApiCalls.join("|") !==
+    [
+      "list",
+      "get:project-api",
+      `create:api project:${process.cwd()}`,
+      "update:project-api:renamed api project",
+      "delete:project-api",
+    ].join("|")
+  ) {
+    throw new Error("project API service should delegate project calls");
   }
   await expectClientError(() => client.getProject(project.project.id), { status: 404, code: "not_found" });
   await expectClientError(() => client.deleteProject("default"), { status: 400, code: "validation_failed" });
