@@ -17,6 +17,8 @@ import { PromptService } from "../src/agent-daemon/prompt-service";
 import { RunApiService } from "../src/agent-daemon/run-api-service";
 import { RunService } from "../src/agent-daemon/run-service";
 import { createDaemonScheduleExecutor, launchPromptAsRun } from "../src/agent-daemon/schedule-executor";
+import { SessionApiService } from "../src/agent-daemon/session-api-service";
+import { SessionService } from "../src/agent-daemon/session-service";
 import { ProjectStore } from "../src/agent-daemon/projects";
 import { RunEventStore } from "../src/agent-daemon/run-events";
 import { loadRunHistory, saveRunHistory } from "../src/agent-daemon/run-history";
@@ -1425,6 +1427,31 @@ async function main() {
   const modelApiSmoke = await modelApi.smokeModel({ prompt: "zuu-ok" });
   if (!modelApiSmoke.ok || modelApiSmoke.runId !== "model-api-smoke-run" || modelApiDeletedSessions[0] !== "model-api-smoke-session") {
     throw new Error("model API smoke should run through prompt and clean up the temporary session");
+  }
+  const sessionApiAbortedRuns: string[] = [];
+  const sessionApi = new SessionApiService(
+    {
+      abort: async (sessionId: string) => ({
+        id: sessionId,
+        projectId: "default",
+        cwd: process.cwd(),
+        thinkingLevel: "medium",
+        activeTools: [],
+        messageCount: 0,
+        isStreaming: false,
+        createdAt: "2026-08-12T00:00:00.000Z",
+        updatedAt: "2026-08-12T00:00:01.000Z",
+      }),
+    } as unknown as SessionService,
+    {
+      abortSessionRuns: (sessionId: string) => {
+        sessionApiAbortedRuns.push(sessionId);
+      },
+    } as unknown as RunService,
+  );
+  const sessionApiAbort = await sessionApi.abortSession("session-api-check");
+  if (sessionApiAbort.id !== "session-api-check" || sessionApiAbortedRuns[0] !== "session-api-check") {
+    throw new Error("session API abort should abort the runtime session and linked runs");
   }
   const models = await client.listModels();
   if (!Array.isArray(models.models)) throw new Error("models response is invalid");

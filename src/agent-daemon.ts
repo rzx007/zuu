@@ -50,6 +50,7 @@ import type {
 import { RunApiService } from "./agent-daemon/run-api-service";
 import { RunService } from "./agent-daemon/run-service";
 import { createDaemonScheduleExecutor, launchPromptAsRun } from "./agent-daemon/schedule-executor";
+import { SessionApiService } from "./agent-daemon/session-api-service";
 import { SessionService } from "./agent-daemon/session-service";
 
 export class ZuuDaemon {
@@ -57,6 +58,7 @@ export class ZuuDaemon {
   private readonly modelApiService: ModelApiService;
   private readonly packageApiService: PackageApiService;
   private readonly runApiService: RunApiService;
+  private readonly sessionApiService: SessionApiService;
 
   constructor(options: { audit?: AuditService } = {}) {
     this.approvalApiService = new ApprovalApiService(this.approvalService, options.audit);
@@ -69,6 +71,7 @@ export class ZuuDaemon {
     });
     this.packageApiService = new PackageApiService(this.packageService, options.audit);
     this.runApiService = new RunApiService(this.runService, this.sessionService);
+    this.sessionApiService = new SessionApiService(this.sessionService, this.runService);
   }
 
   private readonly agentDir = getZuuAgentDir();
@@ -137,31 +140,31 @@ export class ZuuDaemon {
   }
 
   async createSession(options: CreateSessionRequest = {}) {
-    return this.sessionService.createSession(options);
+    return this.sessionApiService.createSession(options);
   }
 
   async openSession(options: OpenSessionRequest) {
-    return this.sessionService.openSession(options);
+    return this.sessionApiService.openSession(options);
   }
 
   listSessions(projectId?: string) {
-    return this.sessionService.listSessions(projectId);
+    return this.sessionApiService.listSessions(projectId);
   }
 
   getSession(sessionId: string, projectId?: string) {
-    return this.sessionService.getSession(sessionId, projectId);
+    return this.sessionApiService.getSession(sessionId, projectId);
   }
 
   updateSession(sessionId: string, request: UpdateSessionRequest, projectId?: string) {
-    return this.sessionService.updateSession(sessionId, request, projectId);
+    return this.sessionApiService.updateSession(sessionId, request, projectId);
   }
 
   deleteSession(sessionId: string, projectId?: string) {
-    return this.sessionService.deleteSession(sessionId, projectId);
+    return this.sessionApiService.deleteSession(sessionId, projectId);
   }
 
   async listStoredSessions(cwd?: string, projectId?: string) {
-    return this.sessionService.listStoredSessions(cwd, projectId);
+    return this.sessionApiService.listStoredSessions(cwd, projectId);
   }
 
   listRuns(sessionId?: string, projectId?: string) {
@@ -285,11 +288,11 @@ export class ZuuDaemon {
   }
 
   summarizeSessionTree(sessionId: string) {
-    return this.sessionService.summarizeSessionTree(sessionId);
+    return this.sessionApiService.summarizeSessionTree(sessionId);
   }
 
   summarizeSession(session: Parameters<SessionService["summarizeSession"]>[0]) {
-    return this.sessionService.summarizeSession(session);
+    return this.sessionApiService.summarizeSession(session);
   }
 
   prompt(request: PromptRequest): AsyncGenerator<PromptStreamEvent> {
@@ -297,29 +300,27 @@ export class ZuuDaemon {
   }
 
   async abort(sessionId: string) {
-    const session = await this.sessionService.abort(sessionId);
-    this.runService.abortSessionRuns(sessionId);
-    return session;
+    return this.sessionApiService.abortSession(sessionId);
   }
 
   async compact(sessionId: string, instructions?: string) {
-    return this.sessionService.compact(sessionId, instructions);
+    return this.sessionApiService.compactSession(sessionId, instructions);
   }
 
   async newSession(sessionId: string, options: NewSessionRequest = {}) {
-    return this.sessionService.newSession(sessionId, options);
+    return this.sessionApiService.newSession(sessionId, options);
   }
 
   async switchSession(sessionId: string, options: SwitchSessionRequest) {
-    return this.sessionService.switchSession(sessionId, options);
+    return this.sessionApiService.switchSession(sessionId, options);
   }
 
   async forkSession(sessionId: string, options: ForkSessionRequest) {
-    return this.sessionService.forkSession(sessionId, options);
+    return this.sessionApiService.forkSession(sessionId, options);
   }
 
   async importSession(sessionId: string, options: ImportSessionRequest) {
-    return this.sessionService.importSession(sessionId, options);
+    return this.sessionApiService.importSession(sessionId, options);
   }
 
   async diagnostics() {
