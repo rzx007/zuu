@@ -71,6 +71,17 @@ function hasErrorField(field: string) {
   return (details: unknown) => Boolean(details && typeof details === "object" && "field" in details && details.field === field);
 }
 
+function assertApiValidationError(error: unknown, field: string) {
+  if (
+    !(error instanceof ApiError) ||
+    error.status !== 400 ||
+    error.code !== "validation_failed" ||
+    !hasErrorField(field)(error.details)
+  ) {
+    throw new Error(`expected validation_failed ApiError for ${field}`);
+  }
+}
+
 async function drainStream(stream: AsyncGenerator<unknown>) {
   for await (const _event of stream) {
     // Exhaust the stream so client-side status and SSE parsing are exercised.
@@ -1227,6 +1238,36 @@ async function main() {
     }),
     { status: 400, code: "validation_failed", details: hasErrorField("trigger.timezone") },
   );
+
+  const invalidScheduleStore = new ScheduleStore(
+    join(mkdtempSync(join(tmpdir(), "zuu-schedule-validation-check-")), "schedules.json"),
+    {
+      runPrompt: async () => ({ agentRunId: "unused" }),
+      runWorkflow: async () => ({ workflowRunId: "unused" }),
+    },
+  );
+  try {
+    try {
+      invalidScheduleStore.create({
+        trigger: { kind: "cron", cron: "61 * * * *", timezone: "UTC" },
+        action: { type: "workflow", workflowId: workflows.workflows[0].id, projectId: defaultProject.id },
+      });
+      throw new Error("invalid cron schedule should fail");
+    } catch (error) {
+      assertApiValidationError(error, "trigger.cron");
+    }
+    try {
+      invalidScheduleStore.create({
+        trigger: { kind: "interval", everyMs: 60_000 },
+        action: { type: "agent" } as never,
+      });
+      throw new Error("invalid schedule action should fail");
+    } catch (error) {
+      assertApiValidationError(error, "action.type");
+    }
+  } finally {
+    invalidScheduleStore.dispose();
+  }
 
   const scheduleApiCalls: string[] = [];
   const scheduleApi = new ScheduleApiService({

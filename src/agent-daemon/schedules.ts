@@ -7,7 +7,7 @@ import type {
   ScheduleTrigger,
   UpdateScheduleRequest,
 } from "@zuu/client";
-import { notFound } from "../http";
+import { notFound, validationError } from "../http";
 import { JsonFileStore } from "./json-file-store";
 import type { ScheduleLease } from "./schedule-lease";
 
@@ -115,13 +115,13 @@ function createSchedulesStore(path: string) {
 
 function assertObject(value: unknown, label: string): asserts value is Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
-    throw new Error(`${label} is required`);
+    validationError(`${label} is required`, { field: label });
   }
 }
 
 function assertValidDate(value: unknown, label: string) {
   if (typeof value !== "string" || Number.isNaN(Date.parse(value))) {
-    throw new Error(`${label} must be an ISO date string`);
+    validationError(`${label} must be an ISO date string`, { field: label });
   }
 }
 
@@ -135,21 +135,21 @@ function validateTrigger(trigger: ScheduleTrigger) {
 
   if (trigger.kind === "interval") {
     if (typeof trigger.everyMs !== "number" || !Number.isFinite(trigger.everyMs) || trigger.everyMs < MIN_INTERVAL_MS) {
-      throw new Error(`trigger.everyMs must be at least ${MIN_INTERVAL_MS}`);
+      validationError(`trigger.everyMs must be at least ${MIN_INTERVAL_MS}`, { field: "trigger.everyMs" });
     }
     return;
   }
 
   if (trigger.kind === "cron") {
     if (typeof trigger.timezone !== "string" || !trigger.timezone.trim()) {
-      throw new Error("trigger.timezone is required for cron schedules");
+      validationError("trigger.timezone is required for cron schedules", { field: "trigger.timezone" });
     }
     validateTimeZone(trigger.timezone);
     parseCron(trigger.cron);
     return;
   }
 
-  throw new Error("trigger.kind must be once, interval, or cron");
+  validationError("trigger.kind must be once, interval, or cron", { field: "trigger.kind" });
 }
 
 function validateAction(action: ScheduleAction) {
@@ -157,35 +157,35 @@ function validateAction(action: ScheduleAction) {
 
   if (action.type === "prompt") {
     if (typeof action.prompt !== "string" || !action.prompt.trim()) {
-      throw new Error("action.prompt is required");
+      validationError("action.prompt is required", { field: "action.prompt" });
     }
     return;
   }
 
   if (action.type === "workflow") {
     if (typeof action.workflowId !== "string" || !action.workflowId.trim()) {
-      throw new Error("action.workflowId is required");
+      validationError("action.workflowId is required", { field: "action.workflowId" });
     }
     return;
   }
 
-  throw new Error("action.type must be prompt or workflow");
+  validationError("action.type must be prompt or workflow", { field: "action.type" });
 }
 
 function validateOverlapPolicy(overlapPolicy: CreateScheduleRequest["overlapPolicy"]) {
   if (overlapPolicy === undefined || SCHEDULE_OVERLAP_POLICIES.has(overlapPolicy)) return;
-  throw new Error("overlapPolicy must be skip, queue, or parallel");
+  validationError("overlapPolicy must be skip, queue, or parallel", { field: "overlapPolicy" });
 }
 
 function validateMisfirePolicy(misfirePolicy: CreateScheduleRequest["misfirePolicy"]) {
   if (misfirePolicy === undefined || SCHEDULE_MISFIRE_POLICIES.has(misfirePolicy)) return;
-  throw new Error("misfirePolicy must be skip or run_once");
+  validationError("misfirePolicy must be skip or run_once", { field: "misfirePolicy" });
 }
 
 function validateRetryPolicy(retryPolicy: CreateScheduleRequest["retryPolicy"] | UpdateScheduleRequest["retryPolicy"]) {
   if (retryPolicy === undefined || retryPolicy === null) return;
   if (!isScheduleRetryPolicy(retryPolicy)) {
-    throw new Error("retryPolicy.maxAttempts must be 1-5 and retryPolicy.backoffMs must be 0-60000");
+    validationError("retryPolicy.maxAttempts must be 1-5 and retryPolicy.backoffMs must be 0-60000", { field: "retryPolicy" });
   }
 }
 
@@ -710,11 +710,11 @@ interface CronExpression {
 
 function parseCron(expression: unknown): CronExpression {
   if (typeof expression !== "string" || !expression.trim()) {
-    throw new Error("trigger.cron is required");
+    validationError("trigger.cron is required", { field: "trigger.cron" });
   }
   const fields = expression.trim().split(/\s+/);
   if (fields.length !== 5) {
-    throw new Error("trigger.cron must contain 5 fields");
+    validationError("trigger.cron must contain 5 fields", { field: "trigger.cron" });
   }
 
   return {
@@ -730,10 +730,12 @@ function parseCronField(field: string, min: number, max: number, label: string) 
   const values = new Set<number>();
   for (const part of field.split(",")) {
     const trimmed = part.trim();
-    if (!trimmed) throw new Error(`trigger.cron ${label} field is invalid`);
+    if (!trimmed) validationError(`trigger.cron ${label} field is invalid`, { field: "trigger.cron" });
     const [rangePart, stepPart] = trimmed.split("/", 2);
     const step = stepPart === undefined ? 1 : Number(stepPart);
-    if (!Number.isInteger(step) || step < 1) throw new Error(`trigger.cron ${label} step is invalid`);
+    if (!Number.isInteger(step) || step < 1) {
+      validationError(`trigger.cron ${label} step is invalid`, { field: "trigger.cron" });
+    }
 
     const [start, end] = parseCronRange(rangePart, min, max, label);
     for (let value = start; value <= end; value += step) {
@@ -749,7 +751,7 @@ function parseCronRange(value: string, min: number, max: number, label: string):
   const start = Number(startRaw);
   const end = endRaw === undefined ? start : Number(endRaw);
   if (!Number.isInteger(start) || !Number.isInteger(end) || start < min || end > max || start > end) {
-    throw new Error(`trigger.cron ${label} range is invalid`);
+    validationError(`trigger.cron ${label} range is invalid`, { field: "trigger.cron" });
   }
   return [start, end];
 }
@@ -765,7 +767,7 @@ function nextCronDate(expression: string | undefined, after: number, timeZone = 
     if (matchesCronDate(cursor, cron, timeZone) && zonedMinuteKey(cursor, timeZone) !== previousWallMinute) return cursor;
     cursor.setUTCMinutes(cursor.getUTCMinutes() + 1);
   }
-  throw new Error("trigger.cron did not produce a run time within one year");
+  validationError("trigger.cron did not produce a run time within one year", { field: "trigger.cron" });
 }
 
 function matchesCronDate(date: Date, cron: CronExpression, timeZone = "UTC") {
@@ -780,7 +782,11 @@ function matchesCronDate(date: Date, cron: CronExpression, timeZone = "UTC") {
 }
 
 function validateTimeZone(timeZone: string) {
-  getTimeZoneFormatter(timeZone);
+  try {
+    getTimeZoneFormatter(timeZone);
+  } catch {
+    validationError("trigger.timezone must be a valid IANA timezone", { field: "trigger.timezone" });
+  }
 }
 
 function utcDateParts(date: Date) {
