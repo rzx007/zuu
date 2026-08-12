@@ -48,6 +48,10 @@ export function getScheduleStorePath(agentDir: string) {
   return join(agentDir, "schedules.json");
 }
 
+export function getScheduleLeaseStorePath(agentDir: string) {
+  return join(agentDir, "scheduler-lease.json");
+}
+
 export function getPackageOperationStorePath(agentDir: string) {
   return join(agentDir, "package-operations.json");
 }

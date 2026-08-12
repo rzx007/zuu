@@ -11,6 +11,7 @@ import {
   getProjectStorePath,
   getRunEventStorePath,
   getRunStorePath,
+  getScheduleLeaseStorePath,
   getScheduleStorePath,
   getWorkflowStorePath,
   getZuuAgentDir,
@@ -69,6 +70,7 @@ export async function buildDiagnostics(
     inspectJsonStore({ name: "approvals", path: getApprovalStorePath(agentDir), defaultValue: [] }),
     inspectJsonStore({ name: "workflow-runs", path: getWorkflowStorePath(agentDir), defaultValue: [] }),
     inspectJsonStore({ name: "schedules", path: getScheduleStorePath(agentDir), defaultValue: [] }),
+    inspectJsonStore({ name: "scheduler-lease", path: getScheduleLeaseStorePath(agentDir), defaultValue: null }),
     inspectJsonStore({ name: "package-operations", path: getPackageOperationStorePath(agentDir), defaultValue: [] }),
     inspectJsonStore({ name: "package-trust", path: getPackageTrustStorePath(agentDir), defaultValue: [] }),
     inspectJsonStore({ name: "auth-token", path: getAuthTokenStorePath(agentDir), defaultValue: { token: "", createdAt: "" } }),
@@ -91,7 +93,7 @@ export async function buildDiagnostics(
     gaps.push(workflowBackend.message ?? "Pi workflow backend is not ready.");
   }
   if (!packages.some((item) => item.includes("pi-crew"))) {
-    gaps.push("Scheduler MVP supports local once/interval/basic cron with IANA timezones; durable cross-process scheduling still needs a production scheduler backend.");
+    gaps.push("Scheduler MVP supports local once/interval/basic cron with IANA timezones and a best-effort local lease; a production HA scheduler backend is still needed for distributed execution.");
   }
   if (available.length === 0) {
     gaps.push("No authenticated model is available; configure provider auth in ~/.pi/agent/auth.json or environment variables.");

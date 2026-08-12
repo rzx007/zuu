@@ -8,6 +8,7 @@ import type {
   UpdateScheduleRequest,
 } from "@zuu/client";
 import { JsonFileStore } from "./json-file-store";
+import type { ScheduleLease } from "./schedule-lease";
 
 const SCHEDULE_RUN_HISTORY_LIMIT = 50;
 const MAX_TIMER_DELAY_MS = 2_147_483_647;
@@ -24,6 +25,11 @@ type WorkflowAction = Extract<ScheduleAction, { type: "workflow" }>;
 export interface ScheduleExecutor {
   runPrompt(action: PromptAction): Promise<{ agentRunId?: string }>;
   runWorkflow(action: WorkflowAction): Promise<{ workflowRunId?: string }>;
+}
+
+export interface ScheduleStoreOptions {
+  lease?: ScheduleLease;
+  leaseHeartbeatMs?: number;
 }
 
 function isSchedule(value: unknown): value is Schedule {
@@ -201,13 +207,20 @@ function computeNextRunAt(trigger: ScheduleTrigger, after = Date.now()) {
 export class ScheduleStore {
   private readonly schedules: Map<string, Schedule>;
   private readonly timers = new Map<string, NodeJS.Timeout>();
+  private readonly lease?: ScheduleLease;
+  private leaseHeld: boolean;
+  private leaseHeartbeatTimer: NodeJS.Timeout | undefined;
 
   constructor(
     private readonly path: string,
     private readonly executor: ScheduleExecutor,
+    options: ScheduleStoreOptions = {},
   ) {
+    this.lease = options.lease;
     this.schedules = new Map(loadSchedules(path).map((schedule) => [schedule.id, schedule]));
-    this.rescheduleAll();
+    this.leaseHeld = this.lease ? this.lease.acquire() : true;
+    if (this.lease) this.startLeaseHeartbeat(options.leaseHeartbeatMs);
+    if (this.leaseHeld) this.rescheduleAll();
   }
 
   list(projectId?: string) {
@@ -381,9 +394,10 @@ export class ScheduleStore {
   }
 
   dispose() {
-    for (const scheduleId of this.timers.keys()) {
-      this.clearTimer(scheduleId);
-    }
+    this.clearAllTimers();
+    if (this.leaseHeartbeatTimer) clearInterval(this.leaseHeartbeatTimer);
+    this.leaseHeartbeatTimer = undefined;
+    this.lease?.release();
   }
 
   private updateNextRun(schedule: Schedule) {
@@ -562,6 +576,7 @@ export class ScheduleStore {
 
   private arm(schedule: Schedule) {
     this.clearTimer(schedule.id);
+    if (!this.canRunAutomaticTimers()) return;
     if (schedule.status !== "active" || !schedule.nextRunAt) return;
 
     const delay = Math.max(0, Math.min(Date.parse(schedule.nextRunAt) - Date.now(), MAX_TIMER_DELAY_MS));
@@ -576,6 +591,31 @@ export class ScheduleStore {
     const timer = this.timers.get(scheduleId);
     if (timer) clearTimeout(timer);
     this.timers.delete(scheduleId);
+  }
+
+  private clearAllTimers() {
+    for (const scheduleId of this.timers.keys()) {
+      this.clearTimer(scheduleId);
+    }
+  }
+
+  private canRunAutomaticTimers() {
+    return !this.lease || this.leaseHeld;
+  }
+
+  private startLeaseHeartbeat(heartbeatMs = 5_000) {
+    this.leaseHeartbeatTimer = setInterval(() => {
+      if (!this.lease) return;
+      if (this.leaseHeld) {
+        this.leaseHeld = this.lease.heartbeat();
+        if (!this.leaseHeld) this.clearAllTimers();
+        return;
+      }
+
+      this.leaseHeld = this.lease.acquire();
+      if (this.leaseHeld) this.rescheduleAll();
+    }, heartbeatMs);
+    this.leaseHeartbeatTimer.unref?.();
   }
 
   private rescheduleAll() {

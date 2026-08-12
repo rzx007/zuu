@@ -1,9 +1,11 @@
 import type { CreateScheduleRequest, UpdateScheduleRequest } from "@zuu/client";
 import type { ProjectRegistry } from "./project-service";
+import { ScheduleLease } from "./schedule-lease";
 import { ScheduleStore, type ScheduleExecutor } from "./schedules";
 
 export interface ScheduleServiceOptions {
   path: string;
+  leasePath?: string;
   projects: ProjectRegistry;
   executor: ScheduleExecutor;
 }
@@ -12,7 +14,9 @@ export class ScheduleService {
   private readonly store: ScheduleStore;
 
   constructor(private readonly options: ScheduleServiceOptions) {
-    this.store = new ScheduleStore(options.path, options.executor);
+    this.store = new ScheduleStore(options.path, options.executor, {
+      lease: options.leasePath ? new ScheduleLease(options.leasePath) : undefined,
+    });
   }
 
   listSchedules(projectId?: string) {

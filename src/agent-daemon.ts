@@ -11,6 +11,7 @@ import {
   getProjectStorePath,
   getRunEventStorePath,
   getRunStorePath,
+  getScheduleLeaseStorePath,
   getScheduleStorePath,
   getZuuAgentDir,
 } from "./agent-daemon/environment";
@@ -112,6 +113,7 @@ export class ZuuDaemon {
   });
   private readonly scheduleService = new ScheduleService({
     path: getScheduleStorePath(this.agentDir),
+    leasePath: getScheduleLeaseStorePath(this.agentDir),
     projects: this.projectService,
     executor: createDaemonScheduleExecutor({
       prompt: (request) => this.prompt(request),

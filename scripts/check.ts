@@ -17,6 +17,7 @@ import { PromptService } from "../src/agent-daemon/prompt-service";
 import { RunApiService } from "../src/agent-daemon/run-api-service";
 import { RunService } from "../src/agent-daemon/run-service";
 import { createDaemonScheduleExecutor, launchPromptAsRun } from "../src/agent-daemon/schedule-executor";
+import { ScheduleLease } from "../src/agent-daemon/schedule-lease";
 import { SessionApiService } from "../src/agent-daemon/session-api-service";
 import { SessionService } from "../src/agent-daemon/session-service";
 import { ProjectStore } from "../src/agent-daemon/projects";
@@ -1287,6 +1288,68 @@ async function main() {
     throw new Error("misfire run_once policy should run the missed work once and keep interval schedules active");
   }
   misfireRunOnceStore.dispose();
+
+  const leaseScheduleDir = mkdtempSync(join(tmpdir(), "zuu-schedule-lease-check-"));
+  const leaseSchedulePath = join(leaseScheduleDir, "schedules.json");
+  const leasePath = join(leaseScheduleDir, "scheduler-lease.json");
+  const seedLeaseStore = new ScheduleStore(leaseSchedulePath, {
+    runPrompt: async () => {
+      throw new Error("lease check should use workflow action");
+    },
+    runWorkflow: async () => ({ workflowRunId: "seed" }),
+  });
+  seedLeaseStore.create({
+    name: "lease schedule",
+    trigger: { kind: "once", runAt: new Date(Date.now() + 80).toISOString() },
+    action: { type: "workflow", workflowId: "lease-check" },
+  });
+  seedLeaseStore.dispose();
+
+  let leaseOwnerRuns = 0;
+  let leaseStandbyRuns = 0;
+  let markLeaseTriggered: (() => void) | undefined;
+  const leaseTriggered = new Promise<void>((resolve) => {
+    markLeaseTriggered = resolve;
+  });
+  const leaseOwnerStore = new ScheduleStore(
+    leaseSchedulePath,
+    {
+      runPrompt: async () => {
+        throw new Error("lease owner check should use workflow action");
+      },
+      runWorkflow: async () => {
+        leaseOwnerRuns += 1;
+        markLeaseTriggered?.();
+        return { workflowRunId: "lease-owner-workflow" };
+      },
+    },
+    { lease: new ScheduleLease(leasePath, { ownerId: "lease-owner", ttlMs: 1_000 }), leaseHeartbeatMs: 50 },
+  );
+  const leaseStandbyStore = new ScheduleStore(
+    leaseSchedulePath,
+    {
+      runPrompt: async () => {
+        throw new Error("lease standby check should use workflow action");
+      },
+      runWorkflow: async () => {
+        leaseStandbyRuns += 1;
+        return { workflowRunId: "lease-standby-workflow" };
+      },
+    },
+    { lease: new ScheduleLease(leasePath, { ownerId: "lease-standby", ttlMs: 1_000 }), leaseHeartbeatMs: 50 },
+  );
+  let leaseTimeoutId: NodeJS.Timeout | undefined;
+  const leaseTimeout = new Promise<never>((_, reject) => {
+    leaseTimeoutId = setTimeout(() => reject(new Error("scheduler lease holder did not execute the due schedule")), 1_000);
+  });
+  await Promise.race([leaseTriggered, leaseTimeout]);
+  if (leaseTimeoutId) clearTimeout(leaseTimeoutId);
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  if (leaseOwnerRuns !== 1 || leaseStandbyRuns !== 0) {
+    throw new Error("scheduler lease should allow only the lease holder to run automatic timers");
+  }
+  leaseOwnerStore.dispose();
+  leaseStandbyStore.dispose();
 
   const approvals = await client.listApprovals();
   if (!Array.isArray(approvals.approvals)) throw new Error("approvals response is invalid");
