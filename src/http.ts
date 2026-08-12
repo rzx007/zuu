@@ -49,6 +49,10 @@ export function validationError(message: string, details?: unknown): never {
   throw new ApiError(message, { status: 400, code: "validation_failed", details });
 }
 
+export function notFound(message: string, details?: unknown): never {
+  throw new ApiError(message, { status: 404, code: "not_found", details });
+}
+
 export async function readJson(request: { raw?: Request; json(): Promise<unknown> }, options: { optional?: boolean } = {}) {
   if (request.raw) {
     const text = await request.raw.clone().text();

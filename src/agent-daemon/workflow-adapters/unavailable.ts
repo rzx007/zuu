@@ -1,4 +1,5 @@
 import type { WorkflowRun, WorkflowBackendInfo } from "@zuu/client";
+import { notFound } from "../../http";
 import type { WorkflowBackend } from "./types";
 
 export class UnavailableWorkflowBackend implements WorkflowBackend {
@@ -21,10 +22,10 @@ export class UnavailableWorkflowBackend implements WorkflowBackend {
   }
 
   async getRun(runId: string): Promise<WorkflowRun> {
-    throw new Error(`Unknown workflow run: ${runId}`);
+    notFound(`Unknown workflow run: ${runId}`, { runId });
   }
 
   async abort(runId: string): Promise<WorkflowRun> {
-    throw new Error(`Unknown workflow run: ${runId}`);
+    notFound(`Unknown workflow run: ${runId}`, { runId });
   }
 }

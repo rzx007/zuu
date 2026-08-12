@@ -1,4 +1,5 @@
 import type { EventStreamQuery, PromptRequest, PromptStreamEvent, RunSummary } from "@zuu/client";
+import { notFound } from "../http";
 import { loadRunHistory, saveRunHistory } from "./run-history";
 import { matchesEventQuery, RunEventStore, type RunEventDraft } from "./run-events";
 
@@ -45,8 +46,8 @@ export class RunService {
 
   getRun(runId: string, projectId?: string) {
     const run = this.runs.get(runId);
-    if (!run) throw new Error(`Unknown run: ${runId}`);
-    if (projectId && run.projectId !== projectId) throw new Error(`Unknown run: ${runId}`);
+    if (!run) notFound(`Unknown run: ${runId}`, { runId });
+    if (projectId && run.projectId !== projectId) notFound(`Unknown run: ${runId}`, { runId, projectId });
     return run;
   }
 

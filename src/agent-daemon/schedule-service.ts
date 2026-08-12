@@ -1,4 +1,5 @@
 import type { CreateScheduleRequest, UpdateScheduleRequest } from "@zuu/client";
+import { notFound } from "../http";
 import type { ProjectRegistry } from "./project-service";
 import { ScheduleLease } from "./schedule-lease";
 import { ScheduleStore, type ScheduleExecutor } from "./schedules";
@@ -52,7 +53,7 @@ export class ScheduleService {
   getSchedule(scheduleId: string, projectId?: string) {
     if (projectId) this.options.projects.get(projectId);
     const schedule = this.store.get(scheduleId);
-    if (projectId && schedule.action.projectId !== projectId) throw new Error(`Unknown schedule: ${scheduleId}`);
+    if (projectId && schedule.action.projectId !== projectId) notFound(`Unknown schedule: ${scheduleId}`, { scheduleId, projectId });
     return schedule;
   }
 

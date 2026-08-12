@@ -5,6 +5,7 @@ import type {
   CreateApprovalRequest,
   ResolveApprovalRequest,
 } from "@zuu/client";
+import { notFound } from "../http";
 import { JsonFileStore } from "./json-file-store";
 
 const APPROVAL_HISTORY_LIMIT = 500;
@@ -107,7 +108,7 @@ export class ApprovalStore {
   get(id: string) {
     this.expireApprovals();
     const approval = this.approvals.get(id);
-    if (!approval) throw new Error(`Unknown approval: ${id}`);
+    if (!approval) notFound(`Unknown approval: ${id}`, { approvalId: id });
     return approval;
   }
 

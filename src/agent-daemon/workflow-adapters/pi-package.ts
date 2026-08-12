@@ -9,6 +9,7 @@ import type {
   WorkflowStage,
   WorkflowTask,
 } from "@zuu/client";
+import { notFound } from "../../http";
 import type { WorkflowBackend } from "./types";
 import { WorkflowRunStore } from "./run-store";
 
@@ -82,7 +83,7 @@ export class PiPackageWorkflowBackend implements WorkflowBackend {
 
   async start(workflowId: string, request: StartWorkflowRequest = {}) {
     const definition = PI_WORKFLOW_DEFINITIONS.find((workflow) => workflow.id === workflowId);
-    if (!definition) throw new Error(`Unknown workflow: ${workflowId}`);
+    if (!definition) notFound(`Unknown workflow: ${workflowId}`, { workflowId });
 
     const now = new Date().toISOString();
     const runId = crypto.randomUUID();

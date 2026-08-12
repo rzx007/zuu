@@ -6,6 +6,7 @@ import type {
   PackageProgressAction,
   PackageProgressEventType,
 } from "@zuu/client";
+import { notFound } from "../http";
 import { JsonFileStore } from "./json-file-store";
 
 const PACKAGE_OPERATION_HISTORY_LIMIT = 100;
@@ -55,7 +56,7 @@ export class PackageOperationStore {
 
   get(operationId: string) {
     const operation = this.operations.get(operationId);
-    if (!operation) throw new Error(`Unknown package operation: ${operationId}`);
+    if (!operation) notFound(`Unknown package operation: ${operationId}`, { operationId });
     return operation;
   }
 

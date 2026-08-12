@@ -20,7 +20,7 @@ import type {
   ThinkingLevel,
   UpdateSessionRequest,
 } from "@zuu/client";
-import { ApiError } from "../http";
+import { ApiError, notFound } from "../http";
 import type { ApprovalRegistry } from "./approval-service";
 import { assertAllowedPath, getSessionDir } from "./environment";
 import { entryRole, entryText } from "./events";
@@ -130,7 +130,7 @@ export class SessionService {
         }
         return existing.runtime.session;
       }
-      throw new Error(`Unknown session: ${options.sessionId}`);
+      notFound(`Unknown session: ${options.sessionId}`, { sessionId: options.sessionId });
     }
 
     return this.createSession(options);
@@ -311,7 +311,7 @@ export class SessionService {
 
   private getManagedRuntime(sessionId: string) {
     const managed = this.runtimes.get(sessionId);
-    if (!managed) throw new Error(`Unknown session: ${sessionId}`);
+    if (!managed) notFound(`Unknown session: ${sessionId}`, { sessionId });
     return managed;
   }
 

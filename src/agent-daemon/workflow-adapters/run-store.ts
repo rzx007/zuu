@@ -1,4 +1,5 @@
 import type { WorkflowRun } from "@zuu/client";
+import { notFound } from "../../http";
 import { JsonFileStore } from "../json-file-store";
 
 const WORKFLOW_HISTORY_LIMIT = 200;
@@ -71,7 +72,7 @@ export class WorkflowRunStore {
 
   get(runId: string) {
     const run = this.runs.get(runId);
-    if (!run) throw new Error(`Unknown workflow run: ${runId}`);
+    if (!run) notFound(`Unknown workflow run: ${runId}`, { runId });
     return run;
   }
 

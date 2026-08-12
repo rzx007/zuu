@@ -844,13 +844,7 @@ async function main() {
   await expectClientError(() => client.listProjectWorkflowTasks(defaultProject.id, "missing"), { status: 404, code: "not_found" });
   await expectClientError(() => client.getWorkflowArtifact("missing"), { status: 404, code: "not_found" });
   await expectClientError(() => client.getProjectWorkflowArtifact(defaultProject.id, "missing"), { status: 404, code: "not_found" });
-  let missingWorkflowFailed = false;
-  try {
-    await client.startProjectWorkflow(defaultProject.id, "missing");
-  } catch {
-    missingWorkflowFailed = true;
-  }
-  if (!missingWorkflowFailed) throw new Error("missing workflow should fail");
+  await expectClientError(() => client.startProjectWorkflow(defaultProject.id, "missing"), { status: 404, code: "not_found" });
   const workflowApiCalls: string[] = [];
   const workflowApi = new WorkflowApiService({
     listWorkflows: async (projectId?: string) => {
@@ -1858,21 +1852,8 @@ async function main() {
   }
   if (!invalidApprovalStatusFailed) throw new Error("invalid approval status should fail");
 
-  let missingApprovalFailed = false;
-  try {
-    await client.getApproval("missing");
-  } catch {
-    missingApprovalFailed = true;
-  }
-  if (!missingApprovalFailed) throw new Error("missing approval should fail");
-
-  let missingApprovalResolveFailed = false;
-  try {
-    await client.resolveApproval("missing", { decision: "deny" });
-  } catch {
-    missingApprovalResolveFailed = true;
-  }
-  if (!missingApprovalResolveFailed) throw new Error("missing approval resolve should fail");
+  await expectClientError(() => client.getApproval("missing"), { status: 404, code: "not_found" });
+  await expectClientError(() => client.resolveApproval("missing", { decision: "deny" }), { status: 404, code: "not_found" });
 
   const approvalStore = new ApprovalStore(join(mkdtempSync(join(tmpdir(), "zuu-approval-check-")), "approvals.json"));
   const pendingApproval = approvalStore.create({
@@ -2113,13 +2094,7 @@ async function main() {
   }
   const packageOperations = await client.listPackageOperations();
   if (!Array.isArray(packageOperations.operations)) throw new Error("package operations response is invalid");
-  let missingPackageOperationFailed = false;
-  try {
-    await client.getPackageOperation("missing");
-  } catch {
-    missingPackageOperationFailed = true;
-  }
-  if (!missingPackageOperationFailed) throw new Error("missing package operation should fail");
+  await expectClientError(() => client.getPackageOperation("missing"), { status: 404, code: "not_found" });
   const modelDiagnosticsCalls: unknown[] = [];
   const modelApiDeletedSessions: string[] = [];
   const modelApi = new ModelApiService(
@@ -2739,6 +2714,7 @@ async function main() {
   if (opened.session.id !== persisted.session.id) throw new Error("openSession returned the wrong session");
 
   await expectClientError(() => client.getRun("missing"), { status: 404, code: "not_found" });
+  await expectClientError(() => client.getSchedule("missing"), { status: 404, code: "not_found" });
   await expectClientError(() => client.listScheduleRuns("missing"), { status: 404, code: "not_found" });
   await expectClientError(() => client.getScheduleRun("missing"), { status: 404, code: "not_found" });
   await expectClientError(() => client.abortScheduleRun("missing"), { status: 404, code: "not_found" });

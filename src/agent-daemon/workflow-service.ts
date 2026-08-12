@@ -1,4 +1,5 @@
 import type { PromptRequest, RunSummary, StartWorkflowRequest } from "@zuu/client";
+import { notFound } from "../http";
 import { getWorkflowStorePath } from "./environment";
 import type { PackageService } from "./packages";
 import type { ProjectRegistry } from "./project-service";
@@ -40,7 +41,7 @@ export class WorkflowService {
   async getWorkflowRun(runId: string, projectId?: string) {
     if (projectId) this.options.projects.get(projectId);
     const run = await this.createBackend().getRun(runId);
-    if (projectId && run.projectId !== projectId) throw new Error(`Unknown workflow run: ${runId}`);
+    if (projectId && run.projectId !== projectId) notFound(`Unknown workflow run: ${runId}`, { runId, projectId });
     return run;
   }
 
@@ -58,7 +59,7 @@ export class WorkflowService {
     if (projectId) this.options.projects.get(projectId);
     const runs = await this.listWorkflowRuns(projectId);
     const artifact = runs.flatMap((run) => run.artifacts).find((item) => item.id === artifactId);
-    if (!artifact) throw new Error(`Unknown workflow artifact: ${artifactId}`);
+    if (!artifact) notFound(`Unknown workflow artifact: ${artifactId}`, { artifactId, projectId });
     return artifact;
   }
 

@@ -4,6 +4,7 @@ import type {
   ProjectSummary,
   UpdateProjectRequest,
 } from "@zuu/client";
+import { notFound } from "../http";
 import { assertAllowedPath } from "./environment";
 import { JsonFileStore } from "./json-file-store";
 
@@ -91,7 +92,7 @@ export class ProjectStore {
 
   get(projectId = DEFAULT_PROJECT_ID) {
     const project = this.projects.get(projectId);
-    if (!project) throw new Error(`Unknown project: ${projectId}`);
+    if (!project) notFound(`Unknown project: ${projectId}`, { projectId });
     return project;
   }
 

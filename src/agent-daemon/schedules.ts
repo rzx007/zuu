@@ -7,6 +7,7 @@ import type {
   ScheduleTrigger,
   UpdateScheduleRequest,
 } from "@zuu/client";
+import { notFound } from "../http";
 import { JsonFileStore } from "./json-file-store";
 import type { ScheduleLease } from "./schedule-lease";
 
@@ -237,20 +238,20 @@ export class ScheduleStore {
 
   get(scheduleId: string) {
     const schedule = this.schedules.get(scheduleId);
-    if (!schedule) throw new Error(`Unknown schedule: ${scheduleId}`);
+    if (!schedule) notFound(`Unknown schedule: ${scheduleId}`, { scheduleId });
     return schedule;
   }
 
   getRun(runId: string) {
     const run = this.listRuns().find((item) => item.id === runId);
-    if (!run) throw new Error(`Unknown schedule run: ${runId}`);
+    if (!run) notFound(`Unknown schedule run: ${runId}`, { runId });
     return run;
   }
 
   abortRun(runId: string) {
     const schedule = this.findScheduleForRun(runId);
     const run = schedule.runs.find((item) => item.id === runId);
-    if (!run) throw new Error(`Unknown schedule run: ${runId}`);
+    if (!run) notFound(`Unknown schedule run: ${runId}`, { runId });
     if (run.status !== "queued" && run.status !== "running") return run;
 
     const now = new Date().toISOString();
@@ -649,7 +650,7 @@ export class ScheduleStore {
 
   private findScheduleForRun(runId: string) {
     const schedule = this.sortedSchedules().find((item) => item.runs.some((run) => run.id === runId));
-    if (!schedule) throw new Error(`Unknown schedule run: ${runId}`);
+    if (!schedule) notFound(`Unknown schedule run: ${runId}`, { runId });
     return schedule;
   }
 
