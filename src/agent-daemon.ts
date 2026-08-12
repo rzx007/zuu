@@ -40,7 +40,6 @@ import type {
   PromptRequest,
   PromptStreamEvent,
   ResolveApprovalRequest,
-  RunSummary,
   StartWorkflowRequest,
   SwitchSessionRequest,
   UpdateProjectRequest,
@@ -50,6 +49,7 @@ import type {
 import { runModelSmoke } from "./agent-daemon/model-smoke";
 import { RunApiService } from "./agent-daemon/run-api-service";
 import { RunService } from "./agent-daemon/run-service";
+import { createDaemonScheduleExecutor, launchPromptAsRun } from "./agent-daemon/schedule-executor";
 import { SessionService } from "./agent-daemon/session-service";
 
 export class ZuuDaemon {
@@ -102,26 +102,10 @@ export class ZuuDaemon {
   private readonly scheduleService = new ScheduleService({
     path: getScheduleStorePath(this.agentDir),
     projects: this.projectService,
-    executor: {
-      runPrompt: async (action) => {
-        const { type: _type, ...request } = action;
-        let agentRunId: string | undefined;
-        for await (const event of this.prompt({ ...request, source: "schedule" })) {
-          agentRunId = event.run?.id ?? event.runId ?? agentRunId;
-        }
-        return { agentRunId };
-      },
-      runWorkflow: async (action) => {
-        const run = await this.startWorkflow(action.workflowId, {
-          projectId: action.projectId,
-          sessionId: action.sessionId,
-          prompt: action.prompt,
-          inputs: action.inputs,
-          source: "schedule",
-        });
-        return { workflowRunId: run.id };
-      },
-    },
+    executor: createDaemonScheduleExecutor({
+      prompt: (request) => this.prompt(request),
+      startWorkflow: (workflowId, request) => this.startWorkflow(workflowId, request),
+    }),
   });
 
   listProjects() {
@@ -245,12 +229,7 @@ export class ZuuDaemon {
   }
 
   private async launchWorkflowPrompt(request: PromptRequest) {
-    let finalRun: RunSummary | undefined;
-    for await (const event of this.prompt(request)) {
-      finalRun = event.run ?? finalRun;
-    }
-    if (!finalRun) throw new Error("Workflow launch did not produce an agent run");
-    return finalRun;
+    return launchPromptAsRun((promptRequest) => this.prompt(promptRequest), request);
   }
 
   listSchedules(projectId?: string) {

@@ -14,6 +14,7 @@ import { PackageTrustStore } from "../src/agent-daemon/package-trust";
 import { PromptService } from "../src/agent-daemon/prompt-service";
 import { RunApiService } from "../src/agent-daemon/run-api-service";
 import { RunService } from "../src/agent-daemon/run-service";
+import { createDaemonScheduleExecutor, launchPromptAsRun } from "../src/agent-daemon/schedule-executor";
 import { ProjectStore } from "../src/agent-daemon/projects";
 import { RunEventStore } from "../src/agent-daemon/run-events";
 import { loadRunHistory, saveRunHistory } from "../src/agent-daemon/run-history";
@@ -730,6 +731,80 @@ async function main() {
     invalidCronTimezoneFailed = true;
   }
   if (!invalidCronTimezoneFailed) throw new Error("invalid cron timezone should fail");
+
+  const schedulePromptRequests: unknown[] = [];
+  const scheduleWorkflowRequests: Array<{ workflowId: string; request: unknown }> = [];
+  const scheduleExecutor = createDaemonScheduleExecutor({
+    prompt: async function* (request) {
+      schedulePromptRequests.push(request);
+      yield {
+        id: "schedule-prompt:1",
+        createdAt: "2026-08-12T00:00:00.000Z",
+        runId: "schedule-agent-run",
+        type: "done",
+        run: {
+          id: "schedule-agent-run",
+          sessionId: "schedule-session",
+          projectId: "default",
+          source: "schedule",
+          status: "completed",
+          prompt: "scheduled prompt",
+          startedAt: "2026-08-12T00:00:00.000Z",
+          finishedAt: "2026-08-12T00:00:01.000Z",
+        },
+      };
+    },
+    startWorkflow: async (workflowId, request) => {
+      scheduleWorkflowRequests.push({ workflowId, request });
+      return {
+        id: "schedule-workflow-run",
+        workflowId,
+        workflowName: "Schedule workflow",
+        status: "completed",
+        source: "schedule",
+        startedAt: "2026-08-12T00:00:00.000Z",
+        stages: [],
+        tasks: [],
+        artifacts: [],
+      };
+    },
+  });
+  const schedulePromptResult = await scheduleExecutor.runPrompt({ type: "prompt", prompt: "scheduled prompt", projectId: "default" });
+  if (
+    schedulePromptResult.agentRunId !== "schedule-agent-run" ||
+    (schedulePromptRequests[0] as { source?: string }).source !== "schedule" ||
+    (schedulePromptRequests[0] as { type?: string }).type
+  ) {
+    throw new Error("daemon schedule executor should launch prompt actions as schedule runs");
+  }
+  const launchedRun = await launchPromptAsRun(async function* () {
+    yield {
+      id: "workflow-launch:1",
+      createdAt: "2026-08-12T00:00:00.000Z",
+      runId: "workflow-launch-run",
+      type: "done",
+      run: {
+        id: "workflow-launch-run",
+        sessionId: "workflow-launch-session",
+        projectId: "default",
+        source: "workflow",
+        status: "completed",
+        prompt: "workflow launch",
+        startedAt: "2026-08-12T00:00:00.000Z",
+      },
+    };
+  }, { prompt: "workflow launch" });
+  if (launchedRun.id !== "workflow-launch-run") {
+    throw new Error("workflow launch prompt should return the final agent run");
+  }
+  const scheduleWorkflowResult = await scheduleExecutor.runWorkflow({ type: "workflow", workflowId: "workflow-check", projectId: "default", prompt: "go" });
+  if (
+    scheduleWorkflowResult.workflowRunId !== "schedule-workflow-run" ||
+    scheduleWorkflowRequests[0]?.workflowId !== "workflow-check" ||
+    (scheduleWorkflowRequests[0]?.request as { source?: string }).source !== "schedule"
+  ) {
+    throw new Error("daemon schedule executor should launch workflow actions as schedule runs");
+  }
 
   let releaseOverlapRun: (() => void) | undefined;
   let markOverlapStarted: (() => void) | undefined;
