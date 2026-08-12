@@ -99,6 +99,7 @@ const scheduleKind = ref<'once' | 'interval' | 'cron'>('once')
 const scheduleRunAt = ref(toDatetimeLocal(new Date(Date.now() + 10 * 60_000)))
 const scheduleEveryMinutes = ref(30)
 const scheduleCron = ref('*/5 * * * *')
+const scheduleTimezone = ref(Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC')
 const scheduleActionType = ref<'workflow' | 'prompt'>('workflow')
 const scheduleOverlapPolicy = ref<ScheduleOverlapPolicy>('skip')
 const scheduleMisfirePolicy = ref<'skip' | 'run_once'>('skip')
@@ -705,7 +706,11 @@ async function createSchedule() {
     if (scheduleKind.value === 'interval') {
       return { kind: 'interval' as const, everyMs: everyMinutes * 60_000 }
     }
-    return { kind: 'cron' as const, cron: scheduleCron.value.trim() || '*/5 * * * *' }
+    return {
+      kind: 'cron' as const,
+      cron: scheduleCron.value.trim() || '*/5 * * * *',
+      timezone: scheduleTimezone.value.trim() || 'UTC',
+    }
   })()
   const input: CreateScheduleRequest = {
     name: scheduleName.value.trim() || undefined,
@@ -739,6 +744,7 @@ function editSchedule(schedule: Schedule) {
     scheduleEveryMinutes.value = Math.max(1, Math.round((schedule.trigger.everyMs || 60_000) / 60_000))
   } else {
     scheduleCron.value = schedule.trigger.cron || '*/5 * * * *'
+    scheduleTimezone.value = schedule.trigger.timezone || 'UTC'
   }
   scheduleActionType.value = schedule.action.type
   scheduleOverlapPolicy.value = schedule.overlapPolicy
@@ -811,7 +817,7 @@ async function abortRun(runId: string) {
 function scheduleTriggerLabel(schedule: Schedule) {
   if (schedule.trigger.kind === 'once') return `once at ${schedule.trigger.runAt || 'unset'}`
   if (schedule.trigger.kind === 'interval') return `every ${Math.round((schedule.trigger.everyMs || 0) / 60_000)} min`
-  return schedule.trigger.cron || 'cron'
+  return `${schedule.trigger.cron || 'cron'} / ${schedule.trigger.timezone || 'UTC'}`
 }
 
 function scheduleActionLabel(action: ScheduleAction) {
@@ -1190,6 +1196,10 @@ onUnmounted(() => {
           <label v-else class="field-label">
             Cron
             <input v-model="scheduleCron" class="field-input" placeholder="*/5 * * * *">
+          </label>
+          <label v-if="scheduleKind === 'cron'" class="field-label">
+            Timezone
+            <input v-model="scheduleTimezone" class="field-input" placeholder="Asia/Shanghai">
           </label>
           <label v-if="scheduleActionType === 'workflow'" class="field-label">
             Workflow

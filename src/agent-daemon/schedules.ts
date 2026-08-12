@@ -16,6 +16,7 @@ const CRON_SEARCH_LIMIT_MINUTES = 366 * 24 * 60;
 const SCHEDULE_RUN_STATUSES = new Set(["queued", "running", "completed", "failed", "skipped", "aborted"]);
 const SCHEDULE_OVERLAP_POLICIES = new Set(["skip", "queue", "parallel"]);
 const SCHEDULE_MISFIRE_POLICIES = new Set(["skip", "run_once"]);
+const timeZoneFormatters = new Map<string, Intl.DateTimeFormat>();
 
 type PromptAction = Extract<ScheduleAction, { type: "prompt" }>;
 type WorkflowAction = Extract<ScheduleAction, { type: "workflow" }>;
@@ -133,9 +134,7 @@ function validateTrigger(trigger: ScheduleTrigger) {
   }
 
   if (trigger.kind === "cron") {
-    if (trigger.timezone && trigger.timezone !== "UTC") {
-      throw new Error("trigger.timezone is not supported yet; omit it or use UTC");
-    }
+    validateTimeZone(trigger.timezone ?? "UTC");
     parseCron(trigger.cron);
     return;
   }
@@ -192,7 +191,7 @@ function computeNextRunAt(trigger: ScheduleTrigger, after = Date.now()) {
   }
 
   if (trigger.kind === "cron") {
-    const next = nextCronDate(trigger.cron, after);
+    const next = nextCronDate(trigger.cron, after, trigger.timezone ?? "UTC");
     return next?.toISOString();
   }
 
@@ -711,25 +710,79 @@ function parseCronRange(value: string, min: number, max: number, label: string):
   return [start, end];
 }
 
-function nextCronDate(expression: string | undefined, after: number) {
+function nextCronDate(expression: string | undefined, after: number, timeZone = "UTC") {
   const cron = parseCron(expression);
   const cursor = new Date(after);
   cursor.setUTCSeconds(0, 0);
   cursor.setUTCMinutes(cursor.getUTCMinutes() + 1);
+  const previousWallMinute = zonedMinuteKey(new Date(after), timeZone);
 
   for (let i = 0; i < CRON_SEARCH_LIMIT_MINUTES; i += 1) {
-    if (matchesCronDate(cursor, cron)) return cursor;
+    if (matchesCronDate(cursor, cron, timeZone) && zonedMinuteKey(cursor, timeZone) !== previousWallMinute) return cursor;
     cursor.setUTCMinutes(cursor.getUTCMinutes() + 1);
   }
   throw new Error("trigger.cron did not produce a run time within one year");
 }
 
-function matchesCronDate(date: Date, cron: CronExpression) {
+function matchesCronDate(date: Date, cron: CronExpression, timeZone = "UTC") {
+  const parts = timeZone === "UTC" ? utcDateParts(date) : zonedDateParts(date, timeZone);
   return (
-    cron.minutes.has(date.getUTCMinutes()) &&
-    cron.hours.has(date.getUTCHours()) &&
-    cron.daysOfMonth.has(date.getUTCDate()) &&
-    cron.months.has(date.getUTCMonth() + 1) &&
-    cron.daysOfWeek.has(date.getUTCDay())
+    cron.minutes.has(parts.minute) &&
+    cron.hours.has(parts.hour) &&
+    cron.daysOfMonth.has(parts.dayOfMonth) &&
+    cron.months.has(parts.month) &&
+    cron.daysOfWeek.has(parts.dayOfWeek)
   );
+}
+
+function validateTimeZone(timeZone: string) {
+  getTimeZoneFormatter(timeZone);
+}
+
+function utcDateParts(date: Date) {
+  return {
+    minute: date.getUTCMinutes(),
+    hour: date.getUTCHours(),
+    dayOfMonth: date.getUTCDate(),
+    month: date.getUTCMonth() + 1,
+    dayOfWeek: date.getUTCDay(),
+  };
+}
+
+function zonedDateParts(date: Date, timeZone: string) {
+  const parts = Object.fromEntries(getTimeZoneFormatter(timeZone).formatToParts(date).map((part) => [part.type, part.value]));
+  const year = Number(parts.year);
+  const month = Number(parts.month);
+  const dayOfMonth = Number(parts.day);
+  return {
+    minute: Number(parts.minute),
+    hour: Number(parts.hour),
+    dayOfMonth,
+    month,
+    dayOfWeek: new Date(Date.UTC(year, month - 1, dayOfMonth)).getUTCDay(),
+  };
+}
+
+function zonedMinuteKey(date: Date, timeZone: string) {
+  if (timeZone === "UTC") {
+    return date.toISOString().slice(0, 16);
+  }
+  const parts = Object.fromEntries(getTimeZoneFormatter(timeZone).formatToParts(date).map((part) => [part.type, part.value]));
+  return `${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}`;
+}
+
+function getTimeZoneFormatter(timeZone: string) {
+  const cached = timeZoneFormatters.get(timeZone);
+  if (cached) return cached;
+  const formatter = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    hourCycle: "h23",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+  timeZoneFormatters.set(timeZone, formatter);
+  return formatter;
 }

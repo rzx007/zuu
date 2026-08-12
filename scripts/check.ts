@@ -523,16 +523,36 @@ async function main() {
     unsupportedRetryPolicyFailed = true;
   }
   if (!unsupportedRetryPolicyFailed) throw new Error("unsupported retry policy should fail");
-  let cronTimezoneFailed = false;
+  const shanghaiCronSchedule = await client.createProjectSchedule(defaultProject.id, {
+    trigger: { kind: "cron", cron: "0 9 * * *", timezone: "Asia/Shanghai" },
+    action: { type: "workflow", workflowId: workflows.workflows[0].id },
+  });
+  const shanghaiCronNext = shanghaiCronSchedule.schedule.nextRunAt
+    ? Object.fromEntries(new Intl.DateTimeFormat("en-US", {
+        timeZone: "Asia/Shanghai",
+        hourCycle: "h23",
+        hour: "2-digit",
+        minute: "2-digit",
+      }).formatToParts(new Date(shanghaiCronSchedule.schedule.nextRunAt)).map((part) => [part.type, part.value]))
+    : undefined;
+  if (
+    shanghaiCronSchedule.schedule.trigger.timezone !== "Asia/Shanghai" ||
+    shanghaiCronNext?.hour !== "09" ||
+    shanghaiCronNext?.minute !== "00"
+  ) {
+    throw new Error("cron timezone schedule should compute nextRunAt in the requested timezone");
+  }
+  await client.deleteProjectSchedule(defaultProject.id, shanghaiCronSchedule.schedule.id);
+  let invalidCronTimezoneFailed = false;
   try {
     await client.createProjectSchedule(defaultProject.id, {
-      trigger: { kind: "cron", cron: "* * * * *", timezone: "Asia/Shanghai" },
+      trigger: { kind: "cron", cron: "* * * * *", timezone: "Not/AZone" },
       action: { type: "workflow", workflowId: workflows.workflows[0].id },
     });
   } catch {
-    cronTimezoneFailed = true;
+    invalidCronTimezoneFailed = true;
   }
-  if (!cronTimezoneFailed) throw new Error("cron timezone should fail until timezone orchestration is installed");
+  if (!invalidCronTimezoneFailed) throw new Error("invalid cron timezone should fail");
 
   let releaseOverlapRun: (() => void) | undefined;
   let markOverlapStarted: (() => void) | undefined;
