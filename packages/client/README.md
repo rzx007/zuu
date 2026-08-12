@@ -57,11 +57,19 @@ for await (const event of client.prompt({ prompt: "你好，介绍一下当前�
 
 ## 事件订阅
 
-`subscribeEvents()` 会先按 `afterEventId` replay 已存档事件，再持续接收 daemon live 事件。事件必须包含稳定 `id` 和 `createdAt`。
+`subscribeEvents()` 会先按 `afterEventId` replay 已存档事件，再持续接收 daemon live 事件。它默认保存最后事件 ID，断线后用 `Last-Event-ID` 自动重连，并去重重复事件。事件必须包含稳定 `id` 和 `createdAt`。
 
 ```ts
 for await (const event of client.subscribeEvents({ runId, afterEventId })) {
   console.log(event.id, event.type, event.createdAt);
+}
+```
+
+需要一次性读取当前窗口时，可以关闭自动重连：
+
+```ts
+for await (const event of client.subscribeEvents({ runId, reconnect: false })) {
+  console.log(event.id, event.type);
 }
 ```
 

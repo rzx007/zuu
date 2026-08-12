@@ -109,21 +109,35 @@ async function main() {
   const missingEventStream = await fetchFromApp("http://zuu.local/api/events?runId=missing");
   if (missingEventStream.status !== 404) throw new Error("missing event stream run should fail before streaming");
 
-  let sawLastEventId = false;
+  let eventStreamRequestCount = 0;
+  const eventStreamLastEventIds: Array<string | null> = [];
   const eventStreamClient = createZuuClient({
     baseUrl: "http://zuu.local",
     fetch: async (input, init) => {
       const request = input instanceof Request ? input : new Request(input, init);
-      sawLastEventId = request.headers.get("last-event-id") === "event-check:0";
-      const body = [
-        "id: event-check:1",
-        "event: text_delta",
-        "data: {\"id\":\"event-check:1\",\"createdAt\":\"2026-08-12T00:00:00.000Z\",\"runId\":\"event-check\",\"type\":\"text_delta\",\"delta\":\"hello\"}",
-        "",
-        "event: heartbeat",
-        "data: {}",
-        "",
-      ].join("\n");
+      eventStreamRequestCount += 1;
+      eventStreamLastEventIds.push(request.headers.get("last-event-id"));
+      const body =
+        eventStreamRequestCount === 1
+          ? [
+              "id: event-check:1",
+              "event: text_delta",
+              "data: {\"id\":\"event-check:1\",\"createdAt\":\"2026-08-12T00:00:00.000Z\",\"runId\":\"event-check\",\"type\":\"text_delta\",\"delta\":\"hello\"}",
+              "",
+              "event: heartbeat",
+              "data: {}",
+              "",
+            ].join("\n")
+          : [
+              "id: event-check:1",
+              "event: text_delta",
+              "data: {\"id\":\"event-check:1\",\"createdAt\":\"2026-08-12T00:00:00.000Z\",\"runId\":\"event-check\",\"type\":\"text_delta\",\"delta\":\"hello again\"}",
+              "",
+              "id: event-check:2",
+              "event: done",
+              "data: {\"id\":\"event-check:2\",\"createdAt\":\"2026-08-12T00:00:01.000Z\",\"runId\":\"event-check\",\"type\":\"done\"}",
+              "",
+            ].join("\n");
       return new Response(new ReadableStream({
         start(controller) {
           controller.enqueue(new TextEncoder().encode(body));
@@ -135,11 +149,17 @@ async function main() {
     },
   });
   const streamedEvents = [];
-  for await (const event of eventStreamClient.subscribeEvents({ afterEventId: "event-check:0" })) {
+  for await (const event of eventStreamClient.subscribeEvents({ afterEventId: "event-check:0", reconnectDelayMs: 0 })) {
     streamedEvents.push(event);
+    if (streamedEvents.length === 2) break;
   }
-  if (!sawLastEventId || streamedEvents.length !== 1 || streamedEvents[0]?.id !== "event-check:1") {
-    throw new Error("event stream client should parse IDs, send Last-Event-ID, and ignore heartbeats");
+  if (
+    eventStreamRequestCount !== 2 ||
+    eventStreamLastEventIds[0] !== "event-check:0" ||
+    eventStreamLastEventIds[1] !== "event-check:1" ||
+    streamedEvents.map((event) => event.id).join(",") !== "event-check:1,event-check:2"
+  ) {
+    throw new Error("event stream client should reconnect with Last-Event-ID, dedupe events, and ignore heartbeats");
   }
 
   const workflows = await client.listWorkflows();

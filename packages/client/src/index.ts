@@ -52,6 +52,9 @@ export interface PromptStreamOptions {
 
 export interface EventStreamOptions extends EventStreamQuery {
   signal?: AbortSignal;
+  reconnect?: boolean;
+  reconnectDelayMs?: number;
+  maxReconnectDelayMs?: number;
 }
 
 export interface ZuuClient {
@@ -158,6 +161,25 @@ function isApiErrorResponse(value: unknown): value is ApiErrorResponse {
   );
 }
 
+function isPromptStreamEvent(value: unknown): value is PromptStreamEvent {
+  return Boolean(
+    value &&
+      typeof value === "object" &&
+      "id" in value &&
+      typeof value.id === "string" &&
+      "createdAt" in value &&
+      typeof value.createdAt === "string" &&
+      "runId" in value &&
+      typeof value.runId === "string" &&
+      "type" in value &&
+      typeof value.type === "string",
+  );
+}
+
+function isAbortError(error: unknown) {
+  return error instanceof Error && error.name === "AbortError";
+}
+
 async function requestJson<T>(
   fetchImpl: typeof fetch,
   baseUrl: string,
@@ -202,8 +224,8 @@ function parseSseEvents(buffer: string) {
       .join("\n");
 
     if (data) {
-      const event = JSON.parse(data) as PromptStreamEvent;
-      if (!id || event.id !== id || !event.createdAt) {
+      const event = JSON.parse(data) as unknown;
+      if (!id || !isPromptStreamEvent(event) || event.id !== id) {
         throw new Error("Invalid SSE event frame");
       }
       events.push(event);
@@ -434,6 +456,43 @@ async function* streamEvents(
   apiToken: string | undefined,
   options: EventStreamOptions,
 ): AsyncGenerator<PromptStreamEvent> {
+  const reconnect = options.reconnect ?? true;
+  const reconnectDelayMs = options.reconnectDelayMs ?? 500;
+  const maxReconnectDelayMs = options.maxReconnectDelayMs ?? 5_000;
+  const seenEventIds = new Set<string>();
+  const seenEventOrder: string[] = [];
+  let afterEventId = options.afterEventId;
+  let attempt = 0;
+
+  while (!options.signal?.aborted) {
+    try {
+      for await (const event of openEventStream(fetchImpl, baseUrl, apiToken, { ...options, afterEventId })) {
+        afterEventId = event.id;
+        attempt = 0;
+        if (rememberEventId(seenEventIds, seenEventOrder, event.id)) {
+          yield event;
+        }
+      }
+    } catch (error) {
+      if (options.signal?.aborted || isAbortError(error)) return;
+      if (!reconnect || (error instanceof ZuuClientError && !error.retryable)) throw error;
+      attempt += 1;
+      await waitForReconnect(backoffDelay(reconnectDelayMs, maxReconnectDelayMs, attempt), options.signal);
+      continue;
+    }
+
+    if (!reconnect) return;
+    attempt += 1;
+    await waitForReconnect(backoffDelay(reconnectDelayMs, maxReconnectDelayMs, attempt), options.signal);
+  }
+}
+
+async function* openEventStream(
+  fetchImpl: typeof fetch,
+  baseUrl: string,
+  apiToken: string | undefined,
+  options: EventStreamOptions,
+): AsyncGenerator<PromptStreamEvent> {
   const params = new URLSearchParams();
   if (options.runId) params.set("runId", options.runId);
   if (options.sessionId) params.set("sessionId", options.sessionId);
@@ -474,4 +533,34 @@ async function* streamEvents(
   } finally {
     await reader.cancel().catch(() => {});
   }
+}
+
+function rememberEventId(seenEventIds: Set<string>, seenEventOrder: string[], eventId: string) {
+  if (seenEventIds.has(eventId)) return false;
+  seenEventIds.add(eventId);
+  seenEventOrder.push(eventId);
+  if (seenEventOrder.length > 1_024) {
+    const expiredEventId = seenEventOrder.shift();
+    if (expiredEventId) seenEventIds.delete(expiredEventId);
+  }
+  return true;
+}
+
+function backoffDelay(baseMs: number, maxMs: number, attempt: number) {
+  return Math.min(maxMs, baseMs * 2 ** Math.max(0, attempt - 1));
+}
+
+function waitForReconnect(delayMs: number, signal?: AbortSignal) {
+  if (signal?.aborted) return Promise.resolve();
+  return new Promise<void>((resolve) => {
+    const timeout = setTimeout(resolve, delayMs);
+    signal?.addEventListener(
+      "abort",
+      () => {
+        clearTimeout(timeout);
+        resolve();
+      },
+      { once: true },
+    );
+  });
 }
