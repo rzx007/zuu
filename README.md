@@ -41,6 +41,7 @@ ZUU_PI_WORKFLOW_RUN=1 pnpm check:pi-workflow
 - `GET /api/models`
 - `GET /api/packages`
 - `POST /api/packages`
+- `POST /api/packages/install`
 - `DELETE /api/packages`
 - `GET /api/sessions`
 - `GET /api/session-files`
@@ -75,6 +76,8 @@ ZUU_PI_WORKFLOW_RUN=1 pnpm check:pi-workflow
 浏览器 UI 通过 `@zuu/client` 调用 daemon API，业务请求不再散落手写 `fetch` 和 SSE 解析逻辑。
 
 默认情况下，Zuu 会把 Pi 应用状态存放在 `.zuu/pi-agent`，嵌入式应用不需要写入 `~/.pi/agent`。可以通过 `ZUU_AGENT_DIR` 覆盖。
+
+Packages 面板会区分 `configured`、`installed` 和 `filtered`。`POST /api/packages` 只登记 package source；只有 `POST /api/packages/install` 或 WebUI 的 Install 按钮会调用 Pi package manager 执行安装。
 
 ## 当前能力边界
 

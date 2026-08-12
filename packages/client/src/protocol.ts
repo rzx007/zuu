@@ -393,10 +393,22 @@ export interface Diagnostics {
 
 export interface PackagesResponse {
   packages: string[];
+  details: PackageSummary[];
 }
 
 export interface PackageMutationRequest {
   source: string;
+}
+
+export type PackageStatus = "configured" | "installed" | "filtered";
+export type PackageScope = "user" | "project";
+
+export interface PackageSummary {
+  source: string;
+  scope: PackageScope;
+  filtered: boolean;
+  installedPath?: string;
+  status: PackageStatus;
 }
 
 export interface ModelSummary {

@@ -49,6 +49,7 @@ export interface ZuuClient {
   listPackages(): Promise<PackagesResponse>;
   listModels(): Promise<ModelsResponse>;
   addPackage(input: PackageMutationRequest): Promise<PackagesResponse>;
+  installPackage(input: PackageMutationRequest): Promise<PackagesResponse>;
   removePackage(input: PackageMutationRequest): Promise<PackagesResponse>;
   listSessions(): Promise<SessionsResponse>;
   listStoredSessions(cwd?: string): Promise<StoredSessionsResponse>;
@@ -150,6 +151,11 @@ export function createZuuClient(options: ZuuClientOptions = {}): ZuuClient {
     listModels: () => requestJson<ModelsResponse>(fetchImpl, baseUrl, "/api/models", undefined, apiToken),
     addPackage: (input) =>
       requestJson<PackagesResponse>(fetchImpl, baseUrl, "/api/packages", {
+        method: "POST",
+        body: JSON.stringify(input),
+      }, apiToken),
+    installPackage: (input) =>
+      requestJson<PackagesResponse>(fetchImpl, baseUrl, "/api/packages/install", {
         method: "POST",
         body: JSON.stringify(input),
       }, apiToken),

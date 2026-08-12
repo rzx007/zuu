@@ -6,6 +6,7 @@ import {
   type ApprovalDecision,
   type Diagnostics,
   type ModelSummary,
+  type PackageSummary,
   type PromptRequest,
   type RunSummary,
   type Schedule,
@@ -42,6 +43,7 @@ let messageSeq = 0
 const apiToken = ref(localStorage.getItem(tokenKey) || '')
 const diagnostics = ref<Diagnostics>()
 const packages = ref<string[]>([])
+const packageDetails = ref<PackageSummary[]>([])
 const packageSource = ref('')
 const models = ref<ModelSummary[]>([])
 const selectedModel = ref('')
@@ -133,7 +135,9 @@ async function loadDiagnostics() {
 }
 
 async function loadPackages() {
-  packages.value = (await client.listPackages()).packages
+  const response = await client.listPackages()
+  packages.value = response.packages
+  packageDetails.value = response.details
 }
 
 async function loadModels() {
@@ -219,6 +223,11 @@ async function addPackage() {
   await client.addPackage({ source })
   packageSource.value = ''
   await Promise.all([loadPackages(), loadDiagnostics()])
+}
+
+async function installPackage(source: string) {
+  await client.installPackage({ source })
+  await Promise.all([loadPackages(), loadDiagnostics(), loadWorkflows()])
 }
 
 async function removePackage(source: string) {
@@ -510,10 +519,17 @@ onMounted(() => {
             <h2>Packages</h2>
             <Badge variant="outline">{{ packages.length }}</Badge>
           </div>
-          <div v-if="packages.length" class="list-stack">
-            <div v-for="source in packages" :key="source" class="compact-row">
-              <span>{{ source }}</span>
-              <Button variant="ghost" size="xs" @click="removePackage(source).catch((error) => addMessage('error', errorMessage(error)))">Remove</Button>
+          <div v-if="packageDetails.length" class="list-stack">
+            <div v-for="item in packageDetails" :key="item.source" class="compact-row">
+              <div class="min-w-0">
+                <strong>{{ item.source }}</strong>
+                <span>{{ item.scope }} / {{ item.status }}</span>
+                <span v-if="item.installedPath">{{ item.installedPath }}</span>
+              </div>
+              <div class="flex flex-wrap justify-end gap-1">
+                <Button v-if="item.status !== 'installed'" variant="outline" size="xs" @click="installPackage(item.source).catch((error) => addMessage('error', errorMessage(error)))">Install</Button>
+                <Button variant="ghost" size="xs" @click="removePackage(item.source).catch((error) => addMessage('error', errorMessage(error)))">Remove</Button>
+              </div>
             </div>
           </div>
           <p v-else class="empty-text">No packages configured.</p>

@@ -24,14 +24,13 @@ import {
   getSessionDir,
   getWorkflowStorePath,
   getZuuAgentDir,
-  normalizePackageSource,
-  packageSourceToString,
 } from "./agent-daemon/environment";
 import { ApprovalStore, assertApprovalStatus } from "./agent-daemon/approval-store";
 import { createApprovalExtension, subscribeApprovalEvents } from "./agent-daemon/approval-policy";
 import { buildDiagnostics } from "./agent-daemon/diagnostics";
 import { compactAgentEvent, entryRole, entryText } from "./agent-daemon/events";
 import { ScheduleStore } from "./agent-daemon/schedules";
+import { PackageService } from "./agent-daemon/packages";
 import { createStatusTool } from "./agent-daemon/status-tool";
 import { createWorkflowBackend } from "./agent-daemon/workflows";
 import type {
@@ -86,6 +85,7 @@ export class ZuuDaemon {
   private readonly runs = new Map<string, RunSummary>(
     loadRunHistory(this.runStorePath).map((run) => [run.id, run]),
   );
+  private readonly packageService = new PackageService(process.cwd(), this.agentDir);
   private readonly modelRuntimePromise = createModelRuntime();
   private readonly startedAt = new Date().toISOString();
   private readonly scheduleStore = new ScheduleStore(getScheduleStorePath(this.agentDir), {
@@ -295,7 +295,7 @@ export class ZuuDaemon {
   private createWorkflowBackend() {
     return createWorkflowBackend({
       path: getWorkflowStorePath(this.agentDir),
-      packages: this.listPackages(),
+      packages: this.listPackages().packages,
       requestedKind: process.env.ZUU_WORKFLOW_BACKEND,
       agentDir: this.agentDir,
       launchPrompt: (request) => this.launchWorkflowPrompt(request),
@@ -606,32 +606,20 @@ export class ZuuDaemon {
     };
   }
 
-  private createSettingsManager(cwd = process.cwd()) {
-    return SettingsManager.create(cwd, getZuuAgentDir(), { projectTrusted: true });
-  }
-
   listPackages() {
-    return this.createSettingsManager().getPackages().map(packageSourceToString);
+    return this.packageService.list();
   }
 
   async addPackage(request: PackageMutationRequest) {
-    const source = normalizePackageSource(request.source);
-    const settingsManager = this.createSettingsManager();
-    const packages = settingsManager.getPackages().map(packageSourceToString);
-    if (!packages.includes(source)) {
-      settingsManager.setPackages([...packages, source]);
-      await settingsManager.flush();
-    }
-    return settingsManager.getPackages().map(packageSourceToString);
+    return this.packageService.add(request);
+  }
+
+  async installPackage(request: PackageMutationRequest) {
+    return this.packageService.install(request);
   }
 
   async removePackage(request: PackageMutationRequest) {
-    const source = normalizePackageSource(request.source);
-    const settingsManager = this.createSettingsManager();
-    const packages = settingsManager.getPackages().map(packageSourceToString);
-    settingsManager.setPackages(packages.filter((item) => item !== source));
-    await settingsManager.flush();
-    return settingsManager.getPackages().map(packageSourceToString);
+    return this.packageService.remove(request);
   }
 
   async dispose() {

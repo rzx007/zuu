@@ -55,7 +55,7 @@ app.get("/api/diagnostics", async (c) => {
   }
 });
 
-app.get("/api/packages", (c) => c.json({ packages: daemon.listPackages() }));
+app.get("/api/packages", (c) => c.json(daemon.listPackages()));
 
 app.get("/api/models", async (c) => {
   try {
@@ -68,7 +68,16 @@ app.get("/api/models", async (c) => {
 app.post("/api/packages", async (c) => {
   try {
     const body = (await c.req.json()) as PackageMutationRequest;
-    return c.json({ packages: await daemon.addPackage(body) });
+    return c.json(await daemon.addPackage(body));
+  } catch (error) {
+    return c.json(jsonError(error, 400), 400);
+  }
+});
+
+app.post("/api/packages/install", async (c) => {
+  try {
+    const body = (await c.req.json()) as PackageMutationRequest;
+    return c.json(await daemon.installPackage(body));
   } catch (error) {
     return c.json(jsonError(error, 400), 400);
   }
@@ -77,7 +86,7 @@ app.post("/api/packages", async (c) => {
 app.delete("/api/packages", async (c) => {
   try {
     const body = (await c.req.json()) as PackageMutationRequest;
-    return c.json({ packages: await daemon.removePackage(body) });
+    return c.json(await daemon.removePackage(body));
   } catch (error) {
     return c.json(jsonError(error, 400), 400);
   }
