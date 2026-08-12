@@ -22,6 +22,7 @@ import {
   type Schedule,
   type ScheduleAction,
   type ScheduleOverlapPolicy,
+  type ScheduleRun,
   type SessionSummary,
   type SessionTreeEntry,
   type StoredSessionSummary,
@@ -125,6 +126,9 @@ const workflowRunTasks = ref<WorkflowTask[]>([])
 const workflowRunArtifacts = ref<WorkflowArtifact[]>([])
 const workflowPrompt = ref('Review the current Zuu agent platform slice and produce a workflow artifact.')
 const schedules = ref<Schedule[]>([])
+const selectedScheduleId = ref('')
+const selectedScheduleRunId = ref('')
+const scheduleRuns = ref<ScheduleRun[]>([])
 const scheduleName = ref('Scheduled Zuu run')
 const scheduleKind = ref<'once' | 'interval' | 'cron'>('once')
 const scheduleRunAt = ref(toDatetimeLocal(new Date(Date.now() + 10 * 60_000)))
@@ -143,6 +147,7 @@ const isRunning = ref(false)
 const isRefreshing = ref(false)
 const isSmokingModel = ref(false)
 const isLoadingWorkflowRunDetail = ref(false)
+const isLoadingScheduleRuns = ref(false)
 const controller = ref<AbortController>()
 const runEventCounts = reactive<Record<string, number>>({})
 const liveEvents = ref<LiveEventItem[]>([])
@@ -177,6 +182,12 @@ const currentProjectCwd = computed(() => currentProject.value?.cwd || '')
 const selectedWorkflow = computed(() => workflows.value.find((workflow) => workflow.id === selectedWorkflowId.value))
 const currentProjectSchedules = computed(() =>
   schedules.value.filter((schedule) => schedule.action.projectId === currentProjectId()),
+)
+const selectedSchedule = computed(() =>
+  currentProjectSchedules.value.find((schedule) => schedule.id === selectedScheduleId.value),
+)
+const selectedScheduleRun = computed(() =>
+  scheduleRuns.value.find((run) => run.id === selectedScheduleRunId.value),
 )
 const currentProjectWorkflowRuns = computed(() =>
   workflowRuns.value.filter((run) => run.projectId === currentProjectId()),
@@ -560,6 +571,60 @@ async function loadWorkflowRunDetail(runId = selectedWorkflowRunId.value) {
 
 async function loadSchedules() {
   schedules.value = (await client.listProjectSchedules(currentProjectId())).schedules
+  const nextScheduleId =
+    currentProjectSchedules.value.find((schedule) => schedule.id === selectedScheduleId.value)?.id ||
+    currentProjectSchedules.value[0]?.id ||
+    ''
+  if (!nextScheduleId) {
+    clearScheduleRunDetail()
+    return
+  }
+  await loadScheduleRuns(nextScheduleId)
+}
+
+function clearScheduleRunDetail() {
+  selectedScheduleId.value = ''
+  selectedScheduleRunId.value = ''
+  scheduleRuns.value = []
+}
+
+async function loadScheduleRuns(scheduleId = selectedScheduleId.value) {
+  if (!scheduleId) {
+    clearScheduleRunDetail()
+    return
+  }
+
+  const projectId = currentProjectId()
+  selectedScheduleId.value = scheduleId
+  isLoadingScheduleRuns.value = true
+  try {
+    const response = await client.listProjectScheduleRuns(projectId, scheduleId)
+    if (selectedScheduleId.value !== scheduleId || currentProjectId() !== projectId) return
+    scheduleRuns.value = response.runs
+    const nextRunId = response.runs.find((run) => run.id === selectedScheduleRunId.value)?.id || response.runs[0]?.id || ''
+    selectedScheduleRunId.value = nextRunId
+    if (nextRunId) {
+      await loadScheduleRunDetail(nextRunId)
+    }
+  } finally {
+    if (selectedScheduleId.value === scheduleId) {
+      isLoadingScheduleRuns.value = false
+    }
+  }
+}
+
+async function loadScheduleRunDetail(runId = selectedScheduleRunId.value) {
+  if (!runId) {
+    selectedScheduleRunId.value = ''
+    return
+  }
+  const projectId = currentProjectId()
+  selectedScheduleRunId.value = runId
+  const response = await client.getProjectScheduleRun(projectId, runId)
+  if (selectedScheduleRunId.value !== runId || currentProjectId() !== projectId) return
+  scheduleRuns.value = [response.run, ...scheduleRuns.value.filter((run) => run.id !== response.run.id)].sort((a, b) =>
+    (b.startedAt || b.scheduledFor).localeCompare(a.startedAt || a.scheduledFor),
+  )
 }
 
 async function refreshAll() {
@@ -937,6 +1002,7 @@ async function createSchedule() {
     ? await client.updateProjectSchedule(currentProjectId(), editingScheduleId.value, input)
     : await client.createProjectSchedule(currentProjectId(), input)
   addMessage('event', `schedule ${editingScheduleId.value ? 'updated' : 'created'}: ${result.schedule.name}`)
+  selectedScheduleId.value = result.schedule.id
   editingScheduleId.value = ''
   await loadSchedules()
 }
@@ -985,18 +1051,25 @@ async function resumeSchedule(scheduleId: string) {
 async function triggerSchedule(scheduleId: string) {
   const result = await client.triggerProjectSchedule(currentProjectId(), scheduleId)
   addMessage('event', `schedule triggered: ${result.schedule.name}`)
+  selectedScheduleId.value = result.schedule.id
+  selectedScheduleRunId.value = result.schedule.runs[0]?.id || ''
   await Promise.all([loadSchedules(), loadWorkflowRuns(), loadRuns()])
 }
 
 async function deleteSchedule(scheduleId: string) {
   const result = await client.deleteProjectSchedule(currentProjectId(), scheduleId)
   addMessage('event', `schedule deleted: ${result.schedule.name}`)
+  if (selectedScheduleId.value === result.schedule.id) {
+    clearScheduleRunDetail()
+  }
   await loadSchedules()
 }
 
 async function abortScheduleRun(runId: string) {
   const result = await client.abortProjectScheduleRun(currentProjectId(), runId)
   addMessage('event', `schedule run ${result.run.status}: ${runId.slice(0, 8)}`)
+  selectedScheduleId.value = result.run.scheduleId
+  selectedScheduleRunId.value = result.run.id
   await Promise.all([loadSchedules(), loadWorkflowRuns(), loadRuns()])
 }
 
@@ -1702,7 +1775,13 @@ onUnmounted(() => {
                 <Button variant="ghost" size="xs" @click="loadSchedules">Refresh</Button>
               </div>
               <div v-if="currentProjectSchedules.length" class="list-stack overflow-auto">
-                <div v-for="schedule in currentProjectSchedules.slice(0, 8)" :key="schedule.id" class="workflow-row">
+                <div
+                  v-for="schedule in currentProjectSchedules.slice(0, 8)"
+                  :key="schedule.id"
+                  class="workflow-row cursor-pointer"
+                  :class="schedule.id === selectedScheduleId ? 'border-primary/50 bg-primary/5' : ''"
+                  @click="loadScheduleRuns(schedule.id).catch((error) => addMessage('error', errorMessage(error)))"
+                >
                   <div class="flex items-center justify-between gap-2">
                     <strong>{{ schedule.name }}</strong>
                     <Badge :variant="schedule.status === 'active' ? 'secondary' : 'outline'">{{ schedule.status }}</Badge>
@@ -1721,11 +1800,71 @@ onUnmounted(() => {
                     <span v-if="schedule.runs[0].workflowRunId">workflow {{ schedule.runs[0].workflowRunId.slice(0, 8) }}</span>
                     <span v-if="schedule.runs[0].agentRunId">agent {{ schedule.runs[0].agentRunId.slice(0, 8) }}</span>
                   </div>
-                  <Button v-if="schedule.runs[0].status === 'queued' || schedule.runs[0].status === 'running'" variant="outline" size="xs" @click="abortScheduleRun(schedule.runs[0].id).catch((error) => addMessage('error', errorMessage(error)))">Abort</Button>
+                  <Button v-if="schedule.runs[0]?.status === 'queued' || schedule.runs[0]?.status === 'running'" variant="outline" size="xs" @click.stop="abortScheduleRun(schedule.runs[0].id).catch((error) => addMessage('error', errorMessage(error)))">Abort</Button>
                   <p v-if="schedule.runs[0]?.error">{{ schedule.runs[0].error }}</p>
                 </div>
               </div>
               <p v-else class="empty-text">No schedule runs yet.</p>
+            </section>
+
+            <section class="side-panel">
+              <div class="section-title">
+                <h2>Schedule Detail</h2>
+                <Badge v-if="selectedSchedule" :variant="selectedSchedule.status === 'active' ? 'secondary' : 'outline'">{{ selectedSchedule.status }}</Badge>
+              </div>
+              <div v-if="selectedSchedule" class="list-stack overflow-auto">
+                <div class="workflow-row">
+                  <strong>{{ selectedSchedule.name }}</strong>
+                  <span>{{ scheduleTriggerLabel(selectedSchedule) }}</span>
+                  <span>{{ scheduleActionLabel(selectedSchedule.action) }}</span>
+                  <span v-if="selectedSchedule.nextRunAt">next {{ selectedSchedule.nextRunAt }}</span>
+                  <span v-if="isLoadingScheduleRuns">Loading...</span>
+                </div>
+                <div class="workflow-row">
+                  <div class="section-title">
+                    <strong>Run History</strong>
+                    <span>{{ scheduleRuns.length }}</span>
+                  </div>
+                  <div v-if="scheduleRuns.length" class="list-stack">
+                    <div
+                      v-for="run in scheduleRuns.slice(0, 10)"
+                      :key="run.id"
+                      class="compact-row cursor-pointer"
+                      :class="run.id === selectedScheduleRunId ? 'border-primary/50 bg-primary/5' : ''"
+                      @click="loadScheduleRunDetail(run.id).catch((error) => addMessage('error', errorMessage(error)))"
+                    >
+                      <div class="min-w-0">
+                        <strong>{{ run.id.slice(0, 8) }} 路 {{ run.status }}</strong>
+                        <span>scheduled {{ run.scheduledFor }}</span>
+                        <span v-if="run.attempts">attempts {{ run.attempts }}</span>
+                        <span v-if="run.reason">reason {{ run.reason }}</span>
+                      </div>
+                      <Button v-if="run.status === 'queued' || run.status === 'running'" variant="outline" size="xs" @click.stop="abortScheduleRun(run.id).catch((error) => addMessage('error', errorMessage(error)))">Abort</Button>
+                    </div>
+                  </div>
+                  <p v-else class="empty-text">No runs.</p>
+                </div>
+                <div v-if="selectedScheduleRun" class="workflow-row">
+                  <div class="section-title">
+                    <strong>Selected Run</strong>
+                    <Badge :variant="selectedScheduleRun.status === 'completed' ? 'secondary' : selectedScheduleRun.status === 'failed' || selectedScheduleRun.status === 'aborted' ? 'destructive' : 'outline'">{{ selectedScheduleRun.status }}</Badge>
+                  </div>
+                  <span>{{ selectedScheduleRun.id }}</span>
+                  <span>scheduled {{ selectedScheduleRun.scheduledFor }}</span>
+                  <span v-if="selectedScheduleRun.startedAt">started {{ selectedScheduleRun.startedAt }}</span>
+                  <span v-if="selectedScheduleRun.finishedAt">finished {{ selectedScheduleRun.finishedAt }}</span>
+                  <span v-if="selectedScheduleRun.attempts">attempts {{ selectedScheduleRun.attempts }}</span>
+                  <span v-if="selectedScheduleRun.workflowRunId">workflow {{ selectedScheduleRun.workflowRunId }}</span>
+                  <span v-if="selectedScheduleRun.agentRunId">agent {{ selectedScheduleRun.agentRunId }}</span>
+                  <p v-if="selectedScheduleRun.reason">{{ selectedScheduleRun.reason }}</p>
+                  <p v-if="selectedScheduleRun.error">{{ selectedScheduleRun.error }}</p>
+                  <div class="flex flex-wrap gap-2">
+                    <Button v-if="selectedScheduleRun.workflowRunId" variant="outline" size="xs" @click="loadWorkflowRunDetail(selectedScheduleRun.workflowRunId).catch((error) => addMessage('error', errorMessage(error)))">Open workflow</Button>
+                    <Button v-if="selectedScheduleRun.agentRunId" variant="outline" size="xs" @click="replayRunEvents(selectedScheduleRun.agentRunId).catch((error) => addMessage('error', errorMessage(error)))">Replay agent</Button>
+                  </div>
+                </div>
+              </div>
+              <p v-else class="empty-text">No schedule selected.</p>
             </section>
 
             <section class="side-panel">
