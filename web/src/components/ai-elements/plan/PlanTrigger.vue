@@ -1,0 +1,25 @@
+<script setup lang="ts">
+import type { HTMLAttributes } from 'vue'
+import { UnfoldMoreIcon } from '@hugeicons/vue'
+import { Button } from '@/components/ui/button'
+import { CollapsibleTrigger } from '@/components/ui/collapsible'
+import { cn } from '@/lib/utils'
+
+const props = defineProps<{
+  class?: HTMLAttributes['class']
+}>()
+</script>
+
+<template>
+  <CollapsibleTrigger as-child>
+    <Button
+      :class="cn('size-8', props.class)"
+      data-slot="plan-trigger"
+      size="icon"
+      variant="ghost"
+    >
+      <UnfoldMoreIcon class="size-4" />
+      <span class="sr-only">Toggle plan</span>
+    </Button>
+  </CollapsibleTrigger>
+</template>
