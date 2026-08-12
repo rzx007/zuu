@@ -96,7 +96,7 @@ export async function buildDiagnostics(
     gaps.push("Scheduler MVP supports local once/interval/basic cron with IANA timezones and a best-effort local lease; a production HA scheduler backend is still needed for distributed execution.");
   }
   if (available.length === 0) {
-    gaps.push("No authenticated model is available; configure provider auth in ~/.pi/agent/auth.json or environment variables.");
+    gaps.push(`No authenticated model is available; configure provider auth in ${agentDir}/auth.json or environment variables.`);
   }
   const resourceDiagnostics: ResourceDiagnostic[] = [
     ...extensionResult.errors.map((error): ResourceDiagnostic => ({
