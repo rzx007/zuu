@@ -14,7 +14,7 @@
 当前仓库已有：
 
 - `src/index.ts`：Hono 占位服务
-- `src/pi-agent.ts`：最小 SDK 调用（`ModelRuntime` + `createAgentSession` + 文本流订阅）
+- `examples/pi-sdk-basic.ts`：最小 SDK 调用（`ModelRuntime` + `createAgentSession` + 文本流订阅）
 
 目标：基于 Pi SDK + **Pi Packages**，做成 **Daemon + Client + 多端 UI** 的可演进 Agent 平台。本文回答：
 
@@ -173,7 +173,7 @@ SDK 侧通过 `DefaultResourceLoader` + 项目 `.pi/settings.json` 的 `packages
 
 | 现状 | 目标态 |
 |---|---|
-| `pi-agent.ts` 脚本直调 Pi SDK | **仅 Daemon** 内嵌 Pi SDK |
+| `examples/pi-sdk-basic.ts` 保留低层 Pi SDK spike | **仅 Daemon** 内嵌 Pi SDK，spike 只作对照示例 |
 | `index.ts` 占位 Hello | Daemon HTTP 协议 |
 | 轻量 Client | `packages/client` 类型化 API，后续补独立构建与发布 |
 | 无 UI 边界 | Web/TUI 只 import Client |

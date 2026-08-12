@@ -166,7 +166,7 @@ docs/
 - 将仓库转换为 workspace，并以 Node.js 作为服务运行时。
 - 建立统一 TypeScript 配置。
 - 建立 build、typecheck、test、lint 脚本。
-- 保留临时兼容入口或迁移 `src/pi-agent.ts`。
+- 低层 Pi SDK spike 迁移为 `examples/pi-sdk-basic.ts`，`src/` 只保留正式 daemon/runtime 代码。
 
 #### ENG-002：Protocol 包
 
@@ -621,7 +621,7 @@ UI end-to-end
 
 ### 16.1 当前代码迁移
 
-- `src/pi-agent.ts` 作为 M0 Spike 参考，完成 M2 后删除或迁移为 example。
+- `src/pi-agent.ts` 已迁移为 `examples/pi-sdk-basic.ts`，不再作为生产入口保留。
 - `src/index.ts` 的 Hono 占位入口迁移到 `packages/daemon`。
 - 根 `package.json` 改为 workspace 管理。
 - `tsconfig.json` 拆为 base config 和 package configs。
@@ -726,6 +726,7 @@ UI end-to-end
 - `web/`：Vue + Vite WebUI，浏览器侧直接 bundle `@zuu/client`，用于 diagnostics、resource diagnostics、model 选择、package source/trust/install/update/remove、prompt SSE、daemon event stream、session 文件、session tree、runs、run event replay、approval 操作、workflow run 的 stage/task/artifact 详情查看，以及 schedule run 历史/详情查看。
 - `scripts/check-pi-workflow-runtime.ts`：WSL2/Linux 专用的真实 `@agwab/pi-workflow` readiness 和 launch 验证脚本；默认只检查 ready，设置 `ZUU_PI_WORKFLOW_RUN=1` 才发起真实 workflow。
 - `docs/spikes/pi-workflow-runtime.md`：记录真实 pi-workflow 验证步骤、通过标准、失败诊断和后续 board/run-state 映射任务。
+- `examples/pi-sdk-basic.ts`：低层 Pi SDK 直调 spike 示例，仅用于对照 `createAgentSession` 的最小用法；正式应用入口仍是 daemon、WebUI 和 `@zuu/client`。
 - `.zuu/pi-agent`：默认 Pi app state 目录，可通过 `ZUU_AGENT_DIR` 覆盖，避免嵌入式运行时写入 `~/.pi/agent`。
 - `README.md`：当前运行方式和 API 入口。
 

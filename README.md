@@ -183,6 +183,8 @@ pnpm --filter @zuu/client pack:dry
 
 更多用法见 [packages/client/README.md](packages/client/README.md)。
 
+低层 Pi SDK spike 示例已迁移到 `examples/pi-sdk-basic.ts`，可用 `pnpm example:pi-sdk` 运行；正式应用入口只保留 daemon、WebUI 和 `@zuu/client`。
+
 ## 当前能力边界
 
 浏览器会话默认启用 `read`、`grep`、`find`、`ls` 和 `zuu_status`。普通只读工具可直接使用；如果只读工具的路径型参数命中 `.env`、SSH、auth token、credential、secret、key 等敏感路径，会先进入 Zuu approval，并让同一个 tool call 等待 WebUI resolve；allow 后继续执行，deny 或过期才阻断本次工具调用。搜索 pattern 中出现 token、secret 等词不会被当作路径误拦。需要更强的 coding agent 能力时，可以在界面里有意识地启用 `bash`、`edit` 或 `write`，这些危险工具默认也需要审批。
