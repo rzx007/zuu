@@ -272,6 +272,15 @@ async function main() {
 
   const packages = await client.listPackages();
   if (!Array.isArray(packages.packages)) throw new Error("packages response is invalid");
+  const packageOperations = await client.listPackageOperations();
+  if (!Array.isArray(packageOperations.operations)) throw new Error("package operations response is invalid");
+  let missingPackageOperationFailed = false;
+  try {
+    await client.getPackageOperation("missing");
+  } catch {
+    missingPackageOperationFailed = true;
+  }
+  if (!missingPackageOperationFailed) throw new Error("missing package operation should fail");
   const models = await client.listModels();
   if (!Array.isArray(models.models)) throw new Error("models response is invalid");
 
@@ -282,6 +291,13 @@ async function main() {
     emptyPackageFailed = true;
   }
   if (!emptyPackageFailed) throw new Error("empty package source should fail");
+  let emptyPackageInstallFailed = false;
+  try {
+    await client.installPackage({ source: " " });
+  } catch {
+    emptyPackageInstallFailed = true;
+  }
+  if (!emptyPackageInstallFailed) throw new Error("empty package install source should fail");
 
   const storedBefore = await client.listStoredSessions();
   if (!Array.isArray(storedBefore.sessions)) throw new Error("stored sessions response is invalid");

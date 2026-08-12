@@ -395,12 +395,28 @@ export interface PackagesResponse {
   packages: PackageSummary[];
 }
 
+export interface PackageInstallResponse extends PackagesResponse {
+  operation: PackageOperation;
+}
+
+export interface PackageOperationsResponse {
+  operations: PackageOperation[];
+}
+
+export interface PackageOperationResponse {
+  operation: PackageOperation;
+}
+
 export interface PackageMutationRequest {
   source: string;
 }
 
 export type PackageStatus = "configured" | "installed" | "filtered";
 export type PackageScope = "user" | "project";
+export type PackageOperationAction = "install";
+export type PackageOperationStatus = "running" | "done" | "error";
+export type PackageProgressAction = "install" | "remove" | "update" | "clone" | "pull";
+export type PackageProgressEventType = "start" | "progress" | "complete" | "error";
 
 export interface PackageSummary {
   source: string;
@@ -408,6 +424,27 @@ export interface PackageSummary {
   filtered: boolean;
   installedPath?: string;
   status: PackageStatus;
+}
+
+export interface PackageOperationEvent {
+  id: string;
+  operationId: string;
+  type: PackageProgressEventType;
+  action: PackageProgressAction;
+  source: string;
+  message?: string;
+  createdAt: string;
+}
+
+export interface PackageOperation {
+  id: string;
+  source: string;
+  action: PackageOperationAction;
+  status: PackageOperationStatus;
+  startedAt: string;
+  endedAt?: string;
+  error?: string;
+  events: PackageOperationEvent[];
 }
 
 export interface ModelSummary {

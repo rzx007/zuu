@@ -385,7 +385,7 @@ Daemon 启动时必须：
 
 Health 至少返回 Daemon 状态、版本、协议版本、uptime。
 
-Diagnostics 返回模型认证状态、Package 加载错误、Project 错误和 Scheduler 状态；不得返回密钥。
+Diagnostics 返回模型认证状态、Package 加载错误、Project 错误和 Scheduler 状态；不得返回密钥。Package 安装、更新或删除必须有可查询的 operation 记录，至少包含来源、进度事件、结束状态和失败原因。
 
 ### 7.3 Projects
 
@@ -815,6 +815,7 @@ Pi Packages 和 Extensions 具有本机代码执行权限。必须：
 
 - 固定精确版本
 - 记录安装来源与校验信息
+- 记录安装 operation、进度事件和失败原因
 - 项目首次加载前获得信任
 - 升级后重新运行安全和集成测试
 

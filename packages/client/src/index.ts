@@ -9,6 +9,9 @@ import type {
   ApprovalStatus,
   ApprovalsResponse,
   PackageMutationRequest,
+  PackageInstallResponse,
+  PackageOperationResponse,
+  PackageOperationsResponse,
   PackagesResponse,
   ModelsResponse,
   PromptRequest,
@@ -49,8 +52,10 @@ export interface ZuuClient {
   listPackages(): Promise<PackagesResponse>;
   listModels(): Promise<ModelsResponse>;
   addPackage(input: PackageMutationRequest): Promise<PackagesResponse>;
-  installPackage(input: PackageMutationRequest): Promise<PackagesResponse>;
+  installPackage(input: PackageMutationRequest): Promise<PackageInstallResponse>;
   removePackage(input: PackageMutationRequest): Promise<PackagesResponse>;
+  listPackageOperations(): Promise<PackageOperationsResponse>;
+  getPackageOperation(operationId: string): Promise<PackageOperationResponse>;
   listSessions(): Promise<SessionsResponse>;
   listStoredSessions(cwd?: string): Promise<StoredSessionsResponse>;
   getSessionTree(sessionId: string): Promise<SessionTreeResponse>;
@@ -155,7 +160,7 @@ export function createZuuClient(options: ZuuClientOptions = {}): ZuuClient {
         body: JSON.stringify(input),
       }, apiToken),
     installPackage: (input) =>
-      requestJson<PackagesResponse>(fetchImpl, baseUrl, "/api/packages/install", {
+      requestJson<PackageInstallResponse>(fetchImpl, baseUrl, "/api/packages/install", {
         method: "POST",
         body: JSON.stringify(input),
       }, apiToken),
@@ -164,6 +169,16 @@ export function createZuuClient(options: ZuuClientOptions = {}): ZuuClient {
         method: "DELETE",
         body: JSON.stringify(input),
       }, apiToken),
+    listPackageOperations: () =>
+      requestJson<PackageOperationsResponse>(fetchImpl, baseUrl, "/api/package-operations", undefined, apiToken),
+    getPackageOperation: (operationId) =>
+      requestJson<PackageOperationResponse>(
+        fetchImpl,
+        baseUrl,
+        `/api/package-operations/${encodeURIComponent(operationId)}`,
+        undefined,
+        apiToken,
+      ),
     listSessions: () => requestJson<SessionsResponse>(fetchImpl, baseUrl, "/api/sessions", undefined, apiToken),
     listStoredSessions: (cwd) =>
       requestJson<StoredSessionsResponse>(

@@ -57,6 +57,16 @@ app.get("/api/diagnostics", async (c) => {
 
 app.get("/api/packages", (c) => c.json(daemon.listPackages()));
 
+app.get("/api/package-operations", (c) => c.json(daemon.listPackageOperations()));
+
+app.get("/api/package-operations/:operationId", (c) => {
+  try {
+    return c.json(daemon.getPackageOperation(c.req.param("operationId")));
+  } catch (error) {
+    return c.json(jsonError(error, 404), 404);
+  }
+});
+
 app.get("/api/models", async (c) => {
   try {
     return c.json(await daemon.listModels());

@@ -40,6 +40,10 @@ export function getScheduleStorePath(agentDir: string) {
   return join(agentDir, "schedules.json");
 }
 
+export function getPackageOperationStorePath(agentDir: string) {
+  return join(agentDir, "package-operations.json");
+}
+
 function normalizePathForCompare(pathname: string) {
   const resolved = resolve(pathname);
   return process.platform === "win32" ? resolved.toLowerCase() : resolved;

@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
 import {
   createZuuClient,
   type Approval,
   type ApprovalDecision,
   type Diagnostics,
   type ModelSummary,
+  type PackageOperation,
   type PackageSummary,
   type PromptRequest,
   type RunSummary,
@@ -39,10 +40,12 @@ interface FlatTreeEntry {
 const tokenKey = 'zuu.apiToken'
 let client = createZuuClient({ apiToken: localStorage.getItem(tokenKey) || undefined })
 let messageSeq = 0
+let packageOperationPollId: number | undefined
 
 const apiToken = ref(localStorage.getItem(tokenKey) || '')
 const diagnostics = ref<Diagnostics>()
 const packages = ref<PackageSummary[]>([])
+const packageOperations = ref<PackageOperation[]>([])
 const packageSource = ref('')
 const models = ref<ModelSummary[]>([])
 const selectedModel = ref('')
@@ -92,6 +95,7 @@ const flatTree = computed(() => flattenTree(sessionTree.value))
 const statusText = computed(() => (isRunning.value ? 'running' : 'ready'))
 const configuredProviders = computed(() => diagnostics.value?.models.configuredProviders.join(', ') || 'none')
 const selectedWorkflow = computed(() => workflows.value.find((workflow) => workflow.id === selectedWorkflowId.value))
+const runningPackageOperations = computed(() => packageOperations.value.filter((operation) => operation.status === 'running'))
 
 function toDatetimeLocal(date: Date) {
   const localDate = new Date(date.getTime() - date.getTimezoneOffset() * 60_000)
@@ -136,6 +140,14 @@ async function loadDiagnostics() {
 async function loadPackages() {
   const response = await client.listPackages()
   packages.value = response.packages
+}
+
+async function loadPackageOperations() {
+  const response = await client.listPackageOperations()
+  packageOperations.value = response.operations
+  if (response.operations.some((operation) => operation.status === 'running')) {
+    schedulePackageOperationPoll()
+  }
 }
 
 async function loadModels() {
@@ -186,6 +198,7 @@ async function refreshAll() {
     await Promise.all([
       loadDiagnostics(),
       loadPackages(),
+      loadPackageOperations(),
       loadModels(),
       loadRuns(),
       loadStoredSessions(),
@@ -224,8 +237,15 @@ async function addPackage() {
 }
 
 async function installPackage(source: string) {
-  await client.installPackage({ source })
-  await Promise.all([loadPackages(), loadDiagnostics(), loadWorkflows()])
+  const response = await client.installPackage({ source })
+  packages.value = response.packages
+  packageOperations.value = [
+    response.operation,
+    ...packageOperations.value.filter((operation) => operation.id !== response.operation.id),
+  ]
+  addMessage('event', `package install started: ${source}`)
+  schedulePackageOperationPoll()
+  await Promise.all([loadPackageOperations(), loadDiagnostics(), loadWorkflows()])
 }
 
 async function removePackage(source: string) {
@@ -371,6 +391,39 @@ function scheduleActionLabel(action: ScheduleAction) {
   return action.type === 'workflow' ? `workflow:${action.workflowId}` : 'prompt'
 }
 
+function latestPackageOperation(source: string) {
+  return packageOperations.value.find((operation) => operation.source === source)
+}
+
+function isPackageInstalling(source: string) {
+  return packageOperations.value.some((operation) => operation.source === source && operation.status === 'running')
+}
+
+function packageOperationMessage(operation: PackageOperation | undefined) {
+  if (!operation) return ''
+  const lastEvent = operation.events[operation.events.length - 1]
+  return operation.error || lastEvent?.message || (lastEvent ? `${lastEvent.type} ${lastEvent.action}` : '')
+}
+
+function clearPackageOperationPoll() {
+  if (packageOperationPollId !== undefined) {
+    window.clearTimeout(packageOperationPollId)
+    packageOperationPollId = undefined
+  }
+}
+
+function schedulePackageOperationPoll() {
+  if (packageOperationPollId !== undefined) return
+  packageOperationPollId = window.setTimeout(async () => {
+    packageOperationPollId = undefined
+    try {
+      await Promise.all([loadPackageOperations(), loadPackages(), loadDiagnostics(), loadWorkflows()])
+    } catch (error) {
+      addMessage('error', errorMessage(error))
+    }
+  }, 1500)
+}
+
 async function sendPrompt() {
   const text = prompt.value.trim()
   if (!text) return
@@ -433,6 +486,10 @@ async function abortPrompt() {
 
 onMounted(() => {
   refreshAll().catch((error) => addMessage('error', errorMessage(error)))
+})
+
+onUnmounted(() => {
+  clearPackageOperationPoll()
 })
 </script>
 
@@ -515,7 +572,10 @@ onMounted(() => {
         <section class="panel-block">
           <div class="section-title">
             <h2>Packages</h2>
-            <Badge variant="outline">{{ packages.length }}</Badge>
+            <div class="flex items-center gap-1">
+              <Badge v-if="runningPackageOperations.length" variant="secondary">{{ runningPackageOperations.length }} installing</Badge>
+              <Badge variant="outline">{{ packages.length }}</Badge>
+            </div>
           </div>
           <div v-if="packages.length" class="list-stack">
             <div v-for="item in packages" :key="item.source" class="compact-row">
@@ -523,9 +583,14 @@ onMounted(() => {
                 <strong>{{ item.source }}</strong>
                 <span>{{ item.scope }} / {{ item.status }}</span>
                 <span v-if="item.installedPath">{{ item.installedPath }}</span>
+                <span v-if="latestPackageOperation(item.source)">
+                  install {{ latestPackageOperation(item.source)?.status }} / {{ packageOperationMessage(latestPackageOperation(item.source)) }}
+                </span>
               </div>
               <div class="flex flex-wrap justify-end gap-1">
-                <Button v-if="item.status !== 'installed'" variant="outline" size="xs" @click="installPackage(item.source).catch((error) => addMessage('error', errorMessage(error)))">Install</Button>
+                <Button v-if="item.status !== 'installed'" variant="outline" size="xs" :disabled="isPackageInstalling(item.source)" @click="installPackage(item.source).catch((error) => addMessage('error', errorMessage(error)))">
+                  {{ isPackageInstalling(item.source) ? 'Installing' : 'Install' }}
+                </Button>
                 <Button variant="ghost" size="xs" @click="removePackage(item.source).catch((error) => addMessage('error', errorMessage(error)))">Remove</Button>
               </div>
             </div>
@@ -683,6 +748,28 @@ onMounted(() => {
                 </div>
               </div>
               <p v-else class="empty-text">No approvals yet.</p>
+            </section>
+
+            <section class="side-panel">
+              <div class="section-title">
+                <h2>Package Ops</h2>
+                <Button variant="ghost" size="xs" @click="loadPackageOperations">Refresh</Button>
+              </div>
+              <div v-if="packageOperations.length" class="list-stack overflow-auto">
+                <div v-for="operation in packageOperations.slice(0, 8)" :key="operation.id" class="workflow-row">
+                  <div class="flex items-center justify-between gap-2">
+                    <strong>{{ operation.source }}</strong>
+                    <Badge :variant="operation.status === 'done' ? 'secondary' : operation.status === 'error' ? 'destructive' : 'outline'">{{ operation.status }}</Badge>
+                  </div>
+                  <span>{{ operation.action }} / {{ operation.startedAt }}</span>
+                  <div class="workflow-progress">
+                    <span>{{ operation.events.length }} events</span>
+                    <span v-if="operation.endedAt">ended {{ operation.endedAt }}</span>
+                  </div>
+                  <p v-if="packageOperationMessage(operation)">{{ packageOperationMessage(operation) }}</p>
+                </div>
+              </div>
+              <p v-else class="empty-text">No package operations yet.</p>
             </section>
 
             <section class="side-panel">

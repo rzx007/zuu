@@ -19,6 +19,7 @@ import {
   createModelRuntime,
   DEFAULT_READ_ONLY_TOOLS,
   getApprovalStorePath,
+  getPackageOperationStorePath,
   getRunStorePath,
   getScheduleStorePath,
   getSessionDir,
@@ -85,7 +86,11 @@ export class ZuuDaemon {
   private readonly runs = new Map<string, RunSummary>(
     loadRunHistory(this.runStorePath).map((run) => [run.id, run]),
   );
-  private readonly packageService = new PackageService(process.cwd(), this.agentDir);
+  private readonly packageService = new PackageService(
+    process.cwd(),
+    this.agentDir,
+    getPackageOperationStorePath(this.agentDir),
+  );
   private readonly modelRuntimePromise = createModelRuntime();
   private readonly startedAt = new Date().toISOString();
   private readonly scheduleStore = new ScheduleStore(getScheduleStorePath(this.agentDir), {
@@ -620,6 +625,14 @@ export class ZuuDaemon {
 
   async removePackage(request: PackageMutationRequest) {
     return this.packageService.remove(request);
+  }
+
+  listPackageOperations() {
+    return this.packageService.listOperations();
+  }
+
+  getPackageOperation(operationId: string) {
+    return this.packageService.getOperation(operationId);
   }
 
   async dispose() {
