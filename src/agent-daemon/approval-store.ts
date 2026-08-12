@@ -5,7 +5,7 @@ import type {
   CreateApprovalRequest,
   ResolveApprovalRequest,
 } from "@zuu/client";
-import { notFound } from "../http";
+import { notFound, validationError } from "../http";
 import { JsonFileStore } from "./json-file-store";
 
 const APPROVAL_HISTORY_LIMIT = 500;
@@ -42,13 +42,13 @@ function createApprovalsStore(path: string) {
 
 function assertDecision(decision: unknown): asserts decision is ApprovalDecision {
   if (!APPROVAL_DECISIONS.has(decision as ApprovalDecision)) {
-    throw new Error("decision must be allow_once, allow_session, or deny");
+    validationError("decision must be allow_once, allow_session, or deny", { field: "decision" });
   }
 }
 
 export function assertApprovalStatus(status: unknown): asserts status is ApprovalStatus {
   if (status !== undefined && !APPROVAL_STATUSES.has(status as ApprovalStatus)) {
-    throw new Error("status must be pending, allowed, denied, or expired");
+    validationError("status must be pending, allowed, denied, or expired", { field: "status" });
   }
 }
 

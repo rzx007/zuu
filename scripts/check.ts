@@ -1912,13 +1912,11 @@ async function main() {
   const approvals = await client.listApprovals();
   if (!Array.isArray(approvals.approvals)) throw new Error("approvals response is invalid");
 
-  let invalidApprovalStatusFailed = false;
-  try {
-    await client.listApprovals("unknown" as never);
-  } catch {
-    invalidApprovalStatusFailed = true;
-  }
-  if (!invalidApprovalStatusFailed) throw new Error("invalid approval status should fail");
+  await expectClientError(() => client.listApprovals("unknown" as never), {
+    status: 400,
+    code: "validation_failed",
+    details: hasErrorField("status"),
+  });
 
   await expectClientError(() => client.getApproval("missing"), { status: 404, code: "not_found" });
   await expectClientError(() => client.resolveApproval("missing", { decision: "deny" }), { status: 404, code: "not_found" });
