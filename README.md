@@ -1,6 +1,6 @@
 # Zuu Agent
 
-一个基于 Pi SDK 的最小完整 Agent 应用，包含 Hono daemon、Vue WebUI、轻量 Client SDK、SSE 流式输出、会话持久化、最近运行记录、审批、fake workflow 合约和最小 scheduler。
+一个基于 Pi SDK 的最小完整 Agent 应用，包含 Hono daemon、Vue WebUI、轻量 Client SDK、SSE 流式输出、会话持久化、最近运行记录、审批、可切换 workflow backend 和最小 scheduler。
 
 ## 运行
 

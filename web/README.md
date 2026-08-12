@@ -22,7 +22,7 @@ pnpm start
 - prompt SSE、运行记录、run event replay 和全局 daemon event stream
 - 持久化 session 打开、session tree、entry fork 和 JSONL import
 - pending approval 查看与处理
-- fake workflow run 启动、运行列表、stage/task/artifact 详情查看
+- workflow backend run 启动、运行列表、stage/task/artifact 详情查看
 - schedule 创建、编辑、暂停、恢复、手动触发、abort、删除，以及 schedule run 历史/详情查看
 
 全局事件流使用 `@zuu/client.subscribeEvents()`，会保存最后事件 ID，断线后自动重连，并在组件卸载或 token 切换时清理连接。
