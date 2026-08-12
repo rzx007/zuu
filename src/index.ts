@@ -7,18 +7,24 @@ import { serveStatic } from "@hono/node-server/serve-static";
 import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
 import { ZuuDaemon } from "./agent-daemon";
+import { jsonError, readJson, toStatus } from "./http";
+import {
+  parseCompact,
+  parseCreateSchedule,
+  parseCreateSession,
+  parseForkSession,
+  parseImportSession,
+  parseNewSession,
+  parseOpenSession,
+  parsePackageMutation,
+  parsePrompt,
+  parseResolveApproval,
+  parseStartWorkflow,
+  parseSwitchSession,
+} from "./request-validation";
 import type {
   ApprovalStatus,
-  CreateScheduleRequest,
-  ForkSessionRequest,
-  ImportSessionRequest,
-  NewSessionRequest,
-  OpenSessionRequest,
-  PackageMutationRequest,
   PromptRequest,
-  ResolveApprovalRequest,
-  StartWorkflowRequest,
-  SwitchSessionRequest,
 } from "@zuu/client";
 
 const app = new Hono();
@@ -26,11 +32,6 @@ const daemon = new ZuuDaemon();
 const webDistRoot = "./web/dist";
 const webIndex = new URL("../web/dist/index.html", import.meta.url);
 const hasWebDist = existsSync(webIndex);
-
-function jsonError(error: unknown, status = 500) {
-  const message = error instanceof Error ? error.message : String(error);
-  return { error: { message, status } };
-}
 
 function isAuthorized(authorization: string | undefined) {
   const apiToken = process.env.ZUU_API_TOKEN?.trim();
@@ -51,7 +52,7 @@ app.get("/api/diagnostics", async (c) => {
   try {
     return c.json(await daemon.diagnostics());
   } catch (error) {
-    return c.json(jsonError(error, 500), 500);
+    return c.json(jsonError(error, 500), toStatus(error, 500));
   }
 });
 
@@ -63,7 +64,7 @@ app.get("/api/package-operations/:operationId", (c) => {
   try {
     return c.json(daemon.getPackageOperation(c.req.param("operationId")));
   } catch (error) {
-    return c.json(jsonError(error, 404), 404);
+    return c.json(jsonError(error, 404), toStatus(error, 404));
   }
 });
 
@@ -71,61 +72,61 @@ app.get("/api/models", async (c) => {
   try {
     return c.json(await daemon.listModels());
   } catch (error) {
-    return c.json(jsonError(error, 500), 500);
+    return c.json(jsonError(error, 500), toStatus(error, 500));
   }
 });
 
 app.post("/api/packages", async (c) => {
   try {
-    const body = (await c.req.json()) as PackageMutationRequest;
+    const body = parsePackageMutation(await readJson(c.req));
     return c.json(await daemon.addPackage(body));
   } catch (error) {
-    return c.json(jsonError(error, 400), 400);
+    return c.json(jsonError(error, 400), toStatus(error, 400));
   }
 });
 
 app.post("/api/packages/install", async (c) => {
   try {
-    const body = (await c.req.json()) as PackageMutationRequest;
+    const body = parsePackageMutation(await readJson(c.req));
     return c.json(await daemon.installPackage(body));
   } catch (error) {
-    return c.json(jsonError(error, 400), 400);
+    return c.json(jsonError(error, 400), toStatus(error, 400));
   }
 });
 
 app.post("/api/packages/update", async (c) => {
   try {
-    const body = (await c.req.json()) as PackageMutationRequest;
+    const body = parsePackageMutation(await readJson(c.req));
     return c.json(daemon.updatePackage(body));
   } catch (error) {
-    return c.json(jsonError(error, 400), 400);
+    return c.json(jsonError(error, 400), toStatus(error, 400));
   }
 });
 
 app.delete("/api/packages", async (c) => {
   try {
-    const body = (await c.req.json()) as PackageMutationRequest;
+    const body = parsePackageMutation(await readJson(c.req));
     return c.json(daemon.removePackage(body));
   } catch (error) {
-    return c.json(jsonError(error, 400), 400);
+    return c.json(jsonError(error, 400), toStatus(error, 400));
   }
 });
 
 app.post("/api/packages/trust", async (c) => {
   try {
-    const body = (await c.req.json()) as PackageMutationRequest;
+    const body = parsePackageMutation(await readJson(c.req));
     return c.json(daemon.trustPackage(body));
   } catch (error) {
-    return c.json(jsonError(error, 400), 400);
+    return c.json(jsonError(error, 400), toStatus(error, 400));
   }
 });
 
 app.delete("/api/packages/trust", async (c) => {
   try {
-    const body = (await c.req.json()) as PackageMutationRequest;
+    const body = parsePackageMutation(await readJson(c.req));
     return c.json(daemon.revokePackageTrust(body));
   } catch (error) {
-    return c.json(jsonError(error, 400), 400);
+    return c.json(jsonError(error, 400), toStatus(error, 400));
   }
 });
 
@@ -135,7 +136,7 @@ app.get("/api/session-files", async (c) => {
   try {
     return c.json({ sessions: await daemon.listStoredSessions(c.req.query("cwd")) });
   } catch (error) {
-    return c.json(jsonError(error, 500), 500);
+    return c.json(jsonError(error, 500), toStatus(error, 500));
   }
 });
 
@@ -143,7 +144,7 @@ app.get("/api/sessions/:sessionId/tree", (c) => {
   try {
     return c.json({ tree: daemon.summarizeSessionTree(c.req.param("sessionId")) });
   } catch (error) {
-    return c.json(jsonError(error, 404), 404);
+    return c.json(jsonError(error, 404), toStatus(error, 404));
   }
 });
 
@@ -156,7 +157,7 @@ app.get("/api/runs/:runId", (c) => {
   try {
     return c.json({ run: daemon.getRun(c.req.param("runId")) });
   } catch (error) {
-    return c.json(jsonError(error, 404), 404);
+    return c.json(jsonError(error, 404), toStatus(error, 404));
   }
 });
 
@@ -164,16 +165,16 @@ app.get("/api/workflows", async (c) => {
   try {
     return c.json(await daemon.listWorkflows());
   } catch (error) {
-    return c.json(jsonError(error, 500), 500);
+    return c.json(jsonError(error, 500), toStatus(error, 500));
   }
 });
 
 app.post("/api/workflows/:workflowId/runs", async (c) => {
   try {
-    const body = (await c.req.json().catch(() => ({}))) as StartWorkflowRequest;
+    const body = parseStartWorkflow(await readJson(c.req, { optional: true }));
     return c.json({ run: await daemon.startWorkflow(c.req.param("workflowId"), body) }, 201);
   } catch (error) {
-    return c.json(jsonError(error, 400), 400);
+    return c.json(jsonError(error, 400), toStatus(error, 400));
   }
 });
 
@@ -181,7 +182,7 @@ app.get("/api/workflow-runs", async (c) => {
   try {
     return c.json({ runs: await daemon.listWorkflowRuns() });
   } catch (error) {
-    return c.json(jsonError(error, 500), 500);
+    return c.json(jsonError(error, 500), toStatus(error, 500));
   }
 });
 
@@ -189,7 +190,7 @@ app.get("/api/workflow-runs/:runId", async (c) => {
   try {
     return c.json({ run: await daemon.getWorkflowRun(c.req.param("runId")) });
   } catch (error) {
-    return c.json(jsonError(error, 404), 404);
+    return c.json(jsonError(error, 404), toStatus(error, 404));
   }
 });
 
@@ -197,7 +198,7 @@ app.post("/api/workflow-runs/:runId/abort", async (c) => {
   try {
     return c.json({ run: await daemon.abortWorkflowRun(c.req.param("runId")) });
   } catch (error) {
-    return c.json(jsonError(error, 404), 404);
+    return c.json(jsonError(error, 404), toStatus(error, 404));
   }
 });
 
@@ -205,16 +206,16 @@ app.get("/api/schedules", (c) => {
   try {
     return c.json({ schedules: daemon.listSchedules() });
   } catch (error) {
-    return c.json(jsonError(error, 500), 500);
+    return c.json(jsonError(error, 500), toStatus(error, 500));
   }
 });
 
 app.post("/api/schedules", async (c) => {
   try {
-    const body = (await c.req.json()) as CreateScheduleRequest;
+    const body = parseCreateSchedule(await readJson(c.req));
     return c.json({ schedule: daemon.createSchedule(body) }, 201);
   } catch (error) {
-    return c.json(jsonError(error, 400), 400);
+    return c.json(jsonError(error, 400), toStatus(error, 400));
   }
 });
 
@@ -222,7 +223,7 @@ app.get("/api/schedules/:scheduleId", (c) => {
   try {
     return c.json({ schedule: daemon.getSchedule(c.req.param("scheduleId")) });
   } catch (error) {
-    return c.json(jsonError(error, 404), 404);
+    return c.json(jsonError(error, 404), toStatus(error, 404));
   }
 });
 
@@ -230,7 +231,7 @@ app.post("/api/schedules/:scheduleId/pause", (c) => {
   try {
     return c.json({ schedule: daemon.pauseSchedule(c.req.param("scheduleId")) });
   } catch (error) {
-    return c.json(jsonError(error, 404), 404);
+    return c.json(jsonError(error, 404), toStatus(error, 404));
   }
 });
 
@@ -238,7 +239,7 @@ app.post("/api/schedules/:scheduleId/resume", (c) => {
   try {
     return c.json({ schedule: daemon.resumeSchedule(c.req.param("scheduleId")) });
   } catch (error) {
-    return c.json(jsonError(error, 400), 400);
+    return c.json(jsonError(error, 400), toStatus(error, 400));
   }
 });
 
@@ -246,7 +247,7 @@ app.post("/api/schedules/:scheduleId/trigger", async (c) => {
   try {
     return c.json({ schedule: await daemon.triggerSchedule(c.req.param("scheduleId")) });
   } catch (error) {
-    return c.json(jsonError(error, 400), 400);
+    return c.json(jsonError(error, 400), toStatus(error, 400));
   }
 });
 
@@ -254,7 +255,7 @@ app.delete("/api/schedules/:scheduleId", (c) => {
   try {
     return c.json({ schedule: daemon.deleteSchedule(c.req.param("scheduleId")) });
   } catch (error) {
-    return c.json(jsonError(error, 404), 404);
+    return c.json(jsonError(error, 404), toStatus(error, 404));
   }
 });
 
@@ -262,7 +263,7 @@ app.get("/api/approvals", (c) => {
   try {
     return c.json({ approvals: daemon.listApprovals(c.req.query("status") as ApprovalStatus | undefined) });
   } catch (error) {
-    return c.json(jsonError(error, 400), 400);
+    return c.json(jsonError(error, 400), toStatus(error, 400));
   }
 });
 
@@ -270,48 +271,45 @@ app.get("/api/approvals/:approvalId", (c) => {
   try {
     return c.json({ approval: daemon.getApproval(c.req.param("approvalId")) });
   } catch (error) {
-    return c.json(jsonError(error, 404), 404);
+    return c.json(jsonError(error, 404), toStatus(error, 404));
   }
 });
 
 app.post("/api/approvals/:approvalId/resolve", async (c) => {
   try {
-    const body = (await c.req.json()) as ResolveApprovalRequest;
+    const body = parseResolveApproval(await readJson(c.req));
     return c.json({ approval: daemon.resolveApproval(c.req.param("approvalId"), body) });
   } catch (error) {
-    return c.json(jsonError(error, 400), 400);
+    return c.json(jsonError(error, 400), toStatus(error, 400));
   }
 });
 
 app.post("/api/sessions", async (c) => {
   try {
-    const body = await c.req.json().catch(() => ({}));
+    const body = parseCreateSession(await readJson(c.req, { optional: true }));
     const session = await daemon.createSession(body);
     return c.json({ session: daemon.summarizeSession(session) }, 201);
   } catch (error) {
-    return c.json(jsonError(error, 400), 400);
+    return c.json(jsonError(error, 400), toStatus(error, 400));
   }
 });
 
 app.post("/api/sessions/open", async (c) => {
   try {
-    const body = (await c.req.json()) as OpenSessionRequest;
+    const body = parseOpenSession(await readJson(c.req));
     const session = await daemon.openSession(body);
     return c.json({ session: daemon.summarizeSession(session) }, 201);
   } catch (error) {
-    return c.json(jsonError(error, 400), 400);
+    return c.json(jsonError(error, 400), toStatus(error, 400));
   }
 });
 
 app.post("/api/prompt", async (c) => {
   let request: PromptRequest;
   try {
-    request = await c.req.json();
-    if (!request.prompt || typeof request.prompt !== "string") {
-      return c.json(jsonError("prompt is required", 400), 400);
-    }
+    request = parsePrompt(await readJson(c.req));
   } catch (error) {
-    return c.json(jsonError(error, 400), 400);
+    return c.json(jsonError(error, 400), toStatus(error, 400));
   }
 
   return streamSSE(c, async (stream) => {
@@ -338,53 +336,53 @@ app.post("/api/sessions/:sessionId/abort", async (c) => {
     const session = await daemon.abort(c.req.param("sessionId"));
     return c.json({ session });
   } catch (error) {
-    return c.json(jsonError(error, 404), 404);
+    return c.json(jsonError(error, 404), toStatus(error, 404));
   }
 });
 
 app.post("/api/sessions/:sessionId/compact", async (c) => {
   try {
-    const body = await c.req.json().catch(() => ({}));
+    const body = parseCompact(await readJson(c.req, { optional: true }));
     const session = await daemon.compact(c.req.param("sessionId"), body.instructions);
     return c.json({ session });
   } catch (error) {
-    return c.json(jsonError(error, 404), 404);
+    return c.json(jsonError(error, 404), toStatus(error, 404));
   }
 });
 
 app.post("/api/sessions/:sessionId/new", async (c) => {
   try {
-    const body = (await c.req.json().catch(() => ({}))) as NewSessionRequest;
+    const body = parseNewSession(await readJson(c.req, { optional: true }));
     return c.json(await daemon.newSession(c.req.param("sessionId"), body));
   } catch (error) {
-    return c.json(jsonError(error, 400), 400);
+    return c.json(jsonError(error, 400), toStatus(error, 400));
   }
 });
 
 app.post("/api/sessions/:sessionId/switch", async (c) => {
   try {
-    const body = (await c.req.json()) as SwitchSessionRequest;
+    const body = parseSwitchSession(await readJson(c.req));
     return c.json(await daemon.switchSession(c.req.param("sessionId"), body));
   } catch (error) {
-    return c.json(jsonError(error, 400), 400);
+    return c.json(jsonError(error, 400), toStatus(error, 400));
   }
 });
 
 app.post("/api/sessions/:sessionId/fork", async (c) => {
   try {
-    const body = (await c.req.json()) as ForkSessionRequest;
+    const body = parseForkSession(await readJson(c.req));
     return c.json(await daemon.forkSession(c.req.param("sessionId"), body));
   } catch (error) {
-    return c.json(jsonError(error, 400), 400);
+    return c.json(jsonError(error, 400), toStatus(error, 400));
   }
 });
 
 app.post("/api/sessions/:sessionId/import", async (c) => {
   try {
-    const body = (await c.req.json()) as ImportSessionRequest;
+    const body = parseImportSession(await readJson(c.req));
     return c.json(await daemon.importSession(c.req.param("sessionId"), body));
   } catch (error) {
-    return c.json(jsonError(error, 400), 400);
+    return c.json(jsonError(error, 400), toStatus(error, 400));
   }
 });
 

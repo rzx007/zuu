@@ -29,6 +29,22 @@ const diagnostics = await client.diagnostics();
 const packages = await client.listPackages();
 ```
 
+## 错误处理
+
+非 2xx 响应会抛出 `ZuuClientError`，其中包含稳定的 `status`、`code`、`retryable` 和可选 `details`。
+
+```ts
+import { ZuuClientError } from "@zuu/client";
+
+try {
+  await client.addPackage({ source: "" });
+} catch (error) {
+  if (error instanceof ZuuClientError) {
+    console.log(error.status, error.code, error.details);
+  }
+}
+```
+
 ## 流式 Prompt
 
 ```ts

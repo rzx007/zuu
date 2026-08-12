@@ -33,6 +33,7 @@ import type {
   WorkflowRunResponse,
   WorkflowRunsResponse,
   WorkflowsResponse,
+  ApiErrorResponse,
 } from "./protocol.js";
 
 export type * from "./protocol.js";
@@ -91,6 +92,22 @@ export interface ZuuClient {
   importSession(sessionId: string, input: ImportSessionRequest): Promise<SessionActionResponse>;
 }
 
+export class ZuuClientError extends Error {
+  readonly status: number;
+  readonly code?: string;
+  readonly details?: unknown;
+  readonly retryable: boolean;
+
+  constructor(message: string, options: { status: number; retryable?: boolean; code?: string; details?: unknown }) {
+    super(message);
+    this.name = "ZuuClientError";
+    this.status = options.status;
+    this.code = options.code;
+    this.details = options.details;
+    this.retryable = options.retryable ?? false;
+  }
+}
+
 function joinUrl(baseUrl: string, path: string) {
   const normalizedBase = baseUrl.replace(/\/+$/, "");
   return `${normalizedBase}${path}`;
@@ -98,17 +115,39 @@ function joinUrl(baseUrl: string, path: string) {
 
 async function parseJsonResponse<T>(response: Response): Promise<T> {
   const text = await response.text();
-  const data = text ? JSON.parse(text) : undefined;
+  const data = parseJson(text);
 
   if (!response.ok) {
-    const message =
-      data && typeof data === "object" && "error" in data
-        ? String((data as { error?: { message?: string } }).error?.message ?? response.statusText)
-        : response.statusText;
-    throw new Error(message);
+    const error = isApiErrorResponse(data) ? data.error : undefined;
+    throw new ZuuClientError(String(error?.message ?? response.statusText), {
+      status: error?.status ?? response.status,
+      retryable: error?.retryable,
+      code: error?.code,
+      details: error?.details,
+    });
   }
 
   return data as T;
+}
+
+function parseJson(text: string) {
+  if (!text) return undefined;
+  try {
+    return JSON.parse(text) as unknown;
+  } catch {
+    return undefined;
+  }
+}
+
+function isApiErrorResponse(value: unknown): value is ApiErrorResponse {
+  return Boolean(
+    value &&
+      typeof value === "object" &&
+      "error" in value &&
+      value.error &&
+      typeof value.error === "object" &&
+      "message" in value.error,
+  );
 }
 
 async function requestJson<T>(

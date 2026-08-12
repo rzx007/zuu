@@ -89,6 +89,8 @@ Packages 面板会区分 `configured`、`installed`、`filtered`、`trusted` / `
 
 `GET /api/diagnostics` 会返回 SDK resource diagnostics；其中 `resources.packages` 只列出已信任且会参与加载的 package，`resources.blockedPackages` 列出因未信任而被阻止加载的 package。WebUI 的 Resources 面板会展示 extension/skill/prompt/theme 的加载错误、warning 和 name collision。
 
+API 错误统一返回 `error.message`、`error.status`、`error.retryable`、`error.code` 和可选 `error.details`。`@zuu/client` 会把非 2xx 响应映射成 `ZuuClientError`，调用方可以直接读取 `status`、`code`、`retryable` 和 `details`，不需要解析错误文案。
+
 ## Client SDK
 
 `packages/client` 是可独立构建的 `@zuu/client` 包，入口是 `dist/index.js`，类型声明是 `dist/index.d.ts`。根目录的 `dev`、`check`、`typecheck`、`build:web` 和 `start` 脚本会先运行 `pnpm build:client`，确保 daemon、WebUI 和第三方脚本消费的是同一个包入口。

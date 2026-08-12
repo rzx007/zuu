@@ -728,6 +728,7 @@ UI end-to-end
 - `pnpm run typecheck` 可以完成 TypeScript `noEmit` 校验。
 - `pnpm run check:pi-workflow` 已作为真实环境验证入口，但只应在 `ZUU_WORKFLOW_BACKEND=pi-package` 的 WSL2/Linux daemon 旁运行。
 - `GET /api/health` 正常。
+- API 错误响应已统一为 `{ error: { message, status, retryable, code?, details? } }`；`@zuu/client` 会把非 2xx 响应映射为 `ZuuClientError`。
 - `GET /api/diagnostics` 正常返回 SDK 版本、模型数量、skills、extensions、resource diagnostics、trusted packages、blocked packages 和能力缺口。
 - `POST /api/prompt` 可以返回 SSE `session`、`error`、`agent_event` 和 `done` 事件。
 - `@zuu/client` 可从 Node.js 侧调用 health、diagnostics 和 prompt stream，并可通过 `pnpm example:client` 运行第三方消费示例。

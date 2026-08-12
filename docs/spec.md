@@ -663,6 +663,7 @@ Client 自动：
 - 指数退避重连
 - 去重重复 Event ID
 - 将 HTTP/SSE 错误映射为 `ZuuClientError`
+- 在 `ZuuClientError` 上保留 `status`、`code`、`retryable` 和 `details`
 
 Client 不自动：
 
@@ -873,7 +874,7 @@ Pi Packages 和 Extensions 具有本机代码执行权限。必须：
 - `rate_limited`
 - `internal_error`
 
-错误必须包含 `retryable`。内部堆栈不得通过生产 API 返回。
+错误响应必须使用 `{ error: { message, status, retryable, code?, details? } }`，其中输入校验失败使用 `validation_failed`，非法 JSON 使用 `invalid_json`，未授权使用 `unauthorized`，资源不存在使用 `not_found`。内部堆栈不得通过生产 API 返回。
 
 ## 15. 可观测性
 

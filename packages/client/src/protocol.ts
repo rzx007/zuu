@@ -497,5 +497,8 @@ export interface ApiErrorResponse {
   error: {
     message: string;
     status: number;
+    retryable: boolean;
+    code?: string;
+    details?: unknown;
   };
 }

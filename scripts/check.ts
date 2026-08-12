@@ -7,13 +7,38 @@ import { createApprovalExtension } from "../src/agent-daemon/approval-policy";
 import { PackageService } from "../src/agent-daemon/packages";
 import { PackageTrustStore } from "../src/agent-daemon/package-trust";
 import { createWorkflowBackend } from "../src/agent-daemon/workflows";
-import { createZuuClient } from "@zuu/client";
+import { createZuuClient, ZuuClientError } from "@zuu/client";
 import { createEventBus } from "@earendil-works/pi-coding-agent";
 
 const fetchFromApp: typeof fetch = async (input, init) => {
   const request = input instanceof Request ? input : new Request(input, init);
   return app.fetch(request);
 };
+
+async function expectClientError(
+  action: () => Promise<unknown>,
+  expected: { status: number; code?: string; details?: (details: unknown) => boolean },
+) {
+  try {
+    await action();
+  } catch (error) {
+    if (!(error instanceof ZuuClientError)) {
+      throw new Error(`expected ZuuClientError, got ${error instanceof Error ? error.name : typeof error}`);
+    }
+    if (error.status !== expected.status) {
+      throw new Error(`expected status ${expected.status}, got ${error.status}`);
+    }
+    if (expected.code && error.code !== expected.code) {
+      throw new Error(`expected code ${expected.code}, got ${error.code}`);
+    }
+    if (expected.details && !expected.details(error.details)) {
+      throw new Error("client error details did not match");
+    }
+    return error;
+  }
+
+  throw new Error("expected client call to fail");
+}
 
 async function main() {
   const client = createZuuClient({ baseUrl: "http://zuu.local", fetch: fetchFromApp });
@@ -45,6 +70,11 @@ async function main() {
     process.env.ZUU_API_TOKEN = "server-check-token";
     const unauthorized = await fetchFromApp("http://zuu.local/api/health");
     if (unauthorized.status !== 401) throw new Error("missing api token should be rejected");
+    const unauthorizedBody = await unauthorized.json() as { error?: { code?: string; status?: number } };
+    if (unauthorizedBody.error?.code !== "unauthorized" || unauthorizedBody.error.status !== 401) {
+      throw new Error("unauthorized response should include a stable error code");
+    }
+    await expectClientError(() => client.health(), { status: 401, code: "unauthorized" });
     const authorizedClient = createZuuClient({
       baseUrl: "http://zuu.local",
       fetch: fetchFromApp,
@@ -58,6 +88,15 @@ async function main() {
       process.env.ZUU_API_TOKEN = previousToken;
     }
   }
+
+  const malformedJson = await fetchFromApp("http://zuu.local/api/packages", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: "{",
+  });
+  if (malformedJson.status !== 400) throw new Error("malformed JSON should be rejected");
+  const malformedJsonBody = await malformedJson.json() as { error?: { code?: string } };
+  if (malformedJsonBody.error?.code !== "invalid_json") throw new Error("malformed JSON response should include invalid_json");
 
   const { runs } = await client.listRuns();
   if (!Array.isArray(runs)) throw new Error("runs response is invalid");
@@ -88,13 +127,7 @@ async function main() {
   if (abortedWorkflowRun.run.id !== workflowRun.run.id) {
     throw new Error("workflow run abort returned the wrong run");
   }
-  let missingWorkflowRunFailed = false;
-  try {
-    await client.getWorkflowRun("missing");
-  } catch {
-    missingWorkflowRunFailed = true;
-  }
-  if (!missingWorkflowRunFailed) throw new Error("missing workflow run should fail");
+  await expectClientError(() => client.getWorkflowRun("missing"), { status: 404, code: "not_found" });
   let missingWorkflowFailed = false;
   try {
     await client.startWorkflow("missing");
@@ -299,13 +332,11 @@ async function main() {
   const models = await client.listModels();
   if (!Array.isArray(models.models)) throw new Error("models response is invalid");
 
-  let emptyPackageFailed = false;
-  try {
-    await client.addPackage({ source: " " });
-  } catch {
-    emptyPackageFailed = true;
-  }
-  if (!emptyPackageFailed) throw new Error("empty package source should fail");
+  await expectClientError(() => client.addPackage({ source: " " }), {
+    status: 400,
+    code: "validation_failed",
+    details: (details) => Boolean(details && typeof details === "object" && "field" in details),
+  });
   let emptyPackageInstallFailed = false;
   try {
     await client.installPackage({ source: " " });
@@ -388,13 +419,7 @@ async function main() {
   const opened = await client.openSession({ sessionFile: persisted.session.sessionFile });
   if (opened.session.id !== persisted.session.id) throw new Error("openSession returned the wrong session");
 
-  let missingRunFailed = false;
-  try {
-    await client.getRun("missing");
-  } catch {
-    missingRunFailed = true;
-  }
-  if (!missingRunFailed) throw new Error("missing run should fail");
+  await expectClientError(() => client.getRun("missing"), { status: 404, code: "not_found" });
 
   console.log("ok");
 }
