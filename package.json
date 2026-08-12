@@ -3,7 +3,7 @@
   "type": "module",
   "packageManager": "pnpm@11.21.0",
   "scripts": {
-    "dev": "node --env-file-if-exists=.env --watch --import tsx src/index.ts",
+    "dev": "node --env-file-if-exists=.env --import tsx src/index.ts",
     "start": "node --env-file-if-exists=.env --import tsx src/index.ts",
     "check": "node --env-file-if-exists=.env --import tsx scripts/check.ts",
     "typecheck": "tsc --noEmit"
