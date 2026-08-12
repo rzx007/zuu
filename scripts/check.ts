@@ -1052,8 +1052,19 @@ async function main() {
   let unavailablePiWorkflowFailed = false;
   try {
     await piBackend.start("deep-research", { prompt: "contract check" });
-  } catch {
+  } catch (error) {
     unavailablePiWorkflowFailed = true;
+    if (
+      !(error instanceof ApiError) ||
+      error.status !== 503 ||
+      error.code !== "workflow_backend_unavailable" ||
+      !error.details ||
+      typeof error.details !== "object" ||
+      !("kind" in error.details) ||
+      error.details.kind !== "pi-package"
+    ) {
+      throw new Error("unavailable pi-package workflow should fail with workflow_backend_unavailable");
+    }
   }
   if (!unavailablePiWorkflowFailed) throw new Error("unavailable pi-package workflow should fail");
 

@@ -1,5 +1,5 @@
 import type { WorkflowRun, WorkflowBackendInfo } from "@zuu/client";
-import { notFound } from "../../http";
+import { ApiError, notFound } from "../../http";
 import type { WorkflowBackend } from "./types";
 
 export class UnavailableWorkflowBackend implements WorkflowBackend {
@@ -14,7 +14,12 @@ export class UnavailableWorkflowBackend implements WorkflowBackend {
   }
 
   async start(): Promise<WorkflowRun> {
-    throw new Error(this.info.message ?? "Workflow backend is unavailable");
+    throw new ApiError(this.info.message ?? "Workflow backend is unavailable", {
+      status: 503,
+      code: "workflow_backend_unavailable",
+      details: this.info,
+      retryable: false,
+    });
   }
 
   async listRuns() {
