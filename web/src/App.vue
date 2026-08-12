@@ -42,8 +42,7 @@ let messageSeq = 0
 
 const apiToken = ref(localStorage.getItem(tokenKey) || '')
 const diagnostics = ref<Diagnostics>()
-const packages = ref<string[]>([])
-const packageDetails = ref<PackageSummary[]>([])
+const packages = ref<PackageSummary[]>([])
 const packageSource = ref('')
 const models = ref<ModelSummary[]>([])
 const selectedModel = ref('')
@@ -137,7 +136,6 @@ async function loadDiagnostics() {
 async function loadPackages() {
   const response = await client.listPackages()
   packages.value = response.packages
-  packageDetails.value = response.details
 }
 
 async function loadModels() {
@@ -519,8 +517,8 @@ onMounted(() => {
             <h2>Packages</h2>
             <Badge variant="outline">{{ packages.length }}</Badge>
           </div>
-          <div v-if="packageDetails.length" class="list-stack">
-            <div v-for="item in packageDetails" :key="item.source" class="compact-row">
+          <div v-if="packages.length" class="list-stack">
+            <div v-for="item in packages" :key="item.source" class="compact-row">
               <div class="min-w-0">
                 <strong>{{ item.source }}</strong>
                 <span>{{ item.scope }} / {{ item.status }}</span>

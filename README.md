@@ -77,7 +77,7 @@ ZUU_PI_WORKFLOW_RUN=1 pnpm check:pi-workflow
 
 默认情况下，Zuu 会把 Pi 应用状态存放在 `.zuu/pi-agent`，嵌入式应用不需要写入 `~/.pi/agent`。可以通过 `ZUU_AGENT_DIR` 覆盖。
 
-Packages 面板会区分 `configured`、`installed` 和 `filtered`。`POST /api/packages` 只登记 package source；只有 `POST /api/packages/install` 或 WebUI 的 Install 按钮会调用 Pi package manager 执行安装。
+Packages 面板会区分 `configured`、`installed` 和 `filtered`，`GET /api/packages` 返回结构化 package 列表。`POST /api/packages` 只登记 package source；只有 `POST /api/packages/install` 或 WebUI 的 Install 按钮会调用 Pi package manager 执行安装。
 
 ## 当前能力边界
 

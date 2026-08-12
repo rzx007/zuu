@@ -736,7 +736,7 @@ UI end-to-end
 - `AgentSessionRuntime` 的 `newSession`、`switchSession`、`fork` 和 `importFromJsonl` 已通过 daemon API 与 client 暴露。
 - `GET /api/session-files` 和 `POST /api/sessions/open` 已支持列出和打开 Pi 持久化 session 文件。
 - `GET /api/sessions/:sessionId/tree` 已支持读取当前 active session 的树形 entry 摘要，为 fork 选择器提供基础。
-- `GET/POST/DELETE /api/packages` 已支持查看和维护 Pi package source 列表；`GET /api/packages` 会返回 `configured`、`installed`、`filtered` 状态和安装路径，`POST /api/packages/install` 会显式调用 Pi package manager 安装 source。
+- `GET/POST/DELETE /api/packages` 已支持查看和维护结构化 Pi package 列表；`GET /api/packages` 会返回 `configured`、`installed`、`filtered` 状态和安装路径，`POST /api/packages/install` 会显式调用 Pi package manager 安装 source。
 - `GET /api/models` 已支持列出当前已认证可用模型，WebUI 可直接下拉选择。
 - `GET /api/approvals`、`GET /api/approvals/:approvalId` 和 `POST /api/approvals/:approvalId/resolve` 已支持审批列表、详情与处理，审批记录持久化到 `.zuu/pi-agent/approvals.json`。
 - `GET /api/workflows`、`POST /api/workflows/:workflowId/runs`、`GET /api/workflow-runs`、`GET /api/workflow-runs/:runId` 和 `POST /api/workflow-runs/:runId/abort` 已支持最小 workflow 合约；默认后端是 `FakeWorkflowBackend`，用于稳定 Definition/Run/Stage/Task/Artifact DTO 和 UI board，不启动真实 subagent。

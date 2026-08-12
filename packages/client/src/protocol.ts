@@ -392,8 +392,7 @@ export interface Diagnostics {
 }
 
 export interface PackagesResponse {
-  packages: string[];
-  details: PackageSummary[];
+  packages: PackageSummary[];
 }
 
 export interface PackageMutationRequest {

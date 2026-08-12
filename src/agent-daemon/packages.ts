@@ -9,10 +9,8 @@ export class PackageService {
   ) {}
 
   list(): PackagesResponse {
-    const details = this.listDetails();
     return {
-      packages: details.map((item) => item.source),
-      details,
+      packages: this.listDetails(),
     };
   }
 

@@ -295,7 +295,7 @@ export class ZuuDaemon {
   private createWorkflowBackend() {
     return createWorkflowBackend({
       path: getWorkflowStorePath(this.agentDir),
-      packages: this.listPackages().packages,
+      packages: this.listPackages().packages.map((item) => item.source),
       requestedKind: process.env.ZUU_WORKFLOW_BACKEND,
       agentDir: this.agentDir,
       launchPrompt: (request) => this.launchWorkflowPrompt(request),
