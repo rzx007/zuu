@@ -56,8 +56,8 @@ import type {
   ThinkingLevel,
   UpdateProjectRequest,
 } from "@zuu/client";
-import { loadRunHistory, saveRunHistory } from "./agent-daemon/run-history";
-import { matchesEventQuery, RunEventStore, type RunEventDraft } from "./agent-daemon/run-events";
+import type { RunEventDraft } from "./agent-daemon/run-events";
+import { RunService } from "./agent-daemon/run-service";
 import {
   bindManagedRuntime,
   createManagedSessionManager,
@@ -66,21 +66,14 @@ import {
   type ManagedRuntime,
 } from "./agent-daemon/session-runtime";
 
-type EventListener = (event: PromptStreamEvent) => void;
-
 export class ZuuDaemon {
   private readonly runtimes = new Map<string, ManagedRuntime>();
   private readonly agentDir = getZuuAgentDir();
-  private readonly runStorePath = getRunStorePath(this.agentDir);
-  private readonly runEventStore = new RunEventStore(getRunEventStorePath(this.agentDir));
-  private readonly eventListeners = new Set<EventListener>();
+  private readonly runService = new RunService(getRunStorePath(this.agentDir), getRunEventStorePath(this.agentDir));
   private readonly projectStore = new ProjectStore(getProjectStorePath(this.agentDir), this.agentDir);
   private readonly approvalStore = new ApprovalStore(getApprovalStorePath(this.agentDir));
   private readonly activeRunBySessionId = new Map<string, string>();
   private readonly eventBus: EventBusController = createEventBus();
-  private readonly runs = new Map<string, RunSummary>(
-    loadRunHistory(this.runStorePath).map((run) => [run.id, run]),
-  );
   private readonly packageService = new PackageService(
     process.cwd(),
     this.agentDir,
@@ -246,50 +239,23 @@ export class ZuuDaemon {
   }
 
   listRuns(sessionId?: string, projectId?: string) {
-    return [...this.runs.values()]
-      .filter((run) => !sessionId || run.sessionId === sessionId)
-      .filter((run) => !projectId || run.projectId === projectId)
-      .sort((a, b) => b.startedAt.localeCompare(a.startedAt));
-  }
-
-  private persistRuns() {
-    saveRunHistory(this.runStorePath, this.listRuns());
-  }
-
-  private setRun(run: RunSummary) {
-    this.runs.set(run.id, run);
-    this.persistRuns();
+    return this.runService.listRuns(sessionId, projectId);
   }
 
   getRun(runId: string, projectId?: string) {
-    const run = this.runs.get(runId);
-    if (!run) throw new Error(`Unknown run: ${runId}`);
-    if (projectId && run.projectId !== projectId) throw new Error(`Unknown run: ${runId}`);
-    return run;
+    return this.runService.getRun(runId, projectId);
   }
 
   listRunEvents(runId: string, afterEventId?: string, projectId?: string) {
-    this.getRun(runId, projectId);
-    return this.runEventStore.list(runId, afterEventId);
+    return this.runService.listRunEvents(runId, afterEventId, projectId);
   }
 
   listEvents(query: EventStreamQuery = {}) {
-    if (query.runId) this.getRun(query.runId);
-    return this.runEventStore.listAll(query);
+    return this.runService.listEvents(query);
   }
 
-  subscribeEvents(query: EventStreamQuery, listener: EventListener) {
-    const filteredListener = (event: PromptStreamEvent) => {
-      if (matchesEventQuery(event, query)) listener(event);
-    };
-    this.eventListeners.add(filteredListener);
-    return () => this.eventListeners.delete(filteredListener);
-  }
-
-  private publishEvent(event: PromptStreamEvent) {
-    for (const listener of this.eventListeners) {
-      listener(event);
-    }
+  subscribeEvents(query: EventStreamQuery, listener: (event: PromptStreamEvent) => void) {
+    return this.runService.subscribeEvents(query, listener);
   }
 
   createApproval(request: CreateApprovalRequest) {
@@ -469,7 +435,6 @@ export class ZuuDaemon {
   }
 
   async *prompt(request: PromptRequest): AsyncGenerator<PromptStreamEvent> {
-    const runId = crypto.randomUUID();
     const session = await this.getOrCreateSession(request);
     const managed = this.runtimes.get(session.sessionId);
     if (managed) managed.updatedAt = new Date().toISOString();
@@ -478,22 +443,14 @@ export class ZuuDaemon {
       session.setActiveToolsByName(request.tools);
     }
 
-    const run: RunSummary = {
-      id: runId,
+    const run = this.runService.startRun({
       sessionId: session.sessionId,
       projectId: this.getManagedRuntime(session.sessionId).projectId,
-      status: "running",
-      prompt: request.prompt,
-      startedAt: new Date().toISOString(),
-    };
-    this.setRun(run);
+      request,
+    });
+    const runId = run.id;
     this.activeRunBySessionId.set(session.sessionId, runId);
-    const recordEvent = this.runEventStore.createRecorder(runId);
-    const recordAndPublish = (event: RunEventDraft) => {
-      const recorded = recordEvent(event);
-      this.publishEvent(recorded);
-      return recorded;
-    };
+    const recordAndPublish = this.runService.createEventRecorder(runId);
 
     yield recordAndPublish({ runId, type: "session", session: this.summarizeSession(session), run });
 
@@ -548,7 +505,7 @@ export class ZuuDaemon {
         const message = promptError instanceof Error ? promptError.message : String(promptError);
         run.status = run.status === "aborted" ? "aborted" : "error";
         run.endedAt = new Date().toISOString();
-        this.persistRuns();
+        this.runService.saveRun(run);
         yield recordAndPublish({ runId, type: "error", message, run });
         return;
       }
@@ -556,7 +513,7 @@ export class ZuuDaemon {
       if (managed) managed.updatedAt = new Date().toISOString();
       run.status = run.status === "aborted" ? "aborted" : sawError ? "error" : "done";
       run.endedAt = new Date().toISOString();
-      this.persistRuns();
+      this.runService.saveRun(run);
       yield recordAndPublish({ runId, type: "done", session: this.summarizeSession(session), run });
     } finally {
       if (this.activeRunBySessionId.get(session.sessionId) === runId) {
@@ -571,14 +528,7 @@ export class ZuuDaemon {
     const managed = this.getManagedRuntime(sessionId);
     await managed.runtime.session.abort();
     managed.updatedAt = new Date().toISOString();
-    const endedAt = new Date().toISOString();
-    for (const run of this.runs.values()) {
-      if (run.sessionId === sessionId && run.status === "running") {
-        run.status = "aborted";
-        run.endedAt = endedAt;
-      }
-    }
-    this.persistRuns();
+    this.runService.abortSessionRuns(sessionId);
     return this.summarizeSession(managed.runtime.session);
   }
 
@@ -699,7 +649,7 @@ export class ZuuDaemon {
       await managed.runtime.dispose();
     }
     this.runtimes.clear();
-    this.runs.clear();
+    this.runService.clear();
   }
 }
 
