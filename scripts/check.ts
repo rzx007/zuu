@@ -1112,6 +1112,32 @@ async function main() {
   if (allowed !== undefined || approvalEvents.length < 2) {
     throw new Error("approval extension should allow session-granted tools");
   }
+  const safeRead = await toolCallHandlers[0]?.(
+    { type: "tool_call", toolName: "read", toolCallId: "tool-call-safe-read", input: { path: "src/index.ts" } },
+    toolCallContext,
+  );
+  if (safeRead !== undefined) {
+    throw new Error("approval extension should allow non-sensitive read tools");
+  }
+  const sensitiveRead = await toolCallHandlers[0]?.(
+    { type: "tool_call", toolName: "read", toolCallId: "tool-call-sensitive-read", input: { path: ".env" } },
+    toolCallContext,
+  );
+  if (!sensitiveRead || typeof sensitiveRead !== "object" || !("block" in sensitiveRead) || sensitiveRead.block !== true) {
+    throw new Error("approval extension should block sensitive read paths");
+  }
+  const sensitiveApproval = extensionStore.list("pending").find((approval) => approval.scope === "tool:read:sensitive_path");
+  if (!sensitiveApproval || sensitiveApproval.kind !== "filesystem" || sensitiveApproval.risk !== "high") {
+    throw new Error("sensitive read approval should use a filesystem scoped approval");
+  }
+  extensionStore.resolve(sensitiveApproval.id, { decision: "allow_session" });
+  const allowedSensitiveRead = await toolCallHandlers[0]?.(
+    { type: "tool_call", toolName: "read", toolCallId: "tool-call-sensitive-read-allowed", input: { path: ".env" } },
+    toolCallContext,
+  );
+  if (allowedSensitiveRead !== undefined) {
+    throw new Error("approval extension should allow session-granted sensitive reads");
+  }
 
   const packages = await client.listPackages();
   if (!Array.isArray(packages.packages)) throw new Error("packages response is invalid");

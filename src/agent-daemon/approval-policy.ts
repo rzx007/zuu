@@ -18,6 +18,34 @@ const APPROVAL_REQUIRED_TOOLS = new Map<string, ApprovalRisk>([
   ["edit", "high"],
   ["write", "high"],
 ]);
+const SENSITIVE_READ_TOOLS = new Set(["read", "grep", "find", "ls"]);
+const SENSITIVE_PATH_FRAGMENTS = [
+  ".env",
+  "/.ssh/",
+  "/.ssh",
+  "id_rsa",
+  "id_ed25519",
+  "id_ecdsa",
+  "id_dsa",
+  "auth.json",
+  "auth-token.json",
+  "/credential",
+  "/credentials",
+  "/secret",
+  "/secrets",
+  "/token",
+  "/tokens",
+  ".credential",
+  ".secret",
+  ".token",
+  ".pem",
+  ".key",
+  ".p12",
+  ".pfx",
+  ".npmrc",
+  ".netrc",
+  ".pypirc",
+];
 
 type ApprovalEvent =
   | { type: "approval_requested"; runId: string; approval: Approval }
@@ -50,11 +78,13 @@ export function createApprovalExtension(options: ApprovalExtensionOptions): Inli
     hidden: true,
     factory: (pi) => {
       pi.on("tool_call", (event, ctx) => {
-        const requiresApproval = APPROVAL_REQUIRED_TOOLS.has(event.toolName);
+        const approvalRisk = approvalRiskForToolCall(event);
+        const requiresApproval = Boolean(approvalRisk);
         const request = createToolApprovalRequest(
           event,
           ctx.sessionManager.getSessionId(),
           options.getActiveRunId,
+          approvalRisk,
         );
         if (!request) {
           return requiresApproval
@@ -97,22 +127,40 @@ function createToolApprovalRequest(
   event: ToolCallEvent,
   sessionId: string,
   getActiveRunId: (sessionId: string) => string | undefined,
+  risk: ApprovalRisk | undefined,
 ): CreateApprovalRequest | undefined {
-  const risk = APPROVAL_REQUIRED_TOOLS.get(event.toolName);
   if (!risk) return undefined;
 
   const runId = getActiveRunId(sessionId);
   if (!runId) return undefined;
+  const sensitivePath = isSensitiveReadToolCall(event);
+  const scope = sensitivePath ? `tool:${event.toolName}:sensitive_path` : `tool:${event.toolName}`;
 
   return {
     sessionId,
     runId,
     kind: event.toolName === "bash" ? "command" : "filesystem",
-    scope: `tool:${event.toolName}`,
-    title: `Allow ${event.toolName}`,
-    description: `The agent requested the ${event.toolName} tool with input: ${previewInput(event.input)}`,
+    scope,
+    title: sensitivePath ? `Allow ${event.toolName} sensitive path access` : `Allow ${event.toolName}`,
+    description: sensitivePath
+      ? `The agent requested ${event.toolName} access to a sensitive path with input: ${previewInput(event.input)}`
+      : `The agent requested the ${event.toolName} tool with input: ${previewInput(event.input)}`,
     risk,
   };
+}
+
+function approvalRiskForToolCall(event: ToolCallEvent): ApprovalRisk | undefined {
+  return APPROVAL_REQUIRED_TOOLS.get(event.toolName) ?? (isSensitiveReadToolCall(event) ? "high" : undefined);
+}
+
+function isSensitiveReadToolCall(event: ToolCallEvent) {
+  if (!SENSITIVE_READ_TOOLS.has(event.toolName)) return false;
+  return inputReferencesSensitivePath(event.input);
+}
+
+function inputReferencesSensitivePath(input: unknown) {
+  const preview = previewInput(input).replace(/\\\\/g, "/").toLowerCase();
+  return SENSITIVE_PATH_FRAGMENTS.some((fragment) => preview.includes(fragment));
 }
 
 function previewInput(input: unknown) {
