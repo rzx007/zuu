@@ -24,6 +24,8 @@ import {
 } from "./request-validation";
 import type {
   ApprovalStatus,
+  EventStreamQuery,
+  PromptStreamEvent,
   PromptRequest,
 } from "@zuu/client";
 
@@ -167,6 +169,68 @@ app.get("/api/runs/:runId/events", (c) => {
   } catch (error) {
     return c.json(jsonError(error, 404), toStatus(error, 404));
   }
+});
+
+app.get("/api/events", (c) => {
+  const query: EventStreamQuery = {
+    runId: c.req.query("runId"),
+    sessionId: c.req.query("sessionId"),
+    afterEventId: c.req.query("afterEventId") ?? c.req.header("last-event-id"),
+  };
+  const liveQuery: EventStreamQuery = {
+    runId: query.runId,
+    sessionId: query.sessionId,
+  };
+  let replayEvents: PromptStreamEvent[];
+  try {
+    replayEvents = daemon.listEvents(query);
+  } catch (error) {
+    return c.json(jsonError(error, 404), toStatus(error, 404));
+  }
+
+  return streamSSE(c, async (stream) => {
+    const queue: PromptStreamEvent[] = [];
+    let notify: (() => void) | undefined;
+    const wake = () => {
+      notify?.();
+      notify = undefined;
+    };
+    const unsubscribe = daemon.subscribeEvents(liveQuery, (event) => {
+      queue.push(event);
+      wake();
+    });
+
+    try {
+      for (const event of replayEvents) {
+        if (stream.aborted) return;
+        await writePromptStreamEvent(stream, event);
+      }
+
+      while (!stream.aborted) {
+        const event = queue.shift();
+        if (event) {
+          await writePromptStreamEvent(stream, event);
+          continue;
+        }
+
+        await new Promise<void>((resolve) => {
+          const timer = setTimeout(() => {
+            notify = undefined;
+            resolve();
+          }, 15_000);
+          notify = () => {
+            clearTimeout(timer);
+            resolve();
+          };
+        });
+        if (!queue.length && !stream.aborted) {
+          await stream.writeSSE({ event: "heartbeat", data: "{}" });
+        }
+      }
+    } finally {
+      unsubscribe();
+    }
+  });
 });
 
 app.get("/api/workflows", async (c) => {
@@ -324,20 +388,35 @@ app.post("/api/prompt", async (c) => {
     try {
       for await (const event of daemon.prompt(request)) {
         if (stream.aborted) break;
-        await stream.writeSSE({ id: event.id, event: event.type, data: JSON.stringify(event) });
+        await writePromptStreamEvent(stream, event);
       }
     } catch (error) {
+      const event: PromptStreamEvent = {
+        id: `unknown:${crypto.randomUUID()}`,
+        createdAt: new Date().toISOString(),
+        runId: "unknown",
+        type: "error",
+        message: error instanceof Error ? error.message : String(error),
+      };
       await stream.writeSSE({
-        event: "error",
-        data: JSON.stringify({
-          runId: "unknown",
-          type: "error",
-          message: error instanceof Error ? error.message : String(error),
-        }),
+        id: event.id,
+        event: event.type,
+        data: JSON.stringify(event),
       });
     }
   });
 });
+
+function writePromptStreamEvent(
+  stream: Parameters<Parameters<typeof streamSSE>[1]>[0],
+  event: PromptStreamEvent,
+) {
+  return stream.writeSSE({
+    id: event.id,
+    event: event.type,
+    data: JSON.stringify(event),
+  });
+}
 
 app.post("/api/sessions/:sessionId/abort", async (c) => {
   try {

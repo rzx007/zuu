@@ -78,7 +78,8 @@ export interface PromptRequest {
 }
 
 export interface PromptStreamEvent {
-  id?: string;
+  id: string;
+  createdAt: string;
   runId: string;
   type:
     | "session"
@@ -195,6 +196,12 @@ export interface RunResponse {
 
 export interface RunEventsResponse {
   events: PromptStreamEvent[];
+}
+
+export interface EventStreamQuery {
+  runId?: string;
+  sessionId?: string;
+  afterEventId?: string;
 }
 
 export type WorkflowRunStatus = "queued" | "running" | "done" | "error" | "aborted";

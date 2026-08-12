@@ -2,7 +2,6 @@ import type {
   Approval,
   ApprovalRisk,
   CreateApprovalRequest,
-  PromptStreamEvent,
 } from "@zuu/client";
 import type {
   EventBus,
@@ -10,6 +9,7 @@ import type {
   ToolCallEvent,
 } from "@earendil-works/pi-coding-agent";
 import type { ApprovalStore } from "./approval-store";
+import type { RunEventDraft } from "./run-events";
 
 const APPROVAL_EVENT_CHANNEL = "zuu:approval";
 const TOOL_INPUT_PREVIEW_LIMIT = 600;
@@ -31,7 +31,7 @@ interface ApprovalExtensionOptions {
 export function subscribeApprovalEvents(
   eventBus: EventBus,
   runId: string,
-  listener: (event: PromptStreamEvent) => void,
+  listener: (event: RunEventDraft) => void,
 ) {
   return eventBus.on(APPROVAL_EVENT_CHANNEL, (event) => {
     if (isApprovalEvent(event) && event.runId === runId) {

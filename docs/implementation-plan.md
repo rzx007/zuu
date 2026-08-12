@@ -715,7 +715,7 @@ UI end-to-end
 
 - `src/index.ts`：Hono daemon、health、diagnostics、model、package、active session、stored session、session tree、run、prompt、abort、compact、new、switch、fork、import API，以及生产态 WebUI 静态托管。
 - `src/agent-daemon.ts`：封装 `ModelRuntime`、`DefaultResourceLoader`、`SettingsManager`、`SessionManager`、`createAgentSessionServices`、`createAgentSessionFromServices`、`createAgentSessionRuntime` 和 runtime lifecycle 编排；daemon 辅助逻辑统一放在 `src/agent-daemon/`，workflow 后端已拆到 `src/agent-daemon/workflow-adapters/`。
-- `packages/client`：workspace 包 `@zuu/client`，封装协议 DTO、health、diagnostics、models、packages、package trust、package install/update/remove operations、active sessions、stored sessions、session tree、runs、run event replay、prompt SSE、abort、compact 和 runtime lifecycle 操作；已具备独立 `dist` 构建、类型声明入口和包内中文 README。
+- `packages/client`：workspace 包 `@zuu/client`，封装协议 DTO、health、diagnostics、models、packages、package trust、package install/update/remove operations、active sessions、stored sessions、session tree、runs、run event replay、daemon event subscribe、prompt SSE、abort、compact 和 runtime lifecycle 操作；已具备独立 `dist` 构建、类型声明入口和包内中文 README。
 - `web/`：Vue + Vite WebUI，浏览器侧直接 bundle `@zuu/client`，用于 diagnostics、resource diagnostics、model 选择、package source/trust/install/update/remove、prompt SSE、session 文件、session tree、runs、run event replay 和 approval 操作。
 - `scripts/check-pi-workflow-runtime.ts`：WSL2/Linux 专用的真实 `@agwab/pi-workflow` readiness 和 launch 验证脚本；默认只检查 ready，设置 `ZUU_PI_WORKFLOW_RUN=1` 才发起真实 workflow。
 - `docs/spikes/pi-workflow-runtime.md`：记录真实 pi-workflow 验证步骤、通过标准、失败诊断和后续 board/run-state 映射任务。
@@ -730,10 +730,10 @@ UI end-to-end
 - `GET /api/health` 正常。
 - API 错误响应已统一为 `{ error: { message, status, retryable, code?, details? } }`；`@zuu/client` 会把非 2xx 响应映射为 `ZuuClientError`。
 - `GET /api/diagnostics` 正常返回 SDK 版本、模型数量、skills、extensions、resource diagnostics、trusted packages、blocked packages、JSON store 健康状态和能力缺口。
-- `POST /api/prompt` 可以返回带稳定事件 ID 的 SSE `session`、`error`、`agent_event` 和 `done` 事件。
+- `POST /api/prompt` 可以返回带稳定事件 ID 和 `createdAt` 的 SSE `session`、`error`、`agent_event` 和 `done` 事件；`GET /api/events` 支持按 `runId`/`sessionId` 过滤，并通过 `afterEventId` 或 `Last-Event-ID` 先 replay 再订阅 live 事件。
 - `@zuu/client` 可从 Node.js 侧调用 health、diagnostics 和 prompt stream，并可通过 `pnpm example:client` 运行第三方消费示例。
 - prompt stream 已携带稳定 `runId`，并可通过 `GET /api/runs` 和 `GET /api/runs/:runId` 查询最近运行状态。
-- run registry 已持久化到 `.zuu/pi-agent/runs.json`，daemon 重启后可恢复最近运行摘要；prompt stream 事件已按 run 持久化到 `.zuu/pi-agent/run-events.json`，可通过 `GET /api/runs/:runId/events` 和 `@zuu/client.listRunEvents()` 补拉事件窗口；runs、run-events、approvals、workflow-runs、schedules、package-operations 和 package-trust 已统一使用版本化 JSON store，写入采用临时文件加原子替换，损坏文件会备份为 `.corrupt-*.bak` 并恢复为空数据。
+- run registry 已持久化到 `.zuu/pi-agent/runs.json`，daemon 重启后可恢复最近运行摘要；prompt stream 事件已按 run 持久化到 `.zuu/pi-agent/run-events.json`，可通过 `GET /api/runs/:runId/events`、`GET /api/events`、`@zuu/client.listRunEvents()` 和 `@zuu/client.subscribeEvents()` 补拉事件窗口；runs、run-events、approvals、workflow-runs、schedules、package-operations 和 package-trust 已统一使用版本化 JSON store，写入采用临时文件加原子替换，损坏文件会备份为 `.corrupt-*.bak` 并恢复为空数据。
 - `AgentSessionRuntime` 的 `newSession`、`switchSession`、`fork` 和 `importFromJsonl` 已通过 daemon API 与 client 暴露。
 - `GET /api/session-files` 和 `POST /api/sessions/open` 已支持列出和打开 Pi 持久化 session 文件。
 - `GET /api/sessions/:sessionId/tree` 已支持读取当前 active session 的树形 entry 摘要，为 fork 选择器提供基础。
@@ -751,7 +751,7 @@ UI end-to-end
 当前限制：
 
 - `@zuu/client` 已是可独立构建的 workspace 包，具备 `dist` 产物、包入口、类型声明、包内中文 README 和第三方示例；尚未接入自动版本发布、changelog 和 npm publish 流程。
-- JSON store 已有原子写和损坏恢复，prompt run 事件已有最小存档和按 run 补拉，但还没有全局 `/events`、自动 SSE 重连、SQLite migration 或跨进程写入协调。
+- JSON store 已有原子写和损坏恢复，prompt run 事件已有最小存档、按 run 补拉和 daemon 级 `/api/events` replay/live stream，但还没有自动 SSE 重连、SQLite migration 或跨进程写入协调。
 - WebUI 已迁移到 Vue + Vite，并支持打开持久化 session、查看当前 session tree、按 entry fork、从本地 JSONL 路径 import、处理 pending approvals、启动/查看 fake workflow runs，以及创建/暂停/恢复/触发/删除 schedule。
 - Package API 已能展示安装状态、信任状态、加载状态、显式触发安装/更新/删除，并通过持久化 operation 记录暴露任务进度和失败原因；WebUI 已能 trust/revoke package source 并展示 SDK resource diagnostics/collision。未信任 package 会保留在配置清单中，但已从 Pi `ResourceLoader` 和 `pi-package` workflow backend 的加载链路中过滤，diagnostics 会通过 `blockedPackages` 暴露被阻止加载的 source。
 - Approval 已接入 Pi tool call 拦截和 SSE 事件，但当前策略是 fail-closed：危险工具被阻断后需要用户 resolve 并重试 prompt，尚未实现挂起并恢复同一个 tool call 的交互式等待。

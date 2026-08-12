@@ -443,7 +443,7 @@ interface PromptRequest {
 
 当 Session 正在运行且没有指定合法 `streamingBehavior` 时，返回 `409 session_busy`。
 
-Prompt SSE 事件必须包含稳定 `id`，并至少按 Run 保留一个可查询的事件窗口。`GET /v1/runs/:runId/events` 必须返回该 Run 已存档的标准 `PromptStreamEvent` 列表，并支持通过 `afterEventId` 补拉指定事件之后的事件；如果 `afterEventId` 不存在，应返回当前窗口内全部事件。
+Prompt SSE 事件必须包含稳定 `id` 和 `createdAt`，并至少按 Run 保留一个可查询的事件窗口。`GET /v1/runs/:runId/events` 必须返回该 Run 已存档的标准 `PromptStreamEvent` 列表，并支持通过 `afterEventId` 补拉指定事件之后的事件；如果 `afterEventId` 不存在，应返回当前窗口内全部事件。
 
 ### 7.7 Workflows
 
@@ -503,6 +503,8 @@ interface ResolveApprovalRequest {
 - 支持查询参数：`projectId`、`sessionId`、`runId`
 - 支持 `Last-Event-ID` 重连
 - Daemon 定期发送 heartbeat
+
+`GET /v1/events` 连接建立时必须先按 `Last-Event-ID` 或 `afterEventId` replay 当前事件窗口，再持续发送 live 事件。每个非 heartbeat SSE frame 的 `id:` 必须等于 JSON payload 内的 `id`；缺少 `id`、`createdAt`、`runId` 或 `type` 的事件视为协议错误，不做旧格式兼容。
 
 ### 8.2 Event Envelope
 

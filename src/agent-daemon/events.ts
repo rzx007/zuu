@@ -2,9 +2,9 @@ import type {
   AgentSessionEvent,
   SessionEntry,
 } from "@earendil-works/pi-coding-agent";
-import type { PromptStreamEvent } from "@zuu/client";
+import type { RunEventDraft } from "./run-events";
 
-export function compactAgentEvent(event: AgentSessionEvent, runId: string): PromptStreamEvent | undefined {
+export function compactAgentEvent(event: AgentSessionEvent, runId: string): RunEventDraft | undefined {
   if (event.type === "message_update" && event.assistantMessageEvent.type === "text_delta") {
     return { runId, type: "text_delta", delta: event.assistantMessageEvent.delta };
   }

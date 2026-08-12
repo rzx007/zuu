@@ -1,5 +1,6 @@
 import type {
   Diagnostics,
+  EventStreamQuery,
   ForkSessionRequest,
   HealthResponse,
   ImportSessionRequest,
@@ -49,6 +50,10 @@ export interface PromptStreamOptions {
   signal?: AbortSignal;
 }
 
+export interface EventStreamOptions extends EventStreamQuery {
+  signal?: AbortSignal;
+}
+
 export interface ZuuClient {
   health(): Promise<HealthResponse>;
   diagnostics(): Promise<Diagnostics>;
@@ -86,6 +91,7 @@ export interface ZuuClient {
   createSession(input?: Record<string, unknown>): Promise<SessionResponse>;
   openSession(input: OpenSessionRequest): Promise<SessionResponse>;
   prompt(input: PromptRequest, options?: PromptStreamOptions): AsyncGenerator<PromptStreamEvent>;
+  subscribeEvents(options?: EventStreamOptions): AsyncGenerator<PromptStreamEvent>;
   abort(sessionId: string): Promise<SessionResponse>;
   compact(sessionId: string, instructions?: string): Promise<SessionResponse>;
   newSession(sessionId: string, input?: NewSessionRequest): Promise<SessionActionResponse>;
@@ -177,6 +183,13 @@ function parseSseEvents(buffer: string) {
   const events: PromptStreamEvent[] = [];
 
   for (const frame of frames) {
+    const eventName = frame
+      .split("\n")
+      .find((line) => line.startsWith("event:"))
+      ?.slice(6)
+      .trimStart();
+    if (eventName === "heartbeat") continue;
+
     const id = frame
       .split("\n")
       .find((line) => line.startsWith("id:"))
@@ -190,7 +203,10 @@ function parseSseEvents(buffer: string) {
 
     if (data) {
       const event = JSON.parse(data) as PromptStreamEvent;
-      events.push(event.id ? event : { ...event, id });
+      if (!id || event.id !== id || !event.createdAt) {
+        throw new Error("Invalid SSE event frame");
+      }
+      events.push(event);
     }
   }
 
@@ -408,5 +424,54 @@ export function createZuuClient(options: ZuuClientOptions = {}): ZuuClient {
         await reader.cancel().catch(() => {});
       }
     },
+    subscribeEvents: (input = {}) => streamEvents(fetchImpl, baseUrl, apiToken, input),
   };
+}
+
+async function* streamEvents(
+  fetchImpl: typeof fetch,
+  baseUrl: string,
+  apiToken: string | undefined,
+  options: EventStreamOptions,
+): AsyncGenerator<PromptStreamEvent> {
+  const params = new URLSearchParams();
+  if (options.runId) params.set("runId", options.runId);
+  if (options.sessionId) params.set("sessionId", options.sessionId);
+  if (options.afterEventId) params.set("afterEventId", options.afterEventId);
+  const path = params.size ? `/api/events?${params}` : "/api/events";
+  const response = await fetchImpl(joinUrl(baseUrl, path), {
+    headers: {
+      ...(apiToken ? { authorization: `Bearer ${apiToken}` } : {}),
+      ...(options.afterEventId ? { "last-event-id": options.afterEventId } : {}),
+    },
+    signal: options.signal,
+  });
+
+  if (!response.ok || !response.body) {
+    await parseJsonResponse(response);
+    return;
+  }
+
+  const reader = response.body.pipeThrough(new TextDecoderStream()).getReader();
+  let buffer = "";
+
+  try {
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+
+      const parsed = parseSseEvents(buffer + value);
+      buffer = parsed.rest;
+      for (const event of parsed.events) {
+        yield event;
+      }
+    }
+
+    const parsed = parseSseEvents(`${buffer}\n\n`);
+    for (const event of parsed.events) {
+      yield event;
+    }
+  } finally {
+    await reader.cancel().catch(() => {});
+  }
 }

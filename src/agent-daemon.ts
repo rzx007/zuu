@@ -37,6 +37,7 @@ import { createStatusTool } from "./agent-daemon/status-tool";
 import { createWorkflowBackend } from "./agent-daemon/workflows";
 import type {
   CreateScheduleRequest,
+  EventStreamQuery,
   ForkSessionRequest,
   ImportSessionRequest,
   NewSessionRequest,
@@ -57,7 +58,7 @@ import type {
   ThinkingLevel,
 } from "@zuu/client";
 import { loadRunHistory, saveRunHistory } from "./agent-daemon/run-history";
-import { RunEventStore } from "./agent-daemon/run-events";
+import { matchesEventQuery, RunEventStore, type RunEventDraft } from "./agent-daemon/run-events";
 
 interface ManagedRuntime {
   runtime: AgentSessionRuntime;
@@ -77,12 +78,15 @@ interface CreateSessionOptions {
   persist?: boolean;
 }
 
+type EventListener = (event: PromptStreamEvent) => void;
+
 
 export class ZuuDaemon {
   private readonly runtimes = new Map<string, ManagedRuntime>();
   private readonly agentDir = getZuuAgentDir();
   private readonly runStorePath = getRunStorePath(this.agentDir);
   private readonly runEventStore = new RunEventStore(getRunEventStorePath(this.agentDir));
+  private readonly eventListeners = new Set<EventListener>();
   private readonly approvalStore = new ApprovalStore(getApprovalStorePath(this.agentDir));
   private readonly activeRunBySessionId = new Map<string, string>();
   private readonly eventBus: EventBusController = createEventBus();
@@ -289,6 +293,25 @@ export class ZuuDaemon {
     return this.runEventStore.list(runId, afterEventId);
   }
 
+  listEvents(query: EventStreamQuery = {}) {
+    if (query.runId) this.getRun(query.runId);
+    return this.runEventStore.listAll(query);
+  }
+
+  subscribeEvents(query: EventStreamQuery, listener: EventListener) {
+    const filteredListener = (event: PromptStreamEvent) => {
+      if (matchesEventQuery(event, query)) listener(event);
+    };
+    this.eventListeners.add(filteredListener);
+    return () => this.eventListeners.delete(filteredListener);
+  }
+
+  private publishEvent(event: PromptStreamEvent) {
+    for (const listener of this.eventListeners) {
+      listener(event);
+    }
+  }
+
   createApproval(request: CreateApprovalRequest) {
     return this.approvalStore.create(request);
   }
@@ -458,10 +481,15 @@ export class ZuuDaemon {
     this.setRun(run);
     this.activeRunBySessionId.set(session.sessionId, runId);
     const recordEvent = this.runEventStore.createRecorder(runId);
+    const recordAndPublish = (event: RunEventDraft) => {
+      const recorded = recordEvent(event);
+      this.publishEvent(recorded);
+      return recorded;
+    };
 
-    yield recordEvent({ runId, type: "session", session: this.summarizeSession(session), run });
+    yield recordAndPublish({ runId, type: "session", session: this.summarizeSession(session), run });
 
-    const queue: PromptStreamEvent[] = [];
+    const queue: RunEventDraft[] = [];
     let notify: (() => void) | undefined;
     let finished = false;
     let promptError: unknown;
@@ -499,7 +527,7 @@ export class ZuuDaemon {
       while (!finished || queue.length > 0) {
         const next = queue.shift();
         if (next) {
-          yield recordEvent(next);
+          yield recordAndPublish(next);
           continue;
         }
 
@@ -513,7 +541,7 @@ export class ZuuDaemon {
         run.status = run.status === "aborted" ? "aborted" : "error";
         run.endedAt = new Date().toISOString();
         this.persistRuns();
-        yield recordEvent({ runId, type: "error", message, run });
+        yield recordAndPublish({ runId, type: "error", message, run });
         return;
       }
 
@@ -521,7 +549,7 @@ export class ZuuDaemon {
       run.status = run.status === "aborted" ? "aborted" : sawError ? "error" : "done";
       run.endedAt = new Date().toISOString();
       this.persistRuns();
-      yield recordEvent({ runId, type: "done", session: this.summarizeSession(session), run });
+      yield recordAndPublish({ runId, type: "done", session: this.summarizeSession(session), run });
     } finally {
       if (this.activeRunBySessionId.get(session.sessionId) === runId) {
         this.activeRunBySessionId.delete(session.sessionId);

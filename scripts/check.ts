@@ -106,6 +106,41 @@ async function main() {
   const { runs } = await client.listRuns();
   if (!Array.isArray(runs)) throw new Error("runs response is invalid");
   await expectClientError(() => client.listRunEvents("missing"), { status: 404, code: "not_found" });
+  const missingEventStream = await fetchFromApp("http://zuu.local/api/events?runId=missing");
+  if (missingEventStream.status !== 404) throw new Error("missing event stream run should fail before streaming");
+
+  let sawLastEventId = false;
+  const eventStreamClient = createZuuClient({
+    baseUrl: "http://zuu.local",
+    fetch: async (input, init) => {
+      const request = input instanceof Request ? input : new Request(input, init);
+      sawLastEventId = request.headers.get("last-event-id") === "event-check:0";
+      const body = [
+        "id: event-check:1",
+        "event: text_delta",
+        "data: {\"id\":\"event-check:1\",\"createdAt\":\"2026-08-12T00:00:00.000Z\",\"runId\":\"event-check\",\"type\":\"text_delta\",\"delta\":\"hello\"}",
+        "",
+        "event: heartbeat",
+        "data: {}",
+        "",
+      ].join("\n");
+      return new Response(new ReadableStream({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode(body));
+          controller.close();
+        },
+      }), {
+        headers: { "content-type": "text/event-stream" },
+      });
+    },
+  });
+  const streamedEvents = [];
+  for await (const event of eventStreamClient.subscribeEvents({ afterEventId: "event-check:0" })) {
+    streamedEvents.push(event);
+  }
+  if (!sawLastEventId || streamedEvents.length !== 1 || streamedEvents[0]?.id !== "event-check:1") {
+    throw new Error("event stream client should parse IDs, send Last-Event-ID, and ignore heartbeats");
+  }
 
   const workflows = await client.listWorkflows();
   if (!Array.isArray(workflows.workflows) || workflows.workflows.length === 0) {

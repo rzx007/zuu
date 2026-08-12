@@ -39,6 +39,7 @@ ZUU_PI_WORKFLOW_RUN=1 pnpm check:pi-workflow
 
 - `GET /api/health`
 - `GET /api/diagnostics`
+- `GET /api/events`：以 SSE 方式订阅 daemon 级事件，支持 `runId`、`sessionId`、`afterEventId` 和 `Last-Event-ID`
 - `GET /api/models`
 - `GET /api/packages`
 - `POST /api/packages`
@@ -94,7 +95,7 @@ Packages 面板会区分 `configured`、`installed`、`filtered`、`trusted` / `
 
 API 错误统一返回 `error.message`、`error.status`、`error.retryable`、`error.code` 和可选 `error.details`。`@zuu/client` 会把非 2xx 响应映射成 `ZuuClientError`，调用方可以直接读取 `status`、`code`、`retryable` 和 `details`，不需要解析错误文案。
 
-Prompt SSE 事件会带稳定 `id`，并按 run 写入 `.zuu/pi-agent/run-events.json`。断线后可通过 `GET /api/runs/:runId/events?afterEventId=<event-id>` 或 `@zuu/client` 的 `listRunEvents(runId, afterEventId)` 补拉事件窗口；WebUI 的 Recent Runs 支持查看事件数量并 replay 文本片段。
+Prompt SSE 事件会带稳定 `id` 和 `createdAt`，并按 run 写入 `.zuu/pi-agent/run-events.json`。断线后可通过 `GET /api/runs/:runId/events?afterEventId=<event-id>` 或 `@zuu/client` 的 `listRunEvents(runId, afterEventId)` 补拉事件窗口；也可以通过 `GET /api/events` 或 `@zuu/client.subscribeEvents()` 先 replay 历史事件再订阅 live 事件。WebUI 的 Recent Runs 支持查看事件数量并 replay 文本片段。
 
 ## Client SDK
 
