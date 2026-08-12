@@ -27,6 +27,13 @@ pnpm typecheck
 pnpm build:web
 ```
 
+真实 `@agwab/pi-workflow` 环境验证不在普通检查里运行。请在 WSL2/Linux 中按 [pi-workflow runtime spike](docs/spikes/pi-workflow-runtime.md) 操作：
+
+```sh
+pnpm check:pi-workflow
+ZUU_PI_WORKFLOW_RUN=1 pnpm check:pi-workflow
+```
+
 ## API
 
 - `GET /api/health`

@@ -8,6 +8,7 @@
     "dev:web": "pnpm --filter web dev -- --host 127.0.0.1",
     "start": "node --env-file-if-exists=.env --import tsx src/index.ts",
     "check": "node --env-file-if-exists=.env --import tsx scripts/check.ts",
+    "check:pi-workflow": "node --env-file-if-exists=.env --import tsx scripts/check-pi-workflow-runtime.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

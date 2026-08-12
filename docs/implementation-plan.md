@@ -717,6 +717,8 @@ UI end-to-end
 - `src/agent-daemon.ts`：封装 `ModelRuntime`、`DefaultResourceLoader`、`SettingsManager`、`SessionManager`、`createAgentSessionServices`、`createAgentSessionFromServices`、`createAgentSessionRuntime` 和 runtime lifecycle 编排；daemon 辅助逻辑统一放在 `src/agent-daemon/`，workflow 后端已拆到 `src/agent-daemon/workflow-adapters/`。
 - `packages/client`：workspace 包 `@zuu/client`，封装协议 DTO、health、diagnostics、models、packages、active sessions、stored sessions、session tree、runs、prompt SSE、abort、compact 和 runtime lifecycle 操作。
 - `web/`：Vue + Vite WebUI，浏览器侧直接 bundle `@zuu/client`，用于 diagnostics、model 选择、package source、prompt SSE、session 文件、session tree、runs 和 approval 操作。
+- `scripts/check-pi-workflow-runtime.ts`：WSL2/Linux 专用的真实 `@agwab/pi-workflow` readiness 和 launch 验证脚本；默认只检查 ready，设置 `ZUU_PI_WORKFLOW_RUN=1` 才发起真实 workflow。
+- `docs/spikes/pi-workflow-runtime.md`：记录真实 pi-workflow 验证步骤、通过标准、失败诊断和后续 board/run-state 映射任务。
 - `.zuu/pi-agent`：默认 Pi app state 目录，可通过 `ZUU_AGENT_DIR` 覆盖，避免嵌入式运行时写入 `~/.pi/agent`。
 - `README.md`：当前运行方式和 API 入口。
 
@@ -724,6 +726,7 @@ UI end-to-end
 
 - `pnpm run check` 可以加载应用入口并验证 health/models/packages/runs/stored sessions/session tree/runtime lifecycle client 合同。
 - `pnpm run typecheck` 可以完成 TypeScript `noEmit` 校验。
+- `pnpm run check:pi-workflow` 已作为真实环境验证入口，但只应在 `ZUU_WORKFLOW_BACKEND=pi-package` 的 WSL2/Linux daemon 旁运行。
 - `GET /api/health` 正常。
 - `GET /api/diagnostics` 正常返回 SDK 版本、模型数量、skills、extensions、packages 和能力缺口。
 - `POST /api/prompt` 可以返回 SSE `session`、`error`、`agent_event` 和 `done` 事件。
@@ -757,5 +760,5 @@ UI end-to-end
 - 当前环境下真实模型 stream 可能因为网络返回 `Connection error`；daemon 已将 SDK assistant error 映射为 SSE error。
 - Workflow/subagent package 在当前环境尚未安装，diagnostics 会明确报告缺口；`pi-package` adapter 已有 launch 桥接，但当前 Windows 原生环境会按 `@agwab/pi-workflow` 包页面说明标记为不可用。Scheduler 已有最小内置后端，但 `cron`、timezone、misfire、retry、abort schedule run 和真实持久队列仍未落地。
 
-后续计划应从此切片继续收敛，而不是另起炉灶：Client workspace 包、run registry 持久化、package source 管理、approval tool-call 拦截、Vue WebUI approval 操作面、fake workflow 合约、pi-package launch adapter 和 Scheduler MVP 已经落地，接下来应优先在 WSL2/Linux 中安装 `@agwab/pi-workflow` 验证 `/workflow run` 端到端，再研究 `.pi/workflows` board/run-state 的只读映射，最后补齐 cron/timezone/retry 等 scheduler backend 能力。
+后续计划应从此切片继续收敛，而不是另起炉灶：Client workspace 包、run registry 持久化、package source 管理、approval tool-call 拦截、Vue WebUI approval 操作面、fake workflow 合约、pi-package launch adapter、pi-workflow runtime spike 和 Scheduler MVP 已经落地，接下来应优先在 WSL2/Linux 中安装 `@agwab/pi-workflow` 跑通 `docs/spikes/pi-workflow-runtime.md`，再研究 `.pi/workflows` board/run-state 的只读映射，最后补齐 cron/timezone/retry 等 scheduler backend 能力。
 
