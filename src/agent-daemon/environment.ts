@@ -1,6 +1,7 @@
 import { mkdirSync, readFileSync } from "node:fs";
 import { join, resolve, sep } from "node:path";
 import { ModelRuntime } from "@earendil-works/pi-coding-agent";
+import { ApiError } from "../http";
 
 export const DEFAULT_READ_ONLY_TOOLS = ["read", "grep", "find", "ls", "zuu_status"];
 
@@ -114,7 +115,7 @@ export function packageSourceToString(source: unknown): string {
 
 export function normalizePackageSource(source: string) {
   const trimmed = source.trim();
-  if (!trimmed) throw new Error("source is required");
+  if (!trimmed) throw new ApiError("source is required", { status: 400, code: "validation_failed", details: { field: "source" } });
   return trimmed;
 }
 
@@ -124,7 +125,11 @@ export function assertPinnedPackageSource(source: string) {
   const versionStart = npmVersionStart(spec);
   const version = versionStart >= 0 ? spec.slice(versionStart + 1) : "";
   if (!EXACT_SEMVER.test(version)) {
-    throw new Error("npm package source must include an exact version, for example npm:@agwab/pi-workflow@0.84.1");
+    throw new ApiError("npm package source must include an exact version, for example npm:@agwab/pi-workflow@0.84.1", {
+      status: 400,
+      code: "validation_failed",
+      details: { field: "source" },
+    });
   }
 }
 

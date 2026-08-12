@@ -2386,20 +2386,16 @@ async function main() {
   }
   if (!emptyPackageInstallFailed) throw new Error("empty package install source should fail");
   const unpinnedSource = `npm:zuu-check-unpinned-${crypto.randomUUID()}`;
-  let unpinnedPackageAddFailed = false;
-  try {
-    await client.addPackage({ source: unpinnedSource });
-  } catch {
-    unpinnedPackageAddFailed = true;
-  }
-  if (!unpinnedPackageAddFailed) throw new Error("unpinned npm package add should fail before settings mutation");
-  let unpinnedPackageTrustFailed = false;
-  try {
-    await client.trustPackage({ source: unpinnedSource });
-  } catch {
-    unpinnedPackageTrustFailed = true;
-  }
-  if (!unpinnedPackageTrustFailed) throw new Error("unpinned npm package trust should fail");
+  await expectClientError(() => client.addPackage({ source: unpinnedSource }), {
+    status: 400,
+    code: "validation_failed",
+    details: (details) => Boolean(details && typeof details === "object" && "field" in details),
+  });
+  await expectClientError(() => client.trustPackage({ source: unpinnedSource }), {
+    status: 400,
+    code: "validation_failed",
+    details: (details) => Boolean(details && typeof details === "object" && "field" in details),
+  });
   const untrustedSource = `npm:zuu-check-untrusted-${crypto.randomUUID()}@0.0.0`;
   let untrustedPackageInstallFailed = false;
   try {
