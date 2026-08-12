@@ -5,16 +5,18 @@ import { serve } from "@hono/node-server";
 import type { ServerType } from "@hono/node-server";
 import { serveStatic } from "@hono/node-server/serve-static";
 import { Hono } from "hono";
+import { AuditService } from "./agent-daemon/audit-service";
 import { AuthService } from "./agent-daemon/auth-service";
 import { ZuuDaemon } from "./agent-daemon";
-import { getAuthTokenStorePath, getZuuAgentDir } from "./agent-daemon/environment";
+import { getAuditEventStorePath, getAuthTokenStorePath, getZuuAgentDir } from "./agent-daemon/environment";
 import { jsonError } from "./http";
 import { registerV1Routes } from "./routes";
 
 const app = new Hono();
 const agentDir = getZuuAgentDir();
+export const audit = new AuditService(getAuditEventStorePath(agentDir));
 export const auth = new AuthService(getAuthTokenStorePath(agentDir));
-const daemon = new ZuuDaemon();
+const daemon = new ZuuDaemon({ audit });
 const webDistRoot = "./web/dist";
 const webIndex = new URL("../web/dist/index.html", import.meta.url);
 const hasWebDist = existsSync(webIndex);
@@ -34,7 +36,7 @@ app.use("/v1/*", async (c, next) => {
 
 app.all("/api/*", (c) => c.json(jsonError("Use /v1 instead of /api.", 404), 404));
 
-registerV1Routes({ app, auth, daemon });
+registerV1Routes({ app, audit, auth, daemon });
 
 if (hasWebDist) {
   app.get("/assets/*", serveStatic({ root: webDistRoot }));

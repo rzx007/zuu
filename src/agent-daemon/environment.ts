@@ -60,6 +60,10 @@ export function getAuthTokenStorePath(agentDir: string) {
   return join(agentDir, "auth-token.json");
 }
 
+export function getAuditEventStorePath(agentDir: string) {
+  return join(agentDir, "audit-events.json");
+}
+
 function normalizePathForCompare(pathname: string) {
   const resolved = resolve(pathname);
   return process.platform === "win32" ? resolved.toLowerCase() : resolved;

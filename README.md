@@ -40,6 +40,7 @@ ZUU_PI_WORKFLOW_RUN=1 pnpm check:pi-workflow
 - `GET /v1/health`
 - `GET /v1/auth/status`
 - `POST /v1/auth/rotate`
+- `GET /v1/audit-events`
 - `GET /v1/diagnostics`
 - `GET /v1/events`：以 SSE 方式订阅 daemon 级事件，支持 `runId`、`sessionId`、`afterEventId` 和 `Last-Event-ID`
 - `GET /v1/models`
@@ -146,7 +147,9 @@ Packages 面板会区分 `configured`、`installed`、`filtered`、`trusted` / `
 
 `GET /v1/auth/status` 会返回 token 来源、是否可轮换、token 预览和本地 token 文件路径；`POST /v1/auth/rotate` 只对本地 token 生效，并在响应中返回新的 `apiToken`，调用方应立即替换后续请求的 Bearer token。
 
-`GET /v1/diagnostics` 会返回 SDK resource diagnostics；其中 `resources.packages` 只列出已信任且会参与加载的 package，`resources.blockedPackages` 列出因未信任而被阻止加载的 package，`resources.stores` 列出 JSON store 健康状态，包括本地 auth token store。WebUI 的 Resources 面板会展示 extension/skill/prompt/theme 的加载错误、warning、name collision 和 store recovery 状态。
+`GET /v1/audit-events` 会返回最近审计事件，当前覆盖 auth rotate、approval resolve 和 package add/trust/install/update/remove 等治理动作，只记录 token 预览、source、decision、错误摘要等非密钥信息。
+
+`GET /v1/diagnostics` 会返回 SDK resource diagnostics；其中 `resources.packages` 只列出已信任且会参与加载的 package，`resources.blockedPackages` 列出因未信任而被阻止加载的 package，`resources.stores` 列出 JSON store 健康状态，包括本地 auth token store 和 audit event store。WebUI 的 Resources 面板会展示 extension/skill/prompt/theme 的加载错误、warning、name collision 和 store recovery 状态。
 
 `GET /v1/models` 只说明当前认证和模型目录看起来可用；需要确认 DeepSeek 等 provider 是否真的能流式返回时，使用 `POST /v1/models/smoke` 或 WebUI 模型区的 Smoke test。该接口会创建一个临时 in-memory session，发送极小 prompt，并返回 `ok/status/runId/error/durationMs`；失败也会写入 run/events，方便继续排查网络、代理或 provider 错误。
 

@@ -194,6 +194,32 @@ export interface AuthRotateResponse extends AuthStatusResponse {
   apiToken: string;
 }
 
+export type AuditEventAction =
+  | "auth.rotate"
+  | "approval.resolve"
+  | "package.add"
+  | "package.install"
+  | "package.update"
+  | "package.remove"
+  | "package.trust"
+  | "package.revoke_trust";
+
+export type AuditEventOutcome = "success" | "failure";
+
+export interface AuditEvent {
+  id: string;
+  createdAt: string;
+  actor: "api";
+  action: AuditEventAction;
+  outcome: AuditEventOutcome;
+  target?: string;
+  details?: Record<string, unknown>;
+}
+
+export interface AuditEventsResponse {
+  events: AuditEvent[];
+}
+
 export interface SessionsResponse {
   sessions: SessionSummary[];
 }

@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import app, { auth } from "../src/index";
 import { AuthService } from "../src/agent-daemon/auth-service";
+import { AuditService } from "../src/agent-daemon/audit-service";
 import { ApprovalStore } from "../src/agent-daemon/approval-store";
 import { createApprovalExtension } from "../src/agent-daemon/approval-policy";
 import { PackageService } from "../src/agent-daemon/packages";
@@ -91,6 +92,13 @@ async function main() {
   if (!diagnostics.resources.stores.some((store) => store.name === "auth-token")) {
     throw new Error("auth token store diagnostics should be reported");
   }
+  if (!diagnostics.resources.stores.some((store) => store.name === "audit-events")) {
+    throw new Error("audit event store diagnostics should be reported");
+  }
+  const auditEvents = await client.listAuditEvents(10);
+  if (!Array.isArray(auditEvents.events)) {
+    throw new Error("audit events response is invalid");
+  }
 
   let sawAuthHeader = false;
   const authClient = createZuuClient({
@@ -126,6 +134,18 @@ async function main() {
   if (!sawRotateRoute || rotateResponse.apiToken !== "zuu_check_new_token") {
     throw new Error("rotate auth token client method should call the rotate route");
   }
+  let sawAuditRoute = false;
+  const auditClient = createZuuClient({
+    baseUrl: "http://zuu.local",
+    apiToken: "check-token",
+    fetch: async (input) => {
+      const request = input instanceof Request ? input : new Request(input);
+      sawAuditRoute = request.url === "http://zuu.local/v1/audit-events?limit=5";
+      return Response.json({ events: [] });
+    },
+  });
+  await auditClient.listAuditEvents(5);
+  if (!sawAuditRoute) throw new Error("audit event client method should call the audit route");
 
   const authServiceDir = mkdtempSync(join(tmpdir(), "zuu-auth-service-check-"));
   const localAuth = new AuthService(join(authServiceDir, "auth-token.json"), "");
@@ -142,6 +162,12 @@ async function main() {
   const envAuth = new AuthService(join(authServiceDir, "env-auth-token.json"), "env-token");
   if (envAuth.status().source !== "env" || envAuth.status().canRotate) {
     throw new Error("env auth token status should be read-only");
+  }
+
+  const auditService = new AuditService(join(mkdtempSync(join(tmpdir(), "zuu-audit-service-check-")), "audit.json"));
+  const auditEvent = auditService.record({ action: "package.trust", target: "npm:check", details: { source: "npm:check" } });
+  if (auditService.list(1)[0]?.id !== auditEvent.id || auditService.list(0).length !== 1) {
+    throw new Error("audit service should record and clamp event limits");
   }
   try {
     envAuth.rotate();
@@ -1254,6 +1280,13 @@ async function main() {
   const enabledPackage = packageService.list().packages.find((item) => item.source === "npm:zuu-check-package");
   if (enabledPackage?.loadStatus !== "enabled" || packageService.listTrustedPackageSources()[0] !== "npm:zuu-check-package") {
     throw new Error("trusted package should be enabled in the trusted settings view");
+  }
+  const packageAuditSource = `npm:zuu-check-audit-${crypto.randomUUID()}`;
+  await client.addPackage({ source: packageAuditSource });
+  await client.trustPackage({ source: packageAuditSource });
+  const latestAuditEvents = await client.listAuditEvents(20);
+  if (!latestAuditEvents.events.some((event) => event.action === "package.trust" && event.target === packageAuditSource)) {
+    throw new Error("package trust should be recorded in audit events");
   }
 
   const storedBefore = await client.listStoredSessions();

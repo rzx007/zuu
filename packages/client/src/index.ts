@@ -52,6 +52,7 @@ import type {
   ApiErrorResponse,
   AuthRotateResponse,
   AuthStatusResponse,
+  AuditEventsResponse,
 } from "./protocol.js";
 
 export type * from "./protocol.js";
@@ -79,6 +80,7 @@ export interface ZuuClient {
   health(): Promise<HealthResponse>;
   authStatus(): Promise<AuthStatusResponse>;
   rotateAuthToken(): Promise<AuthRotateResponse>;
+  listAuditEvents(limit?: number): Promise<AuditEventsResponse>;
   diagnostics(): Promise<Diagnostics>;
   listPackages(): Promise<PackagesResponse>;
   listModels(): Promise<ModelsResponse>;
@@ -341,6 +343,14 @@ export function createZuuClient(options: ZuuClientOptions = {}): ZuuClient {
       requestJson<AuthRotateResponse>(fetchImpl, baseUrl, "/v1/auth/rotate", {
         method: "POST",
       }, apiToken),
+    listAuditEvents: (limit) =>
+      requestJson<AuditEventsResponse>(
+        fetchImpl,
+        baseUrl,
+        limit ? `/v1/audit-events?limit=${encodeURIComponent(String(limit))}` : "/v1/audit-events",
+        undefined,
+        apiToken,
+      ),
     diagnostics: () => requestJson<Diagnostics>(fetchImpl, baseUrl, "/v1/diagnostics", undefined, apiToken),
     listPackages: () => requestJson<PackagesResponse>(fetchImpl, baseUrl, "/v1/packages", undefined, apiToken),
     listModels: () => requestJson<ModelsResponse>(fetchImpl, baseUrl, "/v1/models", undefined, apiToken),

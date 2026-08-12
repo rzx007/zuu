@@ -5,6 +5,7 @@ import {
 import {
   getApprovalStorePath,
   getAuthTokenStorePath,
+  getAuditEventStorePath,
   getPackageOperationStorePath,
   getPackageTrustStorePath,
   getProjectStorePath,
@@ -71,6 +72,7 @@ export async function buildDiagnostics(
     inspectJsonStore({ name: "package-operations", path: getPackageOperationStorePath(agentDir), defaultValue: [] }),
     inspectJsonStore({ name: "package-trust", path: getPackageTrustStorePath(agentDir), defaultValue: [] }),
     inspectJsonStore({ name: "auth-token", path: getAuthTokenStorePath(agentDir), defaultValue: { token: "", createdAt: "" } }),
+    inspectJsonStore({ name: "audit-events", path: getAuditEventStorePath(agentDir), defaultValue: [] }),
   ];
   const gaps: string[] = [];
   if (stores.some((store) => store.recovered)) {

@@ -5,6 +5,7 @@ import {
   type Approval,
   type ApprovalDecision,
   type AuthStatus,
+  type AuditEvent,
   type CreateScheduleRequest,
   type Diagnostics,
   type ModelSmokeResponse,
@@ -68,6 +69,7 @@ const countedEventOrder: string[] = []
 
 const apiToken = ref(localStorage.getItem(tokenKey) || '')
 const authStatus = ref<AuthStatus>()
+const auditEvents = ref<AuditEvent[]>([])
 const diagnostics = ref<Diagnostics>()
 const projects = ref<ProjectSummary[]>([])
 const selectedProjectId = ref(localStorage.getItem(projectKey) || '')
@@ -366,6 +368,10 @@ async function loadAuthStatus() {
   authStatus.value = (await client.authStatus()).auth
 }
 
+async function loadAuditEvents() {
+  auditEvents.value = (await client.listAuditEvents(50)).events
+}
+
 async function loadPackages() {
   const response = await client.listPackages()
   packages.value = response.packages
@@ -442,6 +448,7 @@ async function refreshAll() {
     await loadProjects()
     await Promise.all([
       loadAuthStatus(),
+      loadAuditEvents(),
       loadDiagnostics(),
       loadPackages(),
       loadPackageOperations(),
@@ -608,6 +615,7 @@ async function addPackage() {
   await client.addPackage({ source })
   packageSource.value = ''
   await Promise.all([loadPackages(), loadDiagnostics()])
+  await loadAuditEvents()
 }
 
 async function installPackage(source: string) {
@@ -620,6 +628,7 @@ async function installPackage(source: string) {
   addMessage('event', `package install started: ${source}`)
   schedulePackageOperationPoll()
   await Promise.all([loadPackageOperations(), loadDiagnostics(), loadWorkflows()])
+  await loadAuditEvents()
 }
 
 async function removePackage(source: string) {
@@ -632,6 +641,7 @@ async function removePackage(source: string) {
   addMessage('event', `package remove started: ${source}`)
   schedulePackageOperationPoll()
   await Promise.all([loadPackageOperations(), loadDiagnostics(), loadWorkflows()])
+  await loadAuditEvents()
 }
 
 async function updatePackage(source: string) {
@@ -644,6 +654,7 @@ async function updatePackage(source: string) {
   addMessage('event', `package update started: ${source}`)
   schedulePackageOperationPoll()
   await Promise.all([loadPackageOperations(), loadDiagnostics(), loadWorkflows()])
+  await loadAuditEvents()
 }
 
 async function trustPackage(source: string) {
@@ -651,6 +662,7 @@ async function trustPackage(source: string) {
   packages.value = response.packages
   addMessage('event', `package trusted: ${source}`)
   await loadDiagnostics()
+  await loadAuditEvents()
 }
 
 async function revokePackageTrust(source: string) {
@@ -658,6 +670,7 @@ async function revokePackageTrust(source: string) {
   packages.value = response.packages
   addMessage('event', `package trust revoked: ${source}`)
   await loadDiagnostics()
+  await loadAuditEvents()
 }
 
 async function openStoredSession(sessionFile: string) {
@@ -699,6 +712,7 @@ async function resolveApproval(approval: Approval, decision: ApprovalDecision) {
   const result = await client.resolveApproval(approval.id, { decision })
   addMessage('event', `${decision}: ${result.approval.title}`)
   await Promise.all([loadApprovals(), loadRuns()])
+  await loadAuditEvents()
 }
 
 async function startWorkflow() {
@@ -1432,6 +1446,24 @@ onUnmounted(() => {
                   <p v-if="store.error">{{ store.error }}</p>
                 </div>
               </div>
+            </section>
+
+            <section class="side-panel">
+              <div class="section-title">
+                <h2>Audit</h2>
+                <Button variant="ghost" size="xs" @click="loadAuditEvents">Refresh</Button>
+              </div>
+              <div v-if="auditEvents.length" class="list-stack overflow-auto">
+                <div v-for="event in auditEvents.slice(0, 10)" :key="event.id" class="workflow-row">
+                  <div class="flex items-center justify-between gap-2">
+                    <strong>{{ event.action }}</strong>
+                    <Badge :variant="event.outcome === 'success' ? 'secondary' : 'destructive'">{{ event.outcome }}</Badge>
+                  </div>
+                  <span>{{ event.createdAt }}</span>
+                  <p v-if="event.target">{{ event.target }}</p>
+                </div>
+              </div>
+              <p v-else class="empty-text">No audit events yet.</p>
             </section>
 
             <section class="side-panel">
