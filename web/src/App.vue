@@ -6,6 +6,8 @@ import {
   type ApprovalDecision,
   type AuthStatus,
   type AuditEvent,
+  type AuditEventAction,
+  type AuditEventOutcome,
   type CreateScheduleRequest,
   type Diagnostics,
   type ModelSmokeResponse,
@@ -70,6 +72,9 @@ const countedEventOrder: string[] = []
 const apiToken = ref(localStorage.getItem(tokenKey) || '')
 const authStatus = ref<AuthStatus>()
 const auditEvents = ref<AuditEvent[]>([])
+const auditAction = ref<'' | AuditEventAction>('')
+const auditOutcome = ref<'' | AuditEventOutcome>('')
+const auditTarget = ref('')
 const diagnostics = ref<Diagnostics>()
 const projects = ref<ProjectSummary[]>([])
 const selectedProjectId = ref(localStorage.getItem(projectKey) || '')
@@ -369,7 +374,12 @@ async function loadAuthStatus() {
 }
 
 async function loadAuditEvents() {
-  auditEvents.value = (await client.listAuditEvents(50)).events
+  auditEvents.value = (await client.listAuditEvents({
+    limit: 50,
+    action: auditAction.value || undefined,
+    outcome: auditOutcome.value || undefined,
+    target: auditTarget.value.trim() || undefined,
+  })).events
 }
 
 async function loadPackages() {
@@ -1453,6 +1463,25 @@ onUnmounted(() => {
                 <h2>Audit</h2>
                 <Button variant="ghost" size="xs" @click="loadAuditEvents">Refresh</Button>
               </div>
+              <div class="grid grid-cols-2 gap-2">
+                <select v-model="auditAction" class="field-input">
+                  <option value="">Any action</option>
+                  <option value="auth.rotate">auth.rotate</option>
+                  <option value="approval.resolve">approval.resolve</option>
+                  <option value="package.add">package.add</option>
+                  <option value="package.install">package.install</option>
+                  <option value="package.update">package.update</option>
+                  <option value="package.remove">package.remove</option>
+                  <option value="package.trust">package.trust</option>
+                  <option value="package.revoke_trust">package.revoke_trust</option>
+                </select>
+                <select v-model="auditOutcome" class="field-input">
+                  <option value="">Any outcome</option>
+                  <option value="success">success</option>
+                  <option value="failure">failure</option>
+                </select>
+              </div>
+              <input v-model="auditTarget" class="field-input" placeholder="Target contains" @keydown.enter="loadAuditEvents">
               <div v-if="auditEvents.length" class="list-stack overflow-auto">
                 <div v-for="event in auditEvents.slice(0, 10)" :key="event.id" class="workflow-row">
                   <div class="flex items-center justify-between gap-2">

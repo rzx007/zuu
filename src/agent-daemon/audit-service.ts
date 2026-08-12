@@ -10,6 +10,13 @@ export interface RecordAuditEventRequest {
   details?: Record<string, unknown>;
 }
 
+export interface AuditEventFilter {
+  limit?: number;
+  action?: AuditEventAction;
+  outcome?: AuditEventOutcome;
+  target?: string;
+}
+
 export class AuditService {
   private readonly store: JsonFileStore<AuditEvent[]>;
   private events: AuditEvent[];
@@ -24,9 +31,14 @@ export class AuditService {
     this.events = this.store.load(isAuditEventArray);
   }
 
-  list(limit = 100) {
-    const normalizedLimit = Math.max(1, Math.min(500, Math.floor(limit)));
-    return this.events.slice(0, normalizedLimit);
+  list(input: number | AuditEventFilter = {}) {
+    const filter = typeof input === "number" ? { limit: input } : input;
+    const normalizedLimit = Math.max(1, Math.min(500, Math.floor(filter.limit ?? 100)));
+    return this.events
+      .filter((event) => !filter.action || event.action === filter.action)
+      .filter((event) => !filter.outcome || event.outcome === filter.outcome)
+      .filter((event) => !filter.target || event.target?.includes(filter.target))
+      .slice(0, normalizedLimit);
   }
 
   record(request: RecordAuditEventRequest) {

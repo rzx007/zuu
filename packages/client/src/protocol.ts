@@ -220,6 +220,13 @@ export interface AuditEventsResponse {
   events: AuditEvent[];
 }
 
+export interface AuditEventsQuery {
+  limit?: number;
+  action?: AuditEventAction;
+  outcome?: AuditEventOutcome;
+  target?: string;
+}
+
 export interface SessionsResponse {
   sessions: SessionSummary[];
 }

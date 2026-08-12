@@ -52,6 +52,7 @@ import type {
   ApiErrorResponse,
   AuthRotateResponse,
   AuthStatusResponse,
+  AuditEventsQuery,
   AuditEventsResponse,
 } from "./protocol.js";
 
@@ -80,7 +81,7 @@ export interface ZuuClient {
   health(): Promise<HealthResponse>;
   authStatus(): Promise<AuthStatusResponse>;
   rotateAuthToken(): Promise<AuthRotateResponse>;
-  listAuditEvents(limit?: number): Promise<AuditEventsResponse>;
+  listAuditEvents(query?: number | AuditEventsQuery): Promise<AuditEventsResponse>;
   diagnostics(): Promise<Diagnostics>;
   listPackages(): Promise<PackagesResponse>;
   listModels(): Promise<ModelsResponse>;
@@ -220,6 +221,16 @@ function withQuery(path: string, query: Record<string, string | undefined>) {
   return params.size ? `${path}?${params}` : path;
 }
 
+function withAuditQuery(query: number | AuditEventsQuery | undefined) {
+  if (typeof query === "number") return withQuery("/v1/audit-events", { limit: String(query) });
+  return withQuery("/v1/audit-events", {
+    limit: query?.limit === undefined ? undefined : String(query.limit),
+    action: query?.action,
+    outcome: query?.outcome,
+    target: query?.target,
+  });
+}
+
 async function parseJsonResponse<T>(response: Response): Promise<T> {
   const text = await response.text();
   const data = parseJson(text);
@@ -343,11 +354,11 @@ export function createZuuClient(options: ZuuClientOptions = {}): ZuuClient {
       requestJson<AuthRotateResponse>(fetchImpl, baseUrl, "/v1/auth/rotate", {
         method: "POST",
       }, apiToken),
-    listAuditEvents: (limit) =>
+    listAuditEvents: (query) =>
       requestJson<AuditEventsResponse>(
         fetchImpl,
         baseUrl,
-        limit ? `/v1/audit-events?limit=${encodeURIComponent(String(limit))}` : "/v1/audit-events",
+        withAuditQuery(query),
         undefined,
         apiToken,
       ),

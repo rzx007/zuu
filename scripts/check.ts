@@ -140,11 +140,12 @@ async function main() {
     apiToken: "check-token",
     fetch: async (input) => {
       const request = input instanceof Request ? input : new Request(input);
-      sawAuditRoute = request.url === "http://zuu.local/v1/audit-events?limit=5";
+      sawAuditRoute =
+        request.url === "http://zuu.local/v1/audit-events?limit=5&action=package.trust&outcome=success&target=npm%3Acheck";
       return Response.json({ events: [] });
     },
   });
-  await auditClient.listAuditEvents(5);
+  await auditClient.listAuditEvents({ limit: 5, action: "package.trust", outcome: "success", target: "npm:check" });
   if (!sawAuditRoute) throw new Error("audit event client method should call the audit route");
 
   const authServiceDir = mkdtempSync(join(tmpdir(), "zuu-auth-service-check-"));
@@ -166,8 +167,15 @@ async function main() {
 
   const auditService = new AuditService(join(mkdtempSync(join(tmpdir(), "zuu-audit-service-check-")), "audit.json"));
   const auditEvent = auditService.record({ action: "package.trust", target: "npm:check", details: { source: "npm:check" } });
-  if (auditService.list(1)[0]?.id !== auditEvent.id || auditService.list(0).length !== 1) {
+  auditService.record({ action: "package.add", target: "npm:other", outcome: "failure" });
+  if (auditService.list(1).length !== 1 || auditService.list(0).length !== 1) {
     throw new Error("audit service should record and clamp event limits");
+  }
+  if (
+    auditService.list({ action: "package.trust", outcome: "success", target: "check" }).length !== 1 ||
+    auditService.list({ action: "package.trust", outcome: "failure" }).length !== 0
+  ) {
+    throw new Error("audit service should filter by action, outcome, and target");
   }
   try {
     envAuth.rotate();
@@ -1288,6 +1296,14 @@ async function main() {
   if (!latestAuditEvents.events.some((event) => event.action === "package.trust" && event.target === packageAuditSource)) {
     throw new Error("package trust should be recorded in audit events");
   }
+  const filteredAuditEvents = await client.listAuditEvents({ action: "package.trust", target: packageAuditSource, limit: 5 });
+  if (filteredAuditEvents.events.length !== 1 || filteredAuditEvents.events[0]?.target !== packageAuditSource) {
+    throw new Error("audit events should be filterable by action and target");
+  }
+  await expectClientError(() => client.listAuditEvents({ action: "package.trust" as never, outcome: "invalid" as never }), {
+    status: 400,
+    code: "validation_failed",
+  });
 
   const storedBefore = await client.listStoredSessions();
   if (!Array.isArray(storedBefore.sessions)) throw new Error("stored sessions response is invalid");

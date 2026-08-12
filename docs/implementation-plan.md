@@ -737,7 +737,7 @@ UI end-to-end
 - `GET /v1/health` 正常且作为公开探针；除 health 外的 `/v1/*` 默认要求 Bearer token。
 - API 错误响应已统一为 `{ error: { message, status, retryable, code?, details? } }`；`@zuu/client` 会把非 2xx 响应映射为 `ZuuClientError`。
 - `GET /v1/auth/status` 与 `POST /v1/auth/rotate` 已支持本地 access token 状态查询和轮换；`ZUU_API_TOKEN` 仍可作为环境变量覆盖，此时 token 由进程外管理且 API 不允许轮换。
-- `GET /v1/audit-events` 已支持查询最近审计事件，当前记录 auth rotate、approval resolve 和 package add/trust/install/update/remove 等治理动作，并避免写入 token/provider key 等密钥。
+- `GET /v1/audit-events` 已支持查询最近审计事件，并可按 `action`、`outcome`、`target` 和 `limit` 过滤；当前记录 auth rotate、approval resolve 和 package add/trust/install/update/remove 等治理动作，并避免写入 token/provider key 等密钥。
 - `GET /v1/diagnostics` 正常返回 SDK 版本、模型数量、skills、extensions、resource diagnostics、trusted packages、blocked packages、JSON store 健康状态和能力缺口，store diagnostics 已包含本地 auth-token store 和 audit-events store。
 - `POST /v1/prompt` 可以返回带稳定事件 ID 和 `createdAt` 的 SSE `session`、`error`、`agent_event` 和 `done` 事件；`GET /v1/events` 支持按 `runId`/`sessionId` 过滤，并通过 `afterEventId` 或 `Last-Event-ID` 先 replay 再订阅 live 事件。
 - `@zuu/client` 可从 Node.js 侧调用 health、diagnostics、prompt stream、session-scoped prompt、steer 和 follow-up，并可通过 `pnpm example:client` 运行第三方消费示例。
@@ -765,7 +765,7 @@ UI end-to-end
 - WebUI 已迁移到 Vue + Vite，并支持打开持久化 session、查看当前 session tree、按 entry fork、从本地 JSONL 路径 import、处理 pending approvals、启动/查看 fake workflow runs、创建/暂停/恢复/触发/删除 schedule、模型 smoke test、查看 audit events，以及通过 daemon 级 `subscribeEvents()` 实时展示事件并节流刷新 runs、approvals、session tree、schedule 和 workflow run 状态。
 - Package API 已能展示安装状态、信任状态、加载状态、显式触发安装/更新/删除，并通过持久化 operation 记录暴露任务进度和失败原因；WebUI 已能 trust/revoke package source 并展示 SDK resource diagnostics/collision。未信任 package 会保留在配置清单中，但已从 Pi `ResourceLoader` 和 `pi-package` workflow backend 的加载链路中过滤，diagnostics 会通过 `blockedPackages` 暴露被阻止加载的 source。
 - Approval 已接入 Pi tool call 拦截和 SSE 事件，但当前策略是 fail-closed：危险工具被阻断后需要用户 resolve 并重试 prompt，尚未实现挂起并恢复同一个 tool call 的交互式等待。
-- 当前 API token 仍是单 token 配置，尚未实现权限分级；审计日志已有最小事件记录，但尚未覆盖所有 API 和检索过滤条件。
+- 当前 API token 仍是单 token 配置，尚未实现权限分级；审计日志已有最小事件记录和常用检索过滤，但尚未覆盖所有 API。
 - 路径保护是根目录级 allowlist，尚未做到按工具/动作细粒度授权。
 - 默认工具集偏只读，`bash`、`edit`、`write` 需要 UI 显式启用。
 - 当前环境下真实模型 stream 可能因为网络返回 `Connection error`；daemon 已将 SDK assistant error 映射为 SSE error，并可通过模型 smoke test 把真实调用结果保存为 run/events。
