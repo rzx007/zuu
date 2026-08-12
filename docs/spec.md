@@ -336,7 +336,7 @@ V1 可采用 SQLite。必须支持：
 
 不得将 API Key 明文写入 SQLite。
 
-当前切片在 SQLite 落地前允许使用版本化 JSON store 作为过渡实现，但必须满足与 Zuu Store 一致的可观测和恢复要求：写入必须采用临时文件加原子替换；读到损坏 JSON 时必须保留 `.corrupt-*.bak` 备份并恢复为空数据；diagnostics 必须暴露每个 store 的路径、记录数、是否存在、是否恢复过以及错误信息。该过渡实现不得把 API Key 或 provider credential 写入这些 JSON 文件。
+当前切片在 SQLite 落地前允许使用版本化 JSON store 作为过渡实现，但必须满足与 Zuu Store 一致的可观测和恢复要求：写入必须通过同路径 `.lock` 文件串行化，再采用临时文件加原子替换；读到损坏 JSON 时必须保留 `.corrupt-*.bak` 备份并恢复为空数据；diagnostics 必须暴露每个 store 的路径、记录数、是否存在、是否恢复过以及错误信息。该过渡实现不得把 API Key 或 provider credential 写入这些 JSON 文件。
 
 ### 6.3 重启恢复
 

@@ -141,7 +141,7 @@ Project 已作为一等资源持久化在 `.zuu/pi-agent/projects.json`。Daemon
 
 默认情况下，Zuu 会把 Pi 应用状态存放在 `.zuu/pi-agent`，嵌入式应用不需要写入 `~/.pi/agent`。可以通过 `ZUU_AGENT_DIR` 覆盖。
 
-当前轻量持久化文件统一使用版本化 JSON store：`projects.json`、`runs.json`、`run-events.json`、`approvals.json`、`workflow-runs.json`、`schedules.json`、`package-operations.json` 和 `package-trust.json` 都会先写入临时文件再原子替换。启动时如果读到损坏 JSON，会把原文件备份为 `.corrupt-*.bak`，再恢复为空数据；`GET /v1/diagnostics` 的 `resources.stores` 会暴露每个 store 的路径、记录数、恢复状态和错误信息。Agent Run 摘要使用 `source`、`status`、`startedAt` 和 `finishedAt`，其中 `status` 为 `queued`、`running`、`waiting_approval`、`completed`、`failed` 或 `aborted`。
+当前轻量持久化文件统一使用版本化 JSON store：`projects.json`、`runs.json`、`run-events.json`、`approvals.json`、`workflow-runs.json`、`schedules.json`、`package-operations.json` 和 `package-trust.json` 都会先通过同路径 `.lock` 文件串行化写入，再写入临时文件并原子替换。启动时如果读到损坏 JSON，会把原文件备份为 `.corrupt-*.bak`，再恢复为空数据；`GET /v1/diagnostics` 的 `resources.stores` 会暴露每个 store 的路径、记录数、恢复状态和错误信息。Agent Run 摘要使用 `source`、`status`、`startedAt` 和 `finishedAt`，其中 `status` 为 `queued`、`running`、`waiting_approval`、`completed`、`failed` 或 `aborted`。
 
 Packages 面板会区分 `configured`、`installed`、`filtered`、`trusted` / `untrusted` 和 `enabled` / `blocked`，`GET /v1/packages` 返回结构化 package 列表。`POST /v1/packages` 只登记 package source；安装或更新前需要先通过 `POST /v1/packages/trust` 或 WebUI 的 Trust 按钮信任 source。未信任 package 会保留在配置清单中，但不会进入 Pi `ResourceLoader` 或 workflow backend 的加载链路。
 

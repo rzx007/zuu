@@ -1,4 +1,4 @@
-import { mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, readFileSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import app, { auth } from "../src/index";
@@ -2271,6 +2271,17 @@ async function main() {
   const savedPayload = JSON.parse(readFileSync(corruptRunsPath, "utf8")) as { version?: number; data?: unknown };
   if (savedPayload.version !== 1 || !Array.isArray(savedPayload.data) || savedPayload.data.length !== 1) {
     throw new Error("run history should save through the versioned JSON store");
+  }
+  if (existsSync(`${corruptRunsPath}.lock`)) {
+    throw new Error("run history save should release the JSON store lock");
+  }
+  const staleLockPath = `${corruptRunsPath}.lock`;
+  writeFileSync(staleLockPath, "stale lock", "utf8");
+  const staleLockTime = new Date(Date.now() - 60_000);
+  utimesSync(staleLockPath, staleLockTime, staleLockTime);
+  saveRunHistory(corruptRunsPath, []);
+  if (existsSync(staleLockPath)) {
+    throw new Error("run history save should clean up stale JSON store locks");
   }
 
   const projectStoreDir = mkdtempSync(join(tmpdir(), "zuu-project-store-check-"));
