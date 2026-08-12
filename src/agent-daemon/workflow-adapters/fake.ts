@@ -49,7 +49,7 @@ function stage(
     name,
     status,
     startedAt: timestamp,
-    endedAt: timestamp,
+    finishedAt: timestamp,
     summary,
   };
 }
@@ -69,9 +69,9 @@ function task(
     runId,
     stageId,
     name,
-    status: "done",
+    status: "completed",
     startedAt: timestamp,
-    endedAt: timestamp,
+    finishedAt: timestamp,
     input,
     output,
     artifactIds,
@@ -102,9 +102,9 @@ export class FakeWorkflowBackend implements WorkflowBackend {
 
     const now = new Date().toISOString();
     const runId = crypto.randomUUID();
-    const intakeStage = stage(runId, "stage:intake", "Intake", "done", now, "Captured workflow inputs.");
-    const planStage = stage(runId, "stage:plan", "Plan", "done", now, "Prepared a deterministic fake execution plan.");
-    const artifactStage = stage(runId, "stage:artifact", "Artifact", "done", now, "Created a preview artifact.");
+    const intakeStage = stage(runId, "stage:intake", "Intake", "completed", now, "Captured workflow inputs.");
+    const planStage = stage(runId, "stage:plan", "Plan", "completed", now, "Prepared a deterministic fake execution plan.");
+    const artifactStage = stage(runId, "stage:artifact", "Artifact", "completed", now, "Created a preview artifact.");
     const artifact: WorkflowArtifact = {
       id: `${runId}:artifact:summary`,
       runId,
@@ -141,13 +141,13 @@ export class FakeWorkflowBackend implements WorkflowBackend {
       id: runId,
       workflowId: definition.id,
       workflowName: definition.name,
-      status: "done",
+      status: "completed",
       source: request.source ?? "user",
       projectId: request.projectId,
       sessionId: request.sessionId,
       prompt: request.prompt,
       startedAt: now,
-      endedAt: now,
+      finishedAt: now,
       stages: [intakeStage, planStage, artifactStage],
       tasks,
       artifacts: [artifact],
@@ -170,17 +170,17 @@ export class FakeWorkflowBackend implements WorkflowBackend {
     if (run.status === "queued" || run.status === "running") {
       const now = new Date().toISOString();
       run.status = "aborted";
-      run.endedAt = now;
+      run.finishedAt = now;
       for (const stageItem of run.stages) {
         if (stageItem.status === "queued" || stageItem.status === "running") {
           stageItem.status = "aborted";
-          stageItem.endedAt = now;
+          stageItem.finishedAt = now;
         }
       }
       for (const taskItem of run.tasks) {
         if (taskItem.status === "queued" || taskItem.status === "running") {
           taskItem.status = "aborted";
-          taskItem.endedAt = now;
+          taskItem.finishedAt = now;
         }
       }
       this.store.persist();

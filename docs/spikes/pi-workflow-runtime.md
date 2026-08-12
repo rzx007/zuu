@@ -122,7 +122,7 @@ pnpm check:pi-workflow
 
 - 脚本输出 JSON，`ok` 为 `true`。
 - `workflowRunId` 存在。
-- `status` 为 `done`。
+- `status` 为 `completed`。
 - `artifacts` 中包含 launch artifact。
 - WebUI 的 Workflow Runs 面板能看到对应 run。
 
@@ -140,7 +140,7 @@ pnpm check:pi-workflow
 - 当前平台是原生 Windows。
 - 查看 `/v1/diagnostics` 的 `resources.workflowBackend.message`。
 
-workflow launch 状态不是 `done`：
+workflow launch 状态不是 `completed`：
 
 - 模型认证不可用。
 - `/workflow` slash command 没有被 package extension 注册。

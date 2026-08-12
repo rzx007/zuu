@@ -250,7 +250,7 @@ async function main() {
   if (workflowRun.run.projectId !== defaultProject.id) {
     throw new Error("workflow run should include projectId");
   }
-  if (workflowRun.run.status !== "done" || workflowRun.run.stages.length === 0 || workflowRun.run.tasks.length === 0) {
+  if (workflowRun.run.status !== "completed" || !workflowRun.run.finishedAt || workflowRun.run.stages.length === 0 || workflowRun.run.tasks.length === 0) {
     throw new Error("workflow run response is invalid");
   }
   const workflowRuns = await client.listWorkflowRuns();

@@ -242,7 +242,7 @@ export interface EventStreamQuery {
   afterEventId?: string;
 }
 
-export type WorkflowRunStatus = "queued" | "running" | "done" | "error" | "aborted";
+export type WorkflowRunStatus = "queued" | "running" | "completed" | "failed" | "aborted";
 export type WorkflowArtifactKind = "text" | "json" | "file";
 
 export interface WorkflowDefinition {
@@ -271,7 +271,7 @@ export interface WorkflowStage {
   name: string;
   status: WorkflowRunStatus;
   startedAt?: string;
-  endedAt?: string;
+  finishedAt?: string;
   summary?: string;
 }
 
@@ -282,7 +282,7 @@ export interface WorkflowTask {
   name: string;
   status: WorkflowRunStatus;
   startedAt?: string;
-  endedAt?: string;
+  finishedAt?: string;
   input?: unknown;
   output?: unknown;
   artifactIds: string[];
@@ -309,7 +309,7 @@ export interface WorkflowRun {
   sessionId?: string;
   prompt?: string;
   startedAt: string;
-  endedAt?: string;
+  finishedAt?: string;
   stages: WorkflowStage[];
   tasks: WorkflowTask[];
   artifacts: WorkflowArtifact[];

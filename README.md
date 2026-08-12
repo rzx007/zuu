@@ -147,7 +147,7 @@ ZUU_EXAMPLE_PROMPT="介绍一下当前项目" pnpm example:client
 
 浏览器会话默认启用 `read`、`grep`、`find`、`ls` 和 `zuu_status`。如果需要更强的 coding agent 能力，可以在界面里有意识地启用 `bash`、`edit` 或 `write`。
 
-当前 workflow API 默认使用内置 `FakeWorkflowBackend`，用于验证 `WorkflowDefinition`、`WorkflowRun`、`Stage`、`Task` 和 `Artifact` 的 daemon/client/WebUI 合约。它会立即生成一个完成态 run，不会启动真实 subagent。
+当前 workflow API 默认使用内置 `FakeWorkflowBackend`，用于验证 `WorkflowDefinition`、`WorkflowRun`、`Stage`、`Task` 和 `Artifact` 的 daemon/client/WebUI 合约。Workflow Run、Stage 和 Task 使用 `queued/running/completed/failed/aborted` 状态以及 `finishedAt` 完成时间。Fake 后端会立即生成一个完成态 run，不会启动真实 subagent。
 
 可通过 `ZUU_WORKFLOW_BACKEND=fake` 或 `ZUU_WORKFLOW_BACKEND=pi-package` 选择 workflow 后端。`pi-package` 模式会探测 `@agwab/pi-workflow` 是否已配置、是否解析到安装路径，以及当前平台是否受支持；ready 后会通过 Pi 的 `/workflow run ...` 或 `/workflow dynamic ...` 命令发起真实 extension 工作，并把 Zuu 侧 launch 结果包装成 `WorkflowRun`。它还没有读取 `pi-workflow` board/run-state，因此阶段、任务和 artifact 仍只是 Zuu launch 层的记录。`@agwab/pi-workflow` 包页面说明原生 Windows 不支持，Windows 用户应使用 WSL2/Linux。
 

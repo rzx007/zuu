@@ -619,7 +619,7 @@ async function startWorkflow() {
       model: provider.value && modelName.value ? `${provider.value}/${modelName.value}` : undefined,
     },
   })
-  addMessage('event', `workflow done: ${result.run.workflowName} (${result.run.id.slice(0, 8)})`)
+  addMessage('event', `workflow ${result.run.status}: ${result.run.workflowName} (${result.run.id.slice(0, 8)})`)
   await loadWorkflowRuns()
 }
 
@@ -1253,9 +1253,10 @@ onUnmounted(() => {
                 <div v-for="run in currentProjectWorkflowRuns.slice(0, 8)" :key="run.id" class="workflow-row">
                   <div class="flex items-center justify-between gap-2">
                     <strong>{{ run.workflowName }}</strong>
-                    <Badge :variant="run.status === 'done' ? 'secondary' : run.status === 'error' || run.status === 'aborted' ? 'destructive' : 'outline'">{{ run.status }}</Badge>
+                    <Badge :variant="run.status === 'completed' ? 'secondary' : run.status === 'failed' || run.status === 'aborted' ? 'destructive' : 'outline'">{{ run.status }}</Badge>
                   </div>
                   <span>{{ run.id.slice(0, 8) }} · {{ run.startedAt }}</span>
+                  <span v-if="run.finishedAt">finished {{ run.finishedAt }}</span>
                   <div class="workflow-progress">
                     <span>{{ run.stages.length }} stages</span>
                     <span>{{ run.tasks.length }} tasks</span>

@@ -58,7 +58,7 @@ async function main() {
     },
   });
 
-  if (result.run.status !== "done") {
+  if (result.run.status !== "completed") {
     fail(`pi-workflow launch did not complete successfully.\n${asJson(result.run)}`);
   }
   if (!result.run.artifacts.some((artifact) => artifact.kind === "json")) {

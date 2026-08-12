@@ -2,17 +2,42 @@ import type { WorkflowRun } from "@zuu/client";
 import { JsonFileStore } from "../json-file-store";
 
 const WORKFLOW_HISTORY_LIMIT = 200;
+const WORKFLOW_STATUSES = new Set(["queued", "running", "completed", "failed", "aborted"]);
 
 function isWorkflowRun(value: unknown): value is WorkflowRun {
   return Boolean(
     value &&
       typeof value === "object" &&
       "id" in value &&
+      typeof value.id === "string" &&
       "workflowId" in value &&
+      typeof value.workflowId === "string" &&
+      "workflowName" in value &&
+      typeof value.workflowName === "string" &&
       "status" in value &&
+      WORKFLOW_STATUSES.has(String(value.status)) &&
+      "startedAt" in value &&
+      typeof value.startedAt === "string" &&
       "stages" in value &&
+      Array.isArray(value.stages) &&
+      value.stages.every(isWorkflowStep) &&
       "tasks" in value &&
+      Array.isArray(value.tasks) &&
+      value.tasks.every(isWorkflowStep) &&
       "artifacts" in value,
+  );
+}
+
+function isWorkflowStep(value: unknown) {
+  return Boolean(
+    value &&
+      typeof value === "object" &&
+      "id" in value &&
+      typeof value.id === "string" &&
+      "runId" in value &&
+      typeof value.runId === "string" &&
+      "status" in value &&
+      WORKFLOW_STATUSES.has(String(value.status)),
   );
 }
 

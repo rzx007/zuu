@@ -117,38 +117,38 @@ export class PiPackageWorkflowBackend implements WorkflowBackend {
         source: "workflow",
         name: `Workflow: ${definition.name}`,
       });
-      const endedAt = new Date().toISOString();
-      const artifact = launchArtifact(runId, launchTask.id, definition, command, agentRun, endedAt);
+      const finishedAt = new Date().toISOString();
+      const artifact = launchArtifact(runId, launchTask.id, definition, command, agentRun, finishedAt);
 
-      run.status = agentRun.status === "completed" ? "done" : agentRun.status === "aborted" ? "aborted" : "error";
-      run.endedAt = endedAt;
+      run.status = agentRun.status === "completed" ? "completed" : agentRun.status === "aborted" ? "aborted" : "failed";
+      run.finishedAt = finishedAt;
       run.artifacts = [artifact];
       launchStage.status = run.status;
-      launchStage.endedAt = endedAt;
+      launchStage.finishedAt = finishedAt;
       launchStage.summary =
-        run.status === "done"
+        run.status === "completed"
           ? "pi-workflow launch command completed. Detailed board state remains owned by the Pi workflow extension."
           : `pi-workflow launch command ended with agent status ${agentRun.status}.`;
       launchTask.status = run.status;
-      launchTask.endedAt = endedAt;
+      launchTask.finishedAt = finishedAt;
       launchTask.output = {
         agentRunId: agentRun.id,
         agentStatus: agentRun.status,
       };
       launchTask.artifactIds = [artifact.id];
-      if (run.status === "error") {
+      if (run.status === "failed") {
         run.error = `pi-workflow launch command ended with agent status ${agentRun.status}`;
       }
     } catch (error) {
-      const endedAt = new Date().toISOString();
-      run.status = "error";
-      run.endedAt = endedAt;
+      const finishedAt = new Date().toISOString();
+      run.status = "failed";
+      run.finishedAt = finishedAt;
       run.error = error instanceof Error ? error.message : String(error);
-      launchStage.status = "error";
-      launchStage.endedAt = endedAt;
+      launchStage.status = "failed";
+      launchStage.finishedAt = finishedAt;
       launchStage.summary = run.error;
-      launchTask.status = "error";
-      launchTask.endedAt = endedAt;
+      launchTask.status = "failed";
+      launchTask.finishedAt = finishedAt;
       launchTask.output = { error: run.error };
     }
 
@@ -169,17 +169,17 @@ export class PiPackageWorkflowBackend implements WorkflowBackend {
     if (run.status === "queued" || run.status === "running") {
       const now = new Date().toISOString();
       run.status = "aborted";
-      run.endedAt = now;
+      run.finishedAt = now;
       for (const stageItem of run.stages) {
         if (stageItem.status === "queued" || stageItem.status === "running") {
           stageItem.status = "aborted";
-          stageItem.endedAt = now;
+          stageItem.finishedAt = now;
         }
       }
       for (const taskItem of run.tasks) {
         if (taskItem.status === "queued" || taskItem.status === "running") {
           taskItem.status = "aborted";
-          taskItem.endedAt = now;
+          taskItem.finishedAt = now;
         }
       }
       this.store.persist();
