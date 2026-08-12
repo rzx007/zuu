@@ -1,13 +1,13 @@
 import type { PromptRequest, RunSummary, StartWorkflowRequest } from "@zuu/client";
 import { getWorkflowStorePath } from "./environment";
 import type { PackageService } from "./packages";
-import type { ProjectStore } from "./projects";
+import type { ProjectRegistry } from "./project-service";
 import { createWorkflowBackend } from "./workflows";
 
 export interface WorkflowServiceOptions {
   agentDir: string;
   packageService: PackageService;
-  projectStore: ProjectStore;
+  projects: ProjectRegistry;
   launchPrompt: (request: PromptRequest) => Promise<RunSummary>;
 }
 
@@ -19,7 +19,7 @@ export class WorkflowService {
   }
 
   listWorkflows(projectId?: string) {
-    if (projectId) this.options.projectStore.get(projectId);
+    if (projectId) this.options.projects.get(projectId);
     const backend = this.createBackend();
     return backend.listDefinitions().then((workflows) => ({ workflows, backend: backend.getInfo() }));
   }
@@ -27,18 +27,18 @@ export class WorkflowService {
   startWorkflow(workflowId: string, request: StartWorkflowRequest = {}, projectId?: string) {
     return this.createBackend().start(workflowId, {
       ...request,
-      projectId: this.options.projectStore.get(projectId ?? request.projectId).id,
+      projectId: this.options.projects.get(projectId ?? request.projectId).id,
     });
   }
 
   async listWorkflowRuns(projectId?: string) {
-    if (projectId) this.options.projectStore.get(projectId);
+    if (projectId) this.options.projects.get(projectId);
     const runs = await this.createBackend().listRuns();
     return runs.filter((run) => !projectId || run.projectId === projectId);
   }
 
   async getWorkflowRun(runId: string, projectId?: string) {
-    if (projectId) this.options.projectStore.get(projectId);
+    if (projectId) this.options.projects.get(projectId);
     const run = await this.createBackend().getRun(runId);
     if (projectId && run.projectId !== projectId) throw new Error(`Unknown workflow run: ${runId}`);
     return run;

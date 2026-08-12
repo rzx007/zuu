@@ -25,7 +25,7 @@ import { ApprovalStore, assertApprovalStatus } from "./agent-daemon/approval-sto
 import { subscribeApprovalEvents } from "./agent-daemon/approval-policy";
 import { buildDiagnostics } from "./agent-daemon/diagnostics";
 import { compactAgentEvent, entryRole, entryText } from "./agent-daemon/events";
-import { ProjectStore } from "./agent-daemon/projects";
+import { ProjectService } from "./agent-daemon/project-service";
 import { ScheduleService } from "./agent-daemon/schedule-service";
 import { PackageService } from "./agent-daemon/packages";
 import { WorkflowService } from "./agent-daemon/workflow-service";
@@ -41,7 +41,6 @@ import type {
   ApprovalStatus,
   CreateApprovalRequest,
   PackageMutationRequest,
-  ProjectSummary,
   PromptRequest,
   PromptStreamEvent,
   ResolveApprovalRequest,
@@ -69,7 +68,7 @@ export class ZuuDaemon {
   private readonly runtimes = new Map<string, ManagedRuntime>();
   private readonly agentDir = getZuuAgentDir();
   private readonly runService = new RunService(getRunStorePath(this.agentDir), getRunEventStorePath(this.agentDir));
-  private readonly projectStore = new ProjectStore(getProjectStorePath(this.agentDir), this.agentDir);
+  private readonly projectService = new ProjectService(getProjectStorePath(this.agentDir), this.agentDir);
   private readonly approvalStore = new ApprovalStore(getApprovalStorePath(this.agentDir));
   private readonly activeRunBySessionId = new Map<string, string>();
   private readonly eventBus: EventBusController = createEventBus();
@@ -82,14 +81,14 @@ export class ZuuDaemon {
   private readonly workflowService = new WorkflowService({
     agentDir: this.agentDir,
     packageService: this.packageService,
-    projectStore: this.projectStore,
+    projects: this.projectService,
     launchPrompt: (request) => this.launchWorkflowPrompt(request),
   });
   private readonly modelRuntimePromise = createModelRuntime();
   private readonly startedAt = new Date().toISOString();
   private readonly scheduleService = new ScheduleService({
     path: getScheduleStorePath(this.agentDir),
-    projectStore: this.projectStore,
+    projects: this.projectService,
     executor: {
       runPrompt: async (action) => {
         const { type: _type, ...request } = action;
@@ -113,30 +112,23 @@ export class ZuuDaemon {
   });
 
   listProjects() {
-    return this.projectStore.list();
+    return this.projectService.listProjects();
   }
 
   getProject(projectId: string) {
-    return this.projectStore.get(projectId);
+    return this.projectService.get(projectId);
   }
 
   createProject(request: CreateProjectRequest) {
-    return this.projectStore.create(request);
+    return this.projectService.createProject(request);
   }
 
   updateProject(projectId: string, request: UpdateProjectRequest) {
-    return this.projectStore.update(projectId, request);
+    return this.projectService.updateProject(projectId, request);
   }
 
   deleteProject(projectId: string) {
-    return this.projectStore.delete(projectId);
-  }
-
-  private resolveProject(options: { projectId?: string; cwd?: string }): ProjectSummary {
-    if (options.projectId) return this.projectStore.get(options.projectId);
-    if (!options.cwd) return this.projectStore.get();
-
-    return this.projectStore.findByCwd(options.cwd) ?? this.projectStore.create({ cwd: options.cwd });
+    return this.projectService.deleteProject(projectId);
   }
 
   private findRuntimeBySessionFile(sessionFile: string) {
@@ -155,7 +147,7 @@ export class ZuuDaemon {
       }
     }
 
-    const project = this.resolveProject(options);
+    const project = this.projectService.resolveProject(options);
     const cwd = project.cwd;
     assertAllowedPath(cwd, "cwd");
     const agentDir = getZuuAgentDir();
@@ -229,14 +221,14 @@ export class ZuuDaemon {
   }
 
   listSessions(projectId?: string) {
-    if (projectId) this.projectStore.get(projectId);
+    if (projectId) this.projectService.get(projectId);
     return [...this.runtimes.values()]
       .filter((item) => !projectId || item.projectId === projectId)
       .map((item) => this.summarizeSession(item.runtime.session));
   }
 
   async listStoredSessions(cwd?: string, projectId?: string) {
-    const projectCwd = projectId ? this.projectStore.get(projectId).cwd : undefined;
+    const projectCwd = projectId ? this.projectService.get(projectId).cwd : undefined;
     const targetCwd = cwd ?? projectCwd;
     if (targetCwd) assertAllowedPath(targetCwd, "cwd");
     const agentDir = getZuuAgentDir();
@@ -361,7 +353,7 @@ export class ZuuDaemon {
     const managed = this.runtimes.get(session.sessionId);
     return {
       id: session.sessionId,
-      projectId: managed?.projectId ?? this.projectStore.get().id,
+      projectId: managed?.projectId ?? this.projectService.get().id,
       name: session.sessionName,
       cwd: managed?.cwd ?? process.cwd(),
       model: session.model ? `${session.model.provider}/${session.model.id}` : undefined,

@@ -1,10 +1,10 @@
 import type { CreateScheduleRequest } from "@zuu/client";
-import type { ProjectStore } from "./projects";
+import type { ProjectRegistry } from "./project-service";
 import { ScheduleStore, type ScheduleExecutor } from "./schedules";
 
 export interface ScheduleServiceOptions {
   path: string;
-  projectStore: ProjectStore;
+  projects: ProjectRegistry;
   executor: ScheduleExecutor;
 }
 
@@ -16,12 +16,12 @@ export class ScheduleService {
   }
 
   listSchedules(projectId?: string) {
-    if (projectId) this.options.projectStore.get(projectId);
+    if (projectId) this.options.projects.get(projectId);
     return this.store.list(projectId);
   }
 
   createSchedule(request: CreateScheduleRequest, projectIdOverride?: string) {
-    const projectId = this.options.projectStore.get(projectIdOverride ?? request.action.projectId).id;
+    const projectId = this.options.projects.get(projectIdOverride ?? request.action.projectId).id;
     return this.store.create({
       ...request,
       action: {
@@ -32,7 +32,7 @@ export class ScheduleService {
   }
 
   getSchedule(scheduleId: string, projectId?: string) {
-    if (projectId) this.options.projectStore.get(projectId);
+    if (projectId) this.options.projects.get(projectId);
     const schedule = this.store.get(scheduleId);
     if (projectId && schedule.action.projectId !== projectId) throw new Error(`Unknown schedule: ${scheduleId}`);
     return schedule;
