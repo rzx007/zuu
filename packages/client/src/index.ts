@@ -16,6 +16,9 @@ import type {
   RunResponse,
   RunsResponse,
   ResolveApprovalRequest,
+  CreateScheduleRequest,
+  ScheduleResponse,
+  SchedulesResponse,
   SessionActionResponse,
   SessionResponse,
   SessionsResponse,
@@ -57,6 +60,13 @@ export interface ZuuClient {
   listWorkflowRuns(): Promise<WorkflowRunsResponse>;
   getWorkflowRun(runId: string): Promise<WorkflowRunResponse>;
   abortWorkflowRun(runId: string): Promise<WorkflowRunResponse>;
+  listSchedules(): Promise<SchedulesResponse>;
+  createSchedule(input: CreateScheduleRequest): Promise<ScheduleResponse>;
+  getSchedule(scheduleId: string): Promise<ScheduleResponse>;
+  pauseSchedule(scheduleId: string): Promise<ScheduleResponse>;
+  resumeSchedule(scheduleId: string): Promise<ScheduleResponse>;
+  triggerSchedule(scheduleId: string): Promise<ScheduleResponse>;
+  deleteSchedule(scheduleId: string): Promise<ScheduleResponse>;
   listApprovals(status?: ApprovalStatus): Promise<ApprovalsResponse>;
   getApproval(approvalId: string): Promise<ApprovalResponse>;
   resolveApproval(approvalId: string, input: ResolveApprovalRequest): Promise<ApprovalResponse>;
@@ -181,6 +191,30 @@ export function createZuuClient(options: ZuuClientOptions = {}): ZuuClient {
     abortWorkflowRun: (runId) =>
       requestJson<WorkflowRunResponse>(fetchImpl, baseUrl, `/api/workflow-runs/${encodeURIComponent(runId)}/abort`, {
         method: "POST",
+      }, apiToken),
+    listSchedules: () => requestJson<SchedulesResponse>(fetchImpl, baseUrl, "/api/schedules", undefined, apiToken),
+    createSchedule: (input) =>
+      requestJson<ScheduleResponse>(fetchImpl, baseUrl, "/api/schedules", {
+        method: "POST",
+        body: JSON.stringify(input),
+      }, apiToken),
+    getSchedule: (scheduleId) =>
+      requestJson<ScheduleResponse>(fetchImpl, baseUrl, `/api/schedules/${encodeURIComponent(scheduleId)}`, undefined, apiToken),
+    pauseSchedule: (scheduleId) =>
+      requestJson<ScheduleResponse>(fetchImpl, baseUrl, `/api/schedules/${encodeURIComponent(scheduleId)}/pause`, {
+        method: "POST",
+      }, apiToken),
+    resumeSchedule: (scheduleId) =>
+      requestJson<ScheduleResponse>(fetchImpl, baseUrl, `/api/schedules/${encodeURIComponent(scheduleId)}/resume`, {
+        method: "POST",
+      }, apiToken),
+    triggerSchedule: (scheduleId) =>
+      requestJson<ScheduleResponse>(fetchImpl, baseUrl, `/api/schedules/${encodeURIComponent(scheduleId)}/trigger`, {
+        method: "POST",
+      }, apiToken),
+    deleteSchedule: (scheduleId) =>
+      requestJson<ScheduleResponse>(fetchImpl, baseUrl, `/api/schedules/${encodeURIComponent(scheduleId)}`, {
+        method: "DELETE",
       }, apiToken),
     listApprovals: (status) =>
       requestJson<ApprovalsResponse>(

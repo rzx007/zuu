@@ -738,6 +738,7 @@ UI end-to-end
 - `GET /api/approvals`、`GET /api/approvals/:approvalId` 和 `POST /api/approvals/:approvalId/resolve` 已支持审批列表、详情与处理，审批记录持久化到 `.zuu/pi-agent/approvals.json`。
 - `GET /api/workflows`、`POST /api/workflows/:workflowId/runs`、`GET /api/workflow-runs`、`GET /api/workflow-runs/:runId` 和 `POST /api/workflow-runs/:runId/abort` 已支持最小 workflow 合约；当前后端是 `FakeWorkflowBackend`，用于稳定 Definition/Run/Stage/Task/Artifact DTO 和 UI board，不启动真实 subagent。
 - `ZUU_WORKFLOW_BACKEND` 已支持选择 `fake` 或 `pi-package`；`pi-package` 当前只做 readiness/diagnostics 暴露，尚未绑定真实 `@agwab/pi-workflow` run-state adapter。
+- `GET/POST/DELETE /api/schedules`、`GET /api/schedules/:scheduleId`、`POST /api/schedules/:scheduleId/pause`、`POST /api/schedules/:scheduleId/resume` 和 `POST /api/schedules/:scheduleId/trigger` 已支持 Scheduler MVP；当前支持 `once`、`interval`、prompt action 和 workflow action，并将 schedule run 关联到 Agent Run 或 Workflow Run，记录持久化到 `.zuu/pi-agent/schedules.json`。
 - 内置 Zuu approval policy 已通过 Pi inline extension 接入 `tool_call`，默认阻断 `bash`、`edit`、`write`，并通过 prompt SSE 发出 `approval_requested`；`allow_once` 可消费一次，`allow_session` 可对同 session 的同类工具放行。
 - 可选 `ZUU_API_TOKEN` 已支持保护 `/api/*`，client 和 WebUI 都能发送 Bearer token。
 - 默认路径保护已限制 `cwd`、session 文件和 import 文件在当前项目根内；可通过 `ZUU_ALLOWED_CWD` 追加允许根目录。
@@ -747,14 +748,14 @@ UI end-to-end
 
 - `@zuu/client` 已是 workspace 包，但还没有独立构建产物、版本发布流程和第三方示例。
 - run registry 已有文件持久化，但还没有 SSE 重连 replay、事件明细存档或跨进程写入协调。
-- WebUI 已迁移到 Vue + Vite，并支持打开持久化 session、查看当前 session tree、按 entry fork、从本地 JSONL 路径 import、处理 pending approvals，以及启动/查看 fake workflow runs。
+- WebUI 已迁移到 Vue + Vite，并支持打开持久化 session、查看当前 session tree、按 entry fork、从本地 JSONL 路径 import、处理 pending approvals、启动/查看 fake workflow runs，以及创建/暂停/恢复/触发/删除 schedule。
 - Package API 只维护 source 列表，尚未接入 package 安装进度、信任确认和资源冲突 UI。
 - Approval 已接入 Pi tool call 拦截和 SSE 事件，但当前策略是 fail-closed：危险工具被阻断后需要用户 resolve 并重试 prompt，尚未实现挂起并恢复同一个 tool call 的交互式等待。
 - 当前 API token 是单 token 配置，尚未实现 token 轮换、权限分级和审计日志。
 - 路径保护是根目录级 allowlist，尚未做到按工具/动作细粒度授权。
 - 默认工具集偏只读，`bash`、`edit`、`write` 需要 UI 显式启用。
 - 当前环境下真实模型 stream 可能因为网络返回 `Connection error`；daemon 已将 SDK assistant error 映射为 SSE error。
-- Workflow/subagent/scheduler 尚未安装真实 packages，diagnostics 会明确报告缺口；当前 fake workflow backend 只用于 API/Client/UI 合约验证。
+- Workflow/subagent 尚未安装真实 packages，diagnostics 会明确报告缺口；当前 fake workflow backend 只用于 API/Client/UI 合约验证。Scheduler 已有最小内置后端，但 `cron`、timezone、misfire、retry、abort schedule run 和真实持久队列仍未落地。
 
-后续计划应从此切片继续收敛，而不是另起炉灶：Client workspace 包、run registry 持久化、package source 管理、approval tool-call 拦截、Vue WebUI approval 操作面和 fake workflow 合约已经落地，接下来应优先把 `FakeWorkflowBackend` 替换/桥接到真实 `pi-workflow` adapter，再推进 scheduler backend。
+后续计划应从此切片继续收敛，而不是另起炉灶：Client workspace 包、run registry 持久化、package source 管理、approval tool-call 拦截、Vue WebUI approval 操作面、fake workflow 合约和 Scheduler MVP 已经落地，接下来应优先把 `FakeWorkflowBackend` 替换/桥接到真实 `pi-workflow` adapter，再补齐 cron/timezone/retry 等 scheduler backend 能力。
 

@@ -184,7 +184,7 @@ export class FakeWorkflowBackend implements WorkflowBackend {
       workflowId: definition.id,
       workflowName: definition.name,
       status: "done",
-      source: "user",
+      source: request.source ?? "user",
       sessionId: request.sessionId,
       prompt: request.prompt,
       startedAt: now,

@@ -269,6 +269,7 @@ export interface StartWorkflowRequest {
   sessionId?: string;
   prompt?: string;
   inputs?: Record<string, unknown>;
+  source?: WorkflowRun["source"];
 }
 
 export interface WorkflowsResponse {
@@ -282,6 +283,75 @@ export interface WorkflowRunsResponse {
 
 export interface WorkflowRunResponse {
   run: WorkflowRun;
+}
+
+export type ScheduleStatus = "active" | "paused";
+export type ScheduleTriggerKind = "once" | "interval" | "cron";
+export type ScheduleRunStatus = "running" | "done" | "error";
+
+export interface ScheduleTrigger {
+  kind: ScheduleTriggerKind;
+  runAt?: string;
+  everyMs?: number;
+  cron?: string;
+  timezone?: string;
+}
+
+export type ScheduleAction =
+  | {
+      type: "prompt";
+      prompt: string;
+      sessionId?: string;
+      name?: string;
+      model?: PromptRequest["model"];
+      thinkingLevel?: ThinkingLevel;
+      tools?: string[];
+      persist?: boolean;
+    }
+  | {
+      type: "workflow";
+      workflowId: string;
+      prompt?: string;
+      sessionId?: string;
+      inputs?: Record<string, unknown>;
+    };
+
+export interface ScheduleRun {
+  id: string;
+  scheduleId: string;
+  status: ScheduleRunStatus;
+  startedAt: string;
+  endedAt?: string;
+  agentRunId?: string;
+  workflowRunId?: string;
+  error?: string;
+}
+
+export interface Schedule {
+  id: string;
+  name: string;
+  status: ScheduleStatus;
+  trigger: ScheduleTrigger;
+  action: ScheduleAction;
+  createdAt: string;
+  updatedAt: string;
+  nextRunAt?: string;
+  lastRunAt?: string;
+  runs: ScheduleRun[];
+}
+
+export interface CreateScheduleRequest {
+  name?: string;
+  trigger: ScheduleTrigger;
+  action: ScheduleAction;
+}
+
+export interface SchedulesResponse {
+  schedules: Schedule[];
+}
+
+export interface ScheduleResponse {
+  schedule: Schedule;
 }
 
 export interface ApprovalsResponse {

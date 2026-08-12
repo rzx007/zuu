@@ -8,6 +8,8 @@ import {
   type ModelSummary,
   type PromptRequest,
   type RunSummary,
+  type Schedule,
+  type ScheduleAction,
   type SessionSummary,
   type SessionTreeEntry,
   type StoredSessionSummary,
@@ -59,6 +61,13 @@ const workflowBackend = ref<WorkflowBackendInfo>()
 const workflowRuns = ref<WorkflowRun[]>([])
 const selectedWorkflowId = ref('')
 const workflowPrompt = ref('Review the current Zuu agent platform slice and produce a workflow artifact.')
+const schedules = ref<Schedule[]>([])
+const scheduleName = ref('Scheduled Zuu run')
+const scheduleKind = ref<'once' | 'interval'>('once')
+const scheduleRunAt = ref(toDatetimeLocal(new Date(Date.now() + 10 * 60_000)))
+const scheduleEveryMinutes = ref(30)
+const scheduleActionType = ref<'workflow' | 'prompt'>('workflow')
+const schedulePrompt = ref('Run a scheduled Zuu status check and summarize the result.')
 const messages = ref<MessageItem[]>([])
 const isRunning = ref(false)
 const isRefreshing = ref(false)
@@ -82,6 +91,11 @@ const flatTree = computed(() => flattenTree(sessionTree.value))
 const statusText = computed(() => (isRunning.value ? 'running' : 'ready'))
 const configuredProviders = computed(() => diagnostics.value?.models.configuredProviders.join(', ') || 'none')
 const selectedWorkflow = computed(() => workflows.value.find((workflow) => workflow.id === selectedWorkflowId.value))
+
+function toDatetimeLocal(date: Date) {
+  const localDate = new Date(date.getTime() - date.getTimezoneOffset() * 60_000)
+  return localDate.toISOString().slice(0, 16)
+}
 
 function nextId() {
   messageSeq += 1
@@ -160,6 +174,10 @@ async function loadWorkflowRuns() {
   workflowRuns.value = (await client.listWorkflowRuns()).runs
 }
 
+async function loadSchedules() {
+  schedules.value = (await client.listSchedules()).schedules
+}
+
 async function refreshAll() {
   isRefreshing.value = true
   try {
@@ -173,6 +191,7 @@ async function refreshAll() {
       loadApprovals(),
       loadWorkflows(),
       loadWorkflowRuns(),
+      loadSchedules(),
     ])
   } finally {
     isRefreshing.value = false
@@ -266,6 +285,83 @@ async function abortWorkflowRun(runId: string) {
   const result = await client.abortWorkflowRun(runId)
   addMessage('event', `workflow ${result.run.status}: ${result.run.workflowName}`)
   await loadWorkflowRuns()
+}
+
+function scheduleAction(): ScheduleAction | undefined {
+  if (scheduleActionType.value === 'workflow') {
+    if (!selectedWorkflowId.value) return undefined
+    return {
+      type: 'workflow',
+      workflowId: selectedWorkflowId.value,
+      sessionId: currentSession.value?.id,
+      prompt: schedulePrompt.value.trim() || undefined,
+      inputs: {
+        tools: activeTools.value,
+        model: provider.value && modelName.value ? `${provider.value}/${modelName.value}` : undefined,
+      },
+    }
+  }
+
+  return {
+    type: 'prompt',
+    prompt: schedulePrompt.value.trim() || prompt.value.trim(),
+    sessionId: currentSession.value?.id,
+    name: sessionName.value.trim() || undefined,
+    thinkingLevel: thinkingLevel.value,
+    tools: activeTools.value,
+    model: provider.value && modelName.value ? { provider: provider.value, id: modelName.value } : undefined,
+  }
+}
+
+async function createSchedule() {
+  const action = scheduleAction()
+  if (!action) return
+  const everyMinutes = Math.max(1, Number(scheduleEveryMinutes.value) || 1)
+  const trigger =
+    scheduleKind.value === 'once'
+      ? { kind: 'once' as const, runAt: new Date(scheduleRunAt.value).toISOString() }
+      : { kind: 'interval' as const, everyMs: everyMinutes * 60_000 }
+  const result = await client.createSchedule({
+    name: scheduleName.value.trim() || undefined,
+    trigger,
+    action,
+  })
+  addMessage('event', `schedule created: ${result.schedule.name}`)
+  await loadSchedules()
+}
+
+async function pauseSchedule(scheduleId: string) {
+  const result = await client.pauseSchedule(scheduleId)
+  addMessage('event', `schedule paused: ${result.schedule.name}`)
+  await loadSchedules()
+}
+
+async function resumeSchedule(scheduleId: string) {
+  const result = await client.resumeSchedule(scheduleId)
+  addMessage('event', `schedule active: ${result.schedule.name}`)
+  await loadSchedules()
+}
+
+async function triggerSchedule(scheduleId: string) {
+  const result = await client.triggerSchedule(scheduleId)
+  addMessage('event', `schedule triggered: ${result.schedule.name}`)
+  await Promise.all([loadSchedules(), loadWorkflowRuns(), loadRuns()])
+}
+
+async function deleteSchedule(scheduleId: string) {
+  const result = await client.deleteSchedule(scheduleId)
+  addMessage('event', `schedule deleted: ${result.schedule.name}`)
+  await loadSchedules()
+}
+
+function scheduleTriggerLabel(schedule: Schedule) {
+  if (schedule.trigger.kind === 'once') return `once at ${schedule.trigger.runAt || 'unset'}`
+  if (schedule.trigger.kind === 'interval') return `every ${Math.round((schedule.trigger.everyMs || 0) / 60_000)} min`
+  return schedule.trigger.cron || 'cron'
+}
+
+function scheduleActionLabel(action: ScheduleAction) {
+  return action.type === 'workflow' ? `workflow:${action.workflowId}` : 'prompt'
 }
 
 async function sendPrompt() {
@@ -451,6 +547,68 @@ onMounted(() => {
 
         <section class="panel-block">
           <div class="section-title">
+            <h2>Schedules</h2>
+            <Badge variant="outline">{{ schedules.length }}</Badge>
+          </div>
+          <label class="field-label">
+            Name
+            <input v-model="scheduleName" class="field-input">
+          </label>
+          <div class="grid grid-cols-2 gap-2">
+            <label class="field-label">
+              Trigger
+              <select v-model="scheduleKind" class="field-input">
+                <option value="once">Once</option>
+                <option value="interval">Interval</option>
+              </select>
+            </label>
+            <label class="field-label">
+              Action
+              <select v-model="scheduleActionType" class="field-input">
+                <option value="workflow">Workflow</option>
+                <option value="prompt">Prompt</option>
+              </select>
+            </label>
+          </div>
+          <label v-if="scheduleKind === 'once'" class="field-label">
+            Run at
+            <input v-model="scheduleRunAt" class="field-input" type="datetime-local">
+          </label>
+          <label v-else class="field-label">
+            Every minutes
+            <input v-model.number="scheduleEveryMinutes" class="field-input" type="number" min="1">
+          </label>
+          <label v-if="scheduleActionType === 'workflow'" class="field-label">
+            Workflow
+            <select v-model="selectedWorkflowId" class="field-input">
+              <option v-for="workflow in workflows" :key="workflow.id" :value="workflow.id">
+                {{ workflow.name }}
+              </option>
+            </select>
+          </label>
+          <Textarea v-model="schedulePrompt" class="min-h-16" />
+          <Button size="sm" :disabled="scheduleActionType === 'workflow' && !selectedWorkflowId" @click="createSchedule().catch((error) => addMessage('error', errorMessage(error)))">Create schedule</Button>
+          <div v-if="schedules.length" class="list-stack max-h-56 overflow-auto">
+            <div v-for="schedule in schedules.slice(0, 6)" :key="schedule.id" class="compact-row">
+              <div class="min-w-0">
+                <strong>{{ schedule.name }}</strong>
+                <span>{{ schedule.status }} / {{ scheduleTriggerLabel(schedule) }}</span>
+                <span>{{ scheduleActionLabel(schedule.action) }}</span>
+                <span v-if="schedule.nextRunAt">next {{ schedule.nextRunAt }}</span>
+              </div>
+              <div class="flex flex-wrap justify-end gap-1">
+                <Button variant="outline" size="xs" @click="triggerSchedule(schedule.id).catch((error) => addMessage('error', errorMessage(error)))">Run</Button>
+                <Button v-if="schedule.status === 'active'" variant="ghost" size="xs" @click="pauseSchedule(schedule.id).catch((error) => addMessage('error', errorMessage(error)))">Pause</Button>
+                <Button v-else variant="ghost" size="xs" @click="resumeSchedule(schedule.id).catch((error) => addMessage('error', errorMessage(error)))">Resume</Button>
+                <Button variant="ghost" size="xs" @click="deleteSchedule(schedule.id).catch((error) => addMessage('error', errorMessage(error)))">Delete</Button>
+              </div>
+            </div>
+          </div>
+          <p v-else class="empty-text">No schedules yet.</p>
+        </section>
+
+        <section class="panel-block">
+          <div class="section-title">
             <h2>Stored Sessions</h2>
             <Badge variant="outline">{{ storedSessions.length }}</Badge>
           </div>
@@ -511,6 +669,30 @@ onMounted(() => {
                 </div>
               </div>
               <p v-else class="empty-text">No approvals yet.</p>
+            </section>
+
+            <section class="side-panel">
+              <div class="section-title">
+                <h2>Schedule Runs</h2>
+                <Button variant="ghost" size="xs" @click="loadSchedules">Refresh</Button>
+              </div>
+              <div v-if="schedules.length" class="list-stack overflow-auto">
+                <div v-for="schedule in schedules.slice(0, 8)" :key="schedule.id" class="workflow-row">
+                  <div class="flex items-center justify-between gap-2">
+                    <strong>{{ schedule.name }}</strong>
+                    <Badge :variant="schedule.status === 'active' ? 'secondary' : 'outline'">{{ schedule.status }}</Badge>
+                  </div>
+                  <span>{{ scheduleTriggerLabel(schedule) }}</span>
+                  <span v-if="schedule.nextRunAt">next {{ schedule.nextRunAt }}</span>
+                  <div v-if="schedule.runs[0]" class="workflow-progress">
+                    <span>{{ schedule.runs[0].status }}</span>
+                    <span v-if="schedule.runs[0].workflowRunId">workflow {{ schedule.runs[0].workflowRunId.slice(0, 8) }}</span>
+                    <span v-if="schedule.runs[0].agentRunId">agent {{ schedule.runs[0].agentRunId.slice(0, 8) }}</span>
+                  </div>
+                  <p v-if="schedule.runs[0]?.error">{{ schedule.runs[0].error }}</p>
+                </div>
+              </div>
+              <p v-else class="empty-text">No schedule runs yet.</p>
             </section>
 
             <section class="side-panel">

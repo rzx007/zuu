@@ -1,6 +1,6 @@
 # Zuu Agent
 
-一个基于 Pi SDK 的最小完整 Agent 应用，包含 Hono daemon、浏览器 UI、轻量 Client SDK、SSE 流式输出、会话持久化、最近运行记录持久化、运行诊断，以及一个只读的自定义状态工具。
+一个基于 Pi SDK 的最小完整 Agent 应用，包含 Hono daemon、Vue WebUI、轻量 Client SDK、SSE 流式输出、会话持久化、最近运行记录、审批、fake workflow 合约和最小 scheduler。
 
 ## 运行
 
@@ -9,9 +9,7 @@ pnpm install
 pnpm dev
 ```
 
-打开 http://localhost:3000。
-
-服务运行时是 Node.js，当前已验证 Node `v24.18.1`。
+默认后端监听 `http://localhost:3001`。服务运行时是 Node.js，当前按 Node 24 使用。
 
 项目脚本使用 Node 24 原生 `--env-file-if-exists=.env` 读取环境变量文件，不需要额外安装 `dotenv`。如果 `.env` 不存在，启动不会报错。
 
@@ -26,6 +24,7 @@ pnpm dev
 ```sh
 pnpm check
 pnpm typecheck
+pnpm build:web
 ```
 
 ## API
@@ -46,6 +45,13 @@ pnpm typecheck
 - `GET /api/workflow-runs`
 - `GET /api/workflow-runs/:runId`
 - `POST /api/workflow-runs/:runId/abort`
+- `GET /api/schedules`
+- `POST /api/schedules`
+- `GET /api/schedules/:scheduleId`
+- `POST /api/schedules/:scheduleId/pause`
+- `POST /api/schedules/:scheduleId/resume`
+- `POST /api/schedules/:scheduleId/trigger`
+- `DELETE /api/schedules/:scheduleId`
 - `GET /api/approvals`
 - `GET /api/approvals/:approvalId`
 - `POST /api/approvals/:approvalId/resolve`
@@ -59,23 +65,23 @@ pnpm typecheck
 - `POST /api/sessions/:sessionId/fork`
 - `POST /api/sessions/:sessionId/import`
 
-浏览器 UI 通过 `/client.js` 加载 `packages/client` 中 `@zuu/client` 的同一套 client 实现；业务请求不再散落手写 `fetch` 和 SSE 解析逻辑。
+浏览器 UI 通过 `@zuu/client` 调用 daemon API，业务请求不再散落手写 `fetch` 和 SSE 解析逻辑。
 
-默认情况下，Zuu 会把 Pi 应用状态存放在 `.zuu/pi-agent`，这样嵌入式应用不需要写入 `~/.pi/agent`。可以通过 `ZUU_AGENT_DIR` 覆盖。
+默认情况下，Zuu 会把 Pi 应用状态存放在 `.zuu/pi-agent`，嵌入式应用不需要写入 `~/.pi/agent`。可以通过 `ZUU_AGENT_DIR` 覆盖。
 
-## 说明
+## 当前能力边界
 
 浏览器会话默认启用 `read`、`grep`、`find`、`ls` 和 `zuu_status`。如果需要更强的 coding agent 能力，可以在界面里有意识地启用 `bash`、`edit` 或 `write`。
 
-Workflow、subagent 和 cron 风格调度目前会被诊断接口明确标记为缺口。只有安装并信任类似 `npm:@agwab/pi-workflow` 的 Pi package，以及类似 `pi-crew` 的调度适配方案后，才应承诺这些能力已经可用。
+当前 workflow API 使用内置 `FakeWorkflowBackend`，用于验证 `WorkflowDefinition`、`WorkflowRun`、`Stage`、`Task` 和 `Artifact` 的 daemon/client/WebUI 合约。它会立即生成一个完成态 run，不会启动真实 subagent；真实编排仍需要后续接入 `pi-workflow` adapter。
 
-当前 workflow API 先使用内置 `FakeWorkflowBackend`，用于验证 WorkflowDefinition、WorkflowRun、Stage、Task 和 Artifact 的 daemon/client/WebUI 合约。它会立即生成一个完成态 run，不会启动真实 subagent；真实编排仍需要后续接入 `pi-workflow` adapter。
+可通过 `ZUU_WORKFLOW_BACKEND=fake` 或 `ZUU_WORKFLOW_BACKEND=pi-package` 选择 workflow 后端。当前 `pi-package` 模式只做 readiness/diagnostics 暴露，真实 run-state adapter 尚未绑定，因此未完成前不要把它视为生产可用。
 
-可通过 `ZUU_WORKFLOW_BACKEND=fake` 或 `ZUU_WORKFLOW_BACKEND=pi-package` 选择后端。当前 `pi-package` 模式会做显式 readiness 检查，但真实 run-state adapter 尚未绑定；因此未完成前不要把它视为生产可用。
+Scheduler MVP 已支持 `once` 和 `interval` trigger，支持 prompt action 和 workflow action，记录最近 schedule runs，并可在 WebUI 中创建、暂停、恢复、手动触发和删除。`cron`、timezone、misfire policy、retry policy、abort schedule run 和真实持久队列仍是后续工作。
 
 ## WebUI
 
-当前 WebUI 已迁移到 `web/` 下的 Vue + Vite 应用，浏览器侧只通过 `@zuu/client` 调用 daemon API。
+当前 WebUI 是 `web/` 下的 Vue + Vite 应用，浏览器侧只通过 `@zuu/client` 调用 daemon API。
 
 开发时建议同时运行：
 
@@ -84,7 +90,7 @@ pnpm dev
 pnpm dev:web
 ```
 
-默认后端监听 `http://localhost:3001`；`web/vite.config.ts` 已将开发态 `/api` 代理到 `http://127.0.0.1:3001`。
+`web/vite.config.ts` 已将开发态 `/api` 代理到 `http://127.0.0.1:3001`。
 
 生产或单进程预览时先构建 WebUI：
 

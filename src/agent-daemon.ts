@@ -20,6 +20,7 @@ import {
   DEFAULT_READ_ONLY_TOOLS,
   getApprovalStorePath,
   getRunStorePath,
+  getScheduleStorePath,
   getSessionDir,
   getWorkflowStorePath,
   getZuuAgentDir,
@@ -30,9 +31,11 @@ import { ApprovalStore, assertApprovalStatus } from "./agent-daemon/approval-sto
 import { createApprovalExtension, subscribeApprovalEvents } from "./agent-daemon/approval-policy";
 import { buildDiagnostics } from "./agent-daemon/diagnostics";
 import { compactAgentEvent, entryRole, entryText } from "./agent-daemon/events";
+import { ScheduleStore } from "./agent-daemon/schedules";
 import { createStatusTool } from "./agent-daemon/status-tool";
 import { createWorkflowBackend } from "./agent-daemon/workflows";
 import type {
+  CreateScheduleRequest,
   ForkSessionRequest,
   ImportSessionRequest,
   NewSessionRequest,
@@ -85,6 +88,25 @@ export class ZuuDaemon {
   );
   private readonly modelRuntimePromise = createModelRuntime();
   private readonly startedAt = new Date().toISOString();
+  private readonly scheduleStore = new ScheduleStore(getScheduleStorePath(this.agentDir), {
+    runPrompt: async (action) => {
+      const { type: _type, ...request } = action;
+      let agentRunId: string | undefined;
+      for await (const event of this.prompt(request)) {
+        agentRunId = event.run?.id ?? event.runId ?? agentRunId;
+      }
+      return { agentRunId };
+    },
+    runWorkflow: async (action) => {
+      const run = await this.startWorkflow(action.workflowId, {
+        sessionId: action.sessionId,
+        prompt: action.prompt,
+        inputs: action.inputs,
+        source: "schedule",
+      });
+      return { workflowRunId: run.id };
+    },
+  });
 
   private createRuntimeFactory(options: CreateSessionOptions): CreateAgentSessionRuntimeFactory {
     return async ({ cwd, agentDir, sessionManager, sessionStartEvent }) => {
@@ -297,6 +319,34 @@ export class ZuuDaemon {
 
   abortWorkflowRun(runId: string) {
     return this.createWorkflowBackend().abort(runId);
+  }
+
+  listSchedules() {
+    return this.scheduleStore.list();
+  }
+
+  createSchedule(request: CreateScheduleRequest) {
+    return this.scheduleStore.create(request);
+  }
+
+  getSchedule(scheduleId: string) {
+    return this.scheduleStore.get(scheduleId);
+  }
+
+  pauseSchedule(scheduleId: string) {
+    return this.scheduleStore.pause(scheduleId);
+  }
+
+  resumeSchedule(scheduleId: string) {
+    return this.scheduleStore.resume(scheduleId);
+  }
+
+  triggerSchedule(scheduleId: string) {
+    return this.scheduleStore.trigger(scheduleId);
+  }
+
+  deleteSchedule(scheduleId: string) {
+    return this.scheduleStore.delete(scheduleId);
   }
 
   private getManagedRuntime(sessionId: string) {
@@ -574,6 +624,7 @@ export class ZuuDaemon {
   }
 
   async dispose() {
+    this.scheduleStore.dispose();
     for (const managed of this.runtimes.values()) {
       await managed.runtime.dispose();
     }

@@ -9,6 +9,7 @@ import { streamSSE } from "hono/streaming";
 import { ZuuDaemon } from "./agent-daemon";
 import type {
   ApprovalStatus,
+  CreateScheduleRequest,
   ForkSessionRequest,
   ImportSessionRequest,
   NewSessionRequest,
@@ -149,6 +150,63 @@ app.get("/api/workflow-runs/:runId", async (c) => {
 app.post("/api/workflow-runs/:runId/abort", async (c) => {
   try {
     return c.json({ run: await daemon.abortWorkflowRun(c.req.param("runId")) });
+  } catch (error) {
+    return c.json(jsonError(error, 404), 404);
+  }
+});
+
+app.get("/api/schedules", (c) => {
+  try {
+    return c.json({ schedules: daemon.listSchedules() });
+  } catch (error) {
+    return c.json(jsonError(error, 500), 500);
+  }
+});
+
+app.post("/api/schedules", async (c) => {
+  try {
+    const body = (await c.req.json()) as CreateScheduleRequest;
+    return c.json({ schedule: daemon.createSchedule(body) }, 201);
+  } catch (error) {
+    return c.json(jsonError(error, 400), 400);
+  }
+});
+
+app.get("/api/schedules/:scheduleId", (c) => {
+  try {
+    return c.json({ schedule: daemon.getSchedule(c.req.param("scheduleId")) });
+  } catch (error) {
+    return c.json(jsonError(error, 404), 404);
+  }
+});
+
+app.post("/api/schedules/:scheduleId/pause", (c) => {
+  try {
+    return c.json({ schedule: daemon.pauseSchedule(c.req.param("scheduleId")) });
+  } catch (error) {
+    return c.json(jsonError(error, 404), 404);
+  }
+});
+
+app.post("/api/schedules/:scheduleId/resume", (c) => {
+  try {
+    return c.json({ schedule: daemon.resumeSchedule(c.req.param("scheduleId")) });
+  } catch (error) {
+    return c.json(jsonError(error, 400), 400);
+  }
+});
+
+app.post("/api/schedules/:scheduleId/trigger", async (c) => {
+  try {
+    return c.json({ schedule: await daemon.triggerSchedule(c.req.param("scheduleId")) });
+  } catch (error) {
+    return c.json(jsonError(error, 400), 400);
+  }
+});
+
+app.delete("/api/schedules/:scheduleId", (c) => {
+  try {
+    return c.json({ schedule: daemon.deleteSchedule(c.req.param("scheduleId")) });
   } catch (error) {
     return c.json(jsonError(error, 404), 404);
   }

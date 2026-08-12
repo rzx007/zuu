@@ -93,6 +93,57 @@ async function main() {
   }
   if (!missingWorkflowFailed) throw new Error("missing workflow should fail");
 
+  const schedulesBefore = await client.listSchedules();
+  if (!Array.isArray(schedulesBefore.schedules)) throw new Error("schedules response is invalid");
+  const schedule = await client.createSchedule({
+    name: "check workflow schedule",
+    trigger: { kind: "interval", everyMs: 60_000 },
+    action: {
+      type: "workflow",
+      workflowId: workflows.workflows[0].id,
+      prompt: "scheduled contract check",
+      inputs: { source: "scripts/check.ts" },
+    },
+  });
+  if (schedule.schedule.status !== "active" || !schedule.schedule.nextRunAt) {
+    throw new Error("created schedule response is invalid");
+  }
+  const pausedSchedule = await client.pauseSchedule(schedule.schedule.id);
+  if (pausedSchedule.schedule.status !== "paused" || pausedSchedule.schedule.nextRunAt) {
+    throw new Error("pause schedule response is invalid");
+  }
+  const resumedSchedule = await client.resumeSchedule(schedule.schedule.id);
+  if (resumedSchedule.schedule.status !== "active" || !resumedSchedule.schedule.nextRunAt) {
+    throw new Error("resume schedule response is invalid");
+  }
+  const nextRunAtBeforeTrigger = resumedSchedule.schedule.nextRunAt;
+  const triggeredSchedule = await client.triggerSchedule(schedule.schedule.id);
+  const scheduleRun = triggeredSchedule.schedule.runs[0];
+  if (scheduleRun?.status !== "done" || !scheduleRun.workflowRunId) {
+    throw new Error("triggered schedule response is invalid");
+  }
+  if (triggeredSchedule.schedule.nextRunAt !== nextRunAtBeforeTrigger) {
+    throw new Error("manual schedule trigger should preserve the next automatic run");
+  }
+  const loadedSchedule = await client.getSchedule(schedule.schedule.id);
+  if (loadedSchedule.schedule.id !== schedule.schedule.id) {
+    throw new Error("schedule lookup returned the wrong schedule");
+  }
+  const deletedSchedule = await client.deleteSchedule(schedule.schedule.id);
+  if (deletedSchedule.schedule.id !== schedule.schedule.id) {
+    throw new Error("delete schedule returned the wrong schedule");
+  }
+  let cronScheduleFailed = false;
+  try {
+    await client.createSchedule({
+      trigger: { kind: "cron", cron: "* * * * *" },
+      action: { type: "workflow", workflowId: workflows.workflows[0].id },
+    });
+  } catch {
+    cronScheduleFailed = true;
+  }
+  if (!cronScheduleFailed) throw new Error("cron schedule should fail until a backend is installed");
+
   const approvals = await client.listApprovals();
   if (!Array.isArray(approvals.approvals)) throw new Error("approvals response is invalid");
 
