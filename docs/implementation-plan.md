@@ -716,7 +716,7 @@ UI end-to-end
 - `src/index.ts`：Hono daemon、health、diagnostics、model、package、active session、stored session、session tree、run、prompt、abort、compact、new、switch、fork、import API，以及生产态 WebUI 静态托管。
 - `src/agent-daemon.ts`：封装 `ModelRuntime`、`DefaultResourceLoader`、`SettingsManager`、`SessionManager`、`createAgentSessionServices`、`createAgentSessionFromServices`、`createAgentSessionRuntime` 和 runtime lifecycle 编排；daemon 辅助逻辑统一放在 `src/agent-daemon/`，workflow 后端已拆到 `src/agent-daemon/workflow-adapters/`。
 - `packages/client`：workspace 包 `@zuu/client`，封装协议 DTO、health、diagnostics、models、packages、package trust、package install/update/remove operations、active sessions、stored sessions、session tree、runs、run event replay、daemon event subscribe、prompt SSE、abort、compact 和 runtime lifecycle 操作；daemon event subscribe 已支持自动重连、`Last-Event-ID` 补拉和重复事件去重；已具备独立 `dist` 构建、类型声明入口和包内中文 README。
-- `web/`：Vue + Vite WebUI，浏览器侧直接 bundle `@zuu/client`，用于 diagnostics、resource diagnostics、model 选择、package source/trust/install/update/remove、prompt SSE、session 文件、session tree、runs、run event replay 和 approval 操作。
+- `web/`：Vue + Vite WebUI，浏览器侧直接 bundle `@zuu/client`，用于 diagnostics、resource diagnostics、model 选择、package source/trust/install/update/remove、prompt SSE、daemon event stream、session 文件、session tree、runs、run event replay 和 approval 操作。
 - `scripts/check-pi-workflow-runtime.ts`：WSL2/Linux 专用的真实 `@agwab/pi-workflow` readiness 和 launch 验证脚本；默认只检查 ready，设置 `ZUU_PI_WORKFLOW_RUN=1` 才发起真实 workflow。
 - `docs/spikes/pi-workflow-runtime.md`：记录真实 pi-workflow 验证步骤、通过标准、失败诊断和后续 board/run-state 映射任务。
 - `.zuu/pi-agent`：默认 Pi app state 目录，可通过 `ZUU_AGENT_DIR` 覆盖，避免嵌入式运行时写入 `~/.pi/agent`。
@@ -752,7 +752,7 @@ UI end-to-end
 
 - `@zuu/client` 已是可独立构建的 workspace 包，具备 `dist` 产物、包入口、类型声明、包内中文 README 和第三方示例；尚未接入自动版本发布、changelog 和 npm publish 流程。
 - JSON store 已有原子写和损坏恢复，prompt run 事件已有最小存档、按 run 补拉、daemon 级 `/api/events` replay/live stream 和 SDK 自动 SSE 重连，但还没有 SQLite migration 或跨进程写入协调。
-- WebUI 已迁移到 Vue + Vite，并支持打开持久化 session、查看当前 session tree、按 entry fork、从本地 JSONL 路径 import、处理 pending approvals、启动/查看 fake workflow runs，以及创建/暂停/恢复/触发/删除 schedule。
+- WebUI 已迁移到 Vue + Vite，并支持打开持久化 session、查看当前 session tree、按 entry fork、从本地 JSONL 路径 import、处理 pending approvals、启动/查看 fake workflow runs、创建/暂停/恢复/触发/删除 schedule，以及通过 daemon 级 `subscribeEvents()` 实时展示事件并节流刷新 runs、approvals、session tree、schedule 和 workflow run 状态。
 - Package API 已能展示安装状态、信任状态、加载状态、显式触发安装/更新/删除，并通过持久化 operation 记录暴露任务进度和失败原因；WebUI 已能 trust/revoke package source 并展示 SDK resource diagnostics/collision。未信任 package 会保留在配置清单中，但已从 Pi `ResourceLoader` 和 `pi-package` workflow backend 的加载链路中过滤，diagnostics 会通过 `blockedPackages` 暴露被阻止加载的 source。
 - Approval 已接入 Pi tool call 拦截和 SSE 事件，但当前策略是 fail-closed：危险工具被阻断后需要用户 resolve 并重试 prompt，尚未实现挂起并恢复同一个 tool call 的交互式等待。
 - 当前 API token 是单 token 配置，尚未实现 token 轮换、权限分级和审计日志。
@@ -761,5 +761,5 @@ UI end-to-end
 - 当前环境下真实模型 stream 可能因为网络返回 `Connection error`；daemon 已将 SDK assistant error 映射为 SSE error。
 - Workflow/subagent package 在当前环境尚未安装，diagnostics 会明确报告缺口；`pi-package` adapter 已有 launch 桥接，但当前 Windows 原生环境会按 `@agwab/pi-workflow` 包页面说明标记为不可用。Scheduler 已有最小内置后端，但 `cron`、timezone、misfire、retry、abort schedule run 和真实持久队列仍未落地。
 
-后续计划应从此切片继续收敛，而不是另起炉灶：Client workspace 包、run registry 持久化、package source/trust/load 管理、package status/install/update/remove operations、approval tool-call 拦截、Vue WebUI approval 操作面、fake workflow 合约、pi-package launch adapter、pi-workflow runtime spike 和 Scheduler MVP 已经落地，接下来应优先在 WSL2/Linux 中安装并信任 `@agwab/pi-workflow` 跑通 `docs/spikes/pi-workflow-runtime.md`，再研究 `.pi/workflows` board/run-state 的只读映射，最后补齐 cron/timezone/retry 等 scheduler backend 能力。
+后续计划应从此切片继续收敛，而不是另起炉灶：Client workspace 包、run registry 持久化、package source/trust/load 管理、package status/install/update/remove operations、approval tool-call 拦截、Vue WebUI approval 操作面、daemon event stream 面板、fake workflow 合约、pi-package launch adapter、pi-workflow runtime spike 和 Scheduler MVP 已经落地，接下来应优先在 WSL2/Linux 中安装并信任 `@agwab/pi-workflow` 跑通 `docs/spikes/pi-workflow-runtime.md`，再研究 `.pi/workflows` board/run-state 的只读映射，最后补齐 cron/timezone/retry 等 scheduler backend 能力。
 

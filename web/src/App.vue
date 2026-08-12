@@ -9,6 +9,7 @@ import {
   type PackageOperation,
   type PackageSummary,
   type PromptRequest,
+  type PromptStreamEvent,
   type RunSummary,
   type Schedule,
   type ScheduleAction,
@@ -25,6 +26,8 @@ import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 
 type MessageRole = 'user' | 'agent' | 'event' | 'error'
+type EventStreamStatus = 'connecting' | 'live' | 'stopped' | 'error'
+type EventRefreshTarget = 'runs' | 'storedSessions' | 'sessionTree' | 'approvals' | 'workflowRuns' | 'schedules'
 
 interface MessageItem {
   id: string
@@ -37,10 +40,25 @@ interface FlatTreeEntry {
   depth: number
 }
 
+interface LiveEventItem {
+  id: string
+  type: PromptStreamEvent['type']
+  runId: string
+  createdAt: string
+  text: string
+}
+
 const tokenKey = 'zuu.apiToken'
+const eventCursorKey = 'zuu.lastEventId'
 let client = createZuuClient({ apiToken: localStorage.getItem(tokenKey) || undefined })
 let messageSeq = 0
 let packageOperationPollId: number | undefined
+let eventStreamController: AbortController | undefined
+let eventStreamGeneration = 0
+let eventRefreshTimer: number | undefined
+const pendingEventRefreshes = new Set<EventRefreshTarget>()
+const countedEventIds = new Set<string>()
+const countedEventOrder: string[] = []
 
 const apiToken = ref(localStorage.getItem(tokenKey) || '')
 const diagnostics = ref<Diagnostics>()
@@ -77,6 +95,10 @@ const isRunning = ref(false)
 const isRefreshing = ref(false)
 const controller = ref<AbortController>()
 const runEventCounts = reactive<Record<string, number>>({})
+const liveEvents = ref<LiveEventItem[]>([])
+const eventStreamStatus = ref<EventStreamStatus>('stopped')
+const eventStreamError = ref('')
+const lastEventId = ref(localStorage.getItem(eventCursorKey) || '')
 
 const toolChoices = ['read', 'grep', 'find', 'ls', 'bash', 'edit', 'write', 'zuu_status']
 const selectedTools = reactive<Record<string, boolean>>({
@@ -100,6 +122,11 @@ const blockedPackages = computed(() => diagnostics.value?.resources.blockedPacka
 const storeDiagnostics = computed(() => diagnostics.value?.resources.stores || [])
 const selectedWorkflow = computed(() => workflows.value.find((workflow) => workflow.id === selectedWorkflowId.value))
 const runningPackageOperations = computed(() => packageOperations.value.filter((operation) => operation.status === 'running'))
+const eventStatusVariant = computed(() => {
+  if (eventStreamStatus.value === 'live') return 'secondary'
+  if (eventStreamStatus.value === 'error') return 'destructive'
+  return 'outline'
+})
 
 function toDatetimeLocal(date: Date) {
   const localDate = new Date(date.getTime() - date.getTimezoneOffset() * 60_000)
@@ -131,6 +158,137 @@ function addMessage(role: MessageRole, text = '') {
 function setActiveSession(session: SessionSummary) {
   currentSession.value = session
   sessionName.value = session.name || sessionName.value
+}
+
+function upsertRun(run: RunSummary) {
+  runs.value = [run, ...runs.value.filter((item) => item.id !== run.id)].sort((a, b) => b.startedAt.localeCompare(a.startedAt))
+}
+
+function upsertApproval(approval: Approval) {
+  approvals.value = [approval, ...approvals.value.filter((item) => item.id !== approval.id)].sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+}
+
+function rememberCountedEvent(eventId: string) {
+  if (countedEventIds.has(eventId)) return false
+  countedEventIds.add(eventId)
+  countedEventOrder.push(eventId)
+  if (countedEventOrder.length > 2048) {
+    const expired = countedEventOrder.shift()
+    if (expired) countedEventIds.delete(expired)
+  }
+  return true
+}
+
+function countRunEvent(event: PromptStreamEvent) {
+  if (!rememberCountedEvent(event.id)) return
+  runEventCounts[event.runId] = (runEventCounts[event.runId] ?? 0) + 1
+}
+
+function liveEventText(event: PromptStreamEvent) {
+  if (event.type === 'session') return event.session?.name || event.session?.id || 'session started'
+  if (event.type === 'tool_start') return event.tool ? `tool start: ${event.tool.name}` : 'tool start'
+  if (event.type === 'tool_end') return event.tool ? `tool end: ${event.tool.name}${event.tool.isError ? ' (error)' : ''}` : 'tool end'
+  if (event.type === 'approval_requested') return event.approval?.title || 'approval requested'
+  if (event.type === 'approval_resolved') return event.approval?.title || 'approval resolved'
+  if (event.type === 'error') return event.message || 'agent error'
+  if (event.type === 'done') return event.run?.status || 'done'
+  if (event.type === 'agent_event') return event.eventType || 'agent event'
+  return event.delta ? `text ${event.delta.length} chars` : event.type
+}
+
+function rememberLiveEvent(event: PromptStreamEvent) {
+  if (event.type === 'text_delta') return
+  liveEvents.value = [
+    {
+      id: event.id,
+      type: event.type,
+      runId: event.runId,
+      createdAt: event.createdAt,
+      text: liveEventText(event),
+    },
+    ...liveEvents.value.filter((item) => item.id !== event.id),
+  ].slice(0, 40)
+}
+
+function scheduleEventRefresh(...targets: EventRefreshTarget[]) {
+  targets.forEach((target) => pendingEventRefreshes.add(target))
+  if (eventRefreshTimer !== undefined) return
+  eventRefreshTimer = window.setTimeout(() => {
+    eventRefreshTimer = undefined
+    flushEventRefreshes().catch((error) => addMessage('error', errorMessage(error)))
+  }, 400)
+}
+
+async function flushEventRefreshes() {
+  const targets = new Set(pendingEventRefreshes)
+  pendingEventRefreshes.clear()
+  const tasks: Array<Promise<unknown>> = []
+  if (targets.has('runs')) tasks.push(loadRuns())
+  if (targets.has('storedSessions')) tasks.push(loadStoredSessions())
+  if (targets.has('sessionTree')) tasks.push(loadSessionTree())
+  if (targets.has('approvals')) tasks.push(loadApprovals())
+  if (targets.has('workflowRuns')) tasks.push(loadWorkflowRuns())
+  if (targets.has('schedules')) tasks.push(loadSchedules())
+  await Promise.all(tasks)
+}
+
+function handleDaemonEvent(event: PromptStreamEvent) {
+  lastEventId.value = event.id
+  localStorage.setItem(eventCursorKey, event.id)
+  countRunEvent(event)
+  rememberLiveEvent(event)
+
+  if (event.session && (event.session.isStreaming || currentSession.value?.id === event.session.id)) {
+    setActiveSession(event.session)
+  }
+  if (event.run) upsertRun(event.run)
+  if (event.approval) upsertApproval(event.approval)
+
+  if (event.type === 'session') {
+    scheduleEventRefresh('runs', 'storedSessions', 'sessionTree')
+  } else if (event.type === 'approval_requested' || event.type === 'approval_resolved') {
+    scheduleEventRefresh('approvals', 'runs')
+  } else if (event.type === 'done' || event.type === 'error') {
+    scheduleEventRefresh('runs', 'storedSessions', 'sessionTree', 'approvals', 'schedules', 'workflowRuns')
+  }
+}
+
+function stopEventStream() {
+  eventStreamGeneration += 1
+  eventStreamController?.abort()
+  eventStreamController = undefined
+  eventStreamStatus.value = 'stopped'
+}
+
+function startEventStream() {
+  stopEventStream()
+  const streamGeneration = eventStreamGeneration
+  const streamController = new AbortController()
+  eventStreamController = streamController
+  eventStreamStatus.value = 'connecting'
+  eventStreamError.value = ''
+  consumeEventStream(streamGeneration, streamController.signal).catch((error) => {
+    if (streamController.signal.aborted || streamGeneration !== eventStreamGeneration) return
+    eventStreamStatus.value = 'error'
+    eventStreamError.value = errorMessage(error)
+  })
+}
+
+async function consumeEventStream(streamGeneration: number, signal: AbortSignal) {
+  for await (const event of client.subscribeEvents({
+    afterEventId: lastEventId.value || undefined,
+    reconnectDelayMs: 800,
+    maxReconnectDelayMs: 8000,
+    signal,
+  })) {
+    if (signal.aborted || streamGeneration !== eventStreamGeneration) return
+    eventStreamStatus.value = 'live'
+    eventStreamError.value = ''
+    handleDaemonEvent(event)
+  }
+  if (!signal.aborted && streamGeneration === eventStreamGeneration) {
+    eventStreamStatus.value = 'stopped'
+  }
 }
 
 function flattenTree(entries: SessionTreeEntry[], depth = 0): FlatTreeEntry[] {
@@ -226,8 +384,10 @@ function saveToken() {
   const token = apiToken.value.trim()
   if (token) localStorage.setItem(tokenKey, token)
   else localStorage.removeItem(tokenKey)
+  stopEventStream()
   client = createZuuClient({ apiToken: token || undefined })
   addMessage('event', token ? 'API token saved.' : 'API token cleared.')
+  startEventStream()
   refreshAll().catch((error) => addMessage('error', errorMessage(error)))
 }
 
@@ -541,11 +701,17 @@ async function abortPrompt() {
 }
 
 onMounted(() => {
+  startEventStream()
   refreshAll().catch((error) => addMessage('error', errorMessage(error)))
 })
 
 onUnmounted(() => {
+  stopEventStream()
   clearPackageOperationPoll()
+  if (eventRefreshTimer !== undefined) {
+    window.clearTimeout(eventRefreshTimer)
+    eventRefreshTimer = undefined
+  }
 })
 </script>
 
@@ -775,6 +941,7 @@ onUnmounted(() => {
           </div>
           <div class="flex shrink-0 items-center gap-2">
             <Badge v-if="pendingApprovals.length" variant="destructive">{{ pendingApprovals.length }} pending approval</Badge>
+            <Badge :variant="eventStatusVariant">events {{ eventStreamStatus }}</Badge>
             <Badge variant="outline">{{ activeTools.length }} tools</Badge>
           </div>
         </header>
@@ -791,6 +958,26 @@ onUnmounted(() => {
           </section>
 
           <aside class="border-border bg-muted/20 flex min-h-0 flex-col gap-3 overflow-auto border-l p-4 max-xl:border-l-0 max-xl:border-t">
+            <section class="side-panel">
+              <div class="section-title">
+                <h2>Event Stream</h2>
+                <Badge :variant="eventStatusVariant">{{ eventStreamStatus }}</Badge>
+              </div>
+              <p v-if="eventStreamError" class="text-destructive text-xs">{{ eventStreamError }}</p>
+              <p v-else class="empty-text">cursor {{ lastEventId ? lastEventId.slice(0, 18) : 'none' }}</p>
+              <div v-if="liveEvents.length" class="list-stack overflow-auto">
+                <div v-for="event in liveEvents.slice(0, 10)" :key="event.id" class="workflow-row">
+                  <div class="flex items-center justify-between gap-2">
+                    <strong>{{ event.type }}</strong>
+                    <Badge variant="outline">{{ event.runId.slice(0, 8) }}</Badge>
+                  </div>
+                  <p>{{ event.text }}</p>
+                  <span>{{ event.createdAt }}</span>
+                </div>
+              </div>
+              <p v-else class="empty-text">Waiting for daemon events.</p>
+            </section>
+
             <section class="side-panel">
               <div class="section-title">
                 <h2>Approvals</h2>

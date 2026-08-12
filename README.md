@@ -95,7 +95,7 @@ Packages 面板会区分 `configured`、`installed`、`filtered`、`trusted` / `
 
 API 错误统一返回 `error.message`、`error.status`、`error.retryable`、`error.code` 和可选 `error.details`。`@zuu/client` 会把非 2xx 响应映射成 `ZuuClientError`，调用方可以直接读取 `status`、`code`、`retryable` 和 `details`，不需要解析错误文案。
 
-Prompt SSE 事件会带稳定 `id` 和 `createdAt`，并按 run 写入 `.zuu/pi-agent/run-events.json`。断线后可通过 `GET /api/runs/:runId/events?afterEventId=<event-id>` 或 `@zuu/client` 的 `listRunEvents(runId, afterEventId)` 补拉事件窗口；也可以通过 `GET /api/events` 或 `@zuu/client.subscribeEvents()` 先 replay 历史事件再订阅 live 事件。`subscribeEvents()` 默认会保存最后事件 ID、用指数退避自动重连，并去重重复事件。WebUI 的 Recent Runs 支持查看事件数量并 replay 文本片段。
+Prompt SSE 事件会带稳定 `id` 和 `createdAt`，并按 run 写入 `.zuu/pi-agent/run-events.json`。断线后可通过 `GET /api/runs/:runId/events?afterEventId=<event-id>` 或 `@zuu/client` 的 `listRunEvents(runId, afterEventId)` 补拉事件窗口；也可以通过 `GET /api/events` 或 `@zuu/client.subscribeEvents()` 先 replay 历史事件再订阅 live 事件。`subscribeEvents()` 默认会保存最后事件 ID、用指数退避自动重连，并去重重复事件。WebUI 会用全局 Event Stream 面板展示 daemon live 事件，并用该事件流节流刷新 runs、approvals、session tree、schedule 和 workflow run 状态。
 
 ## Client SDK
 
@@ -122,7 +122,7 @@ Scheduler MVP 已支持 `once` 和 `interval` trigger，支持 prompt action 和
 
 ## WebUI
 
-当前 WebUI 是 `web/` 下的 Vue + Vite 应用，浏览器侧只通过 `@zuu/client` 调用 daemon API。
+当前 WebUI 是 `web/` 下的 Vue + Vite 应用，浏览器侧只通过 `@zuu/client` 调用 daemon API。它会在挂载时通过 `subscribeEvents()` 订阅 daemon 级事件流，保存最后事件 ID，卸载或 token 切换时清理连接。
 
 开发时建议同时运行：
 
