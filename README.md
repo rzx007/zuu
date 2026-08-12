@@ -71,6 +71,7 @@ ZUU_PI_WORKFLOW_RUN=1 pnpm check:pi-workflow
 - `PATCH /v1/projects/:projectId/schedules/:scheduleId`
 - `GET /v1/projects/:projectId/schedules/:scheduleId/runs`
 - `GET /v1/projects/:projectId/schedule-runs/:runId`
+- `POST /v1/projects/:projectId/schedule-runs/:runId/abort`
 - `POST /v1/projects/:projectId/schedules/:scheduleId/pause`
 - `POST /v1/projects/:projectId/schedules/:scheduleId/resume`
 - `POST /v1/projects/:projectId/schedules/:scheduleId/trigger`
@@ -108,6 +109,7 @@ ZUU_PI_WORKFLOW_RUN=1 pnpm check:pi-workflow
 - `PATCH /v1/schedules/:scheduleId`
 - `GET /v1/schedules/:scheduleId/runs`
 - `GET /v1/schedule-runs/:runId`
+- `POST /v1/schedule-runs/:runId/abort`
 - `POST /v1/schedules/:scheduleId/pause`
 - `POST /v1/schedules/:scheduleId/resume`
 - `POST /v1/schedules/:scheduleId/trigger`
@@ -168,7 +170,7 @@ ZUU_EXAMPLE_PROMPT="介绍一下当前项目" pnpm example:client
 
 可通过 `ZUU_WORKFLOW_BACKEND=fake` 或 `ZUU_WORKFLOW_BACKEND=pi-package` 选择 workflow 后端。`pi-package` 模式会探测 `@agwab/pi-workflow` 是否已配置、是否解析到安装路径，以及当前平台是否受支持；ready 后会通过 Pi 的 `/workflow run ...` 或 `/workflow dynamic ...` 命令发起真实 extension 工作，并把 Zuu 侧 launch 结果包装成 `WorkflowRun`。它还没有读取 `pi-workflow` board/run-state，因此阶段、任务和 artifact 仍只是 Zuu launch 层的记录。`@agwab/pi-workflow` 包页面说明原生 Windows 不支持，Windows 用户应使用 WSL2/Linux。
 
-Scheduler MVP 已支持 `once`、`interval` 和基础 5 字段 UTC `cron` trigger，支持 prompt action 和 workflow action，记录最近 schedule runs，并可在 WebUI 中创建、编辑、暂停、恢复、手动触发和删除。Schedule 默认 `overlapPolicy` 为 `skip`；同一 schedule 仍在运行时，`skip` 会记录 `skipped` 和 `reason: "schedule_overlap"`，`queue` 会最多积压一个 queued run，`parallel` 会并发启动新 run。Schedule 默认 `misfirePolicy` 为 `skip`；daemon 重启时遇到错过触发会记录 `reason: "schedule_misfire"`，也可显式设为 `run_once` 在启动后补跑一次。可选 `retryPolicy` 支持 `maxAttempts`、`backoffMs` 和 `retryableCodes`，Schedule Run 会记录最终 `attempts`。Schedule Run 摘要使用 `scheduledFor`、`startedAt`、`finishedAt` 和 `completed/failed/aborted/skipped` 等状态。timezone、abort schedule run 和真实持久队列仍是后续工作。
+Scheduler MVP 已支持 `once`、`interval` 和基础 5 字段 UTC `cron` trigger，支持 prompt action 和 workflow action，记录最近 schedule runs，并可在 WebUI 中创建、编辑、暂停、恢复、手动触发、abort 和删除。Schedule 默认 `overlapPolicy` 为 `skip`；同一 schedule 仍在运行时，`skip` 会记录 `skipped` 和 `reason: "schedule_overlap"`，`queue` 会最多积压一个 queued run，`parallel` 会并发启动新 run。Schedule 默认 `misfirePolicy` 为 `skip`；daemon 重启时遇到错过触发会记录 `reason: "schedule_misfire"`，也可显式设为 `run_once` 在启动后补跑一次。可选 `retryPolicy` 支持 `maxAttempts`、`backoffMs` 和 `retryableCodes`，Schedule Run 会记录最终 `attempts`。Schedule Run 摘要使用 `scheduledFor`、`startedAt`、`finishedAt` 和 `completed/failed/aborted/skipped` 等状态。timezone 和真实持久队列仍是后续工作。
 
 ## WebUI
 

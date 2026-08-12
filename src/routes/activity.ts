@@ -215,6 +215,14 @@ export function registerActivityRoutes({ app, daemon }: RouteDeps) {
     }
   });
 
+  app.post("/v1/schedule-runs/:runId/abort", (c) => {
+    try {
+      return c.json({ run: daemon.abortScheduleRun(c.req.param("runId")) });
+    } catch (error) {
+      return c.json(jsonError(error, 404), toStatus(error, 404));
+    }
+  });
+
   app.post("/v1/schedules/:scheduleId/pause", (c) => {
     try {
       return c.json({ schedule: daemon.pauseSchedule(c.req.param("scheduleId")) });

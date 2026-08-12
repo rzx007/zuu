@@ -273,6 +273,10 @@ export class ZuuDaemon {
     return this.scheduleService.getScheduleRun(runId, projectId);
   }
 
+  abortScheduleRun(runId: string, projectId?: string) {
+    return this.scheduleService.abortScheduleRun(runId, projectId);
+  }
+
   pauseSchedule(scheduleId: string, projectId?: string) {
     return this.scheduleService.pauseSchedule(scheduleId, projectId);
   }

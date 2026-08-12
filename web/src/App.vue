@@ -781,6 +781,12 @@ async function deleteSchedule(scheduleId: string) {
   await loadSchedules()
 }
 
+async function abortScheduleRun(runId: string) {
+  const result = await client.abortProjectScheduleRun(currentProjectId(), runId)
+  addMessage('event', `schedule run ${result.run.status}: ${runId.slice(0, 8)}`)
+  await Promise.all([loadSchedules(), loadWorkflowRuns(), loadRuns()])
+}
+
 async function replayRunEvents(runId: string) {
   const events = (await client.listProjectRunEvents(currentProjectId(), runId)).events
   addMessage('event', `replayed ${events.length} stored events for run ${runId.slice(0, 8)}`)
@@ -1386,6 +1392,7 @@ onUnmounted(() => {
                     <span v-if="schedule.runs[0].workflowRunId">workflow {{ schedule.runs[0].workflowRunId.slice(0, 8) }}</span>
                     <span v-if="schedule.runs[0].agentRunId">agent {{ schedule.runs[0].agentRunId.slice(0, 8) }}</span>
                   </div>
+                  <Button v-if="schedule.runs[0].status === 'queued' || schedule.runs[0].status === 'running'" variant="outline" size="xs" @click="abortScheduleRun(schedule.runs[0].id).catch((error) => addMessage('error', errorMessage(error)))">Abort</Button>
                   <p v-if="schedule.runs[0]?.error">{{ schedule.runs[0].error }}</p>
                 </div>
               </div>

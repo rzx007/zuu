@@ -451,6 +451,10 @@ async function main() {
   if (loadedScheduleRun.run.id !== scheduleRun.id || loadedScheduleRun.run.scheduleId !== schedule.schedule.id) {
     throw new Error("schedule run lookup returned the wrong run");
   }
+  const unchangedCompletedScheduleRun = await client.abortProjectScheduleRun(defaultProject.id, scheduleRun.id);
+  if (unchangedCompletedScheduleRun.run.status !== "completed") {
+    throw new Error("aborting a completed schedule run should leave it completed");
+  }
   if (triggeredSchedule.schedule.nextRunAt !== nextRunAtBeforeTrigger) {
     throw new Error("manual schedule trigger should preserve the next automatic run");
   }
@@ -629,6 +633,86 @@ async function main() {
     throw new Error("queued schedule run should execute after the active run finishes");
   }
   queueOverlapStore.dispose();
+
+  let releaseAbortQueuedFirstRun: (() => void) | undefined;
+  let markAbortQueuedFirstStarted: (() => void) | undefined;
+  let abortQueuedRunCount = 0;
+  const abortQueuedFirstStarted = new Promise<void>((resolve) => {
+    markAbortQueuedFirstStarted = resolve;
+  });
+  const abortQueuedStore = new ScheduleStore(
+    join(mkdtempSync(join(tmpdir(), "zuu-schedule-abort-queued-check-")), "schedules.json"),
+    {
+      runPrompt: async () => {
+        throw new Error("abort queued check should use workflow action");
+      },
+      runWorkflow: async () => {
+        abortQueuedRunCount += 1;
+        markAbortQueuedFirstStarted?.();
+        await new Promise<void>((resolve) => {
+          releaseAbortQueuedFirstRun = resolve;
+        });
+        return { workflowRunId: `abort-queued-workflow-${abortQueuedRunCount}` };
+      },
+    },
+  );
+  const abortQueuedSchedule = abortQueuedStore.create({
+    trigger: { kind: "interval", everyMs: 60_000 },
+    action: { type: "workflow", workflowId: workflows.workflows[0].id, projectId: defaultProject.id },
+    overlapPolicy: "queue",
+  });
+  const abortQueuedFirstTrigger = abortQueuedStore.trigger(abortQueuedSchedule.id);
+  await abortQueuedFirstStarted;
+  const abortQueuedScheduleWithRun = await abortQueuedStore.trigger(abortQueuedSchedule.id);
+  const abortedQueuedRun = abortQueuedStore.abortRun(abortQueuedScheduleWithRun.runs[0].id);
+  if (abortedQueuedRun.status !== "aborted" || abortedQueuedRun.reason !== "schedule_run_aborted" || !abortedQueuedRun.finishedAt) {
+    throw new Error("queued schedule run abort should mark the run aborted");
+  }
+  releaseAbortQueuedFirstRun?.();
+  await abortQueuedFirstTrigger;
+  if (abortQueuedRunCount !== 1 || abortQueuedStore.getRun(abortedQueuedRun.id).status !== "aborted") {
+    throw new Error("aborted queued schedule run should not execute later");
+  }
+  abortQueuedStore.dispose();
+
+  let releaseAbortRunningRun: (() => void) | undefined;
+  let markAbortRunningStarted: (() => void) | undefined;
+  const abortRunningStarted = new Promise<void>((resolve) => {
+    markAbortRunningStarted = resolve;
+  });
+  const abortRunningStore = new ScheduleStore(
+    join(mkdtempSync(join(tmpdir(), "zuu-schedule-abort-running-check-")), "schedules.json"),
+    {
+      runPrompt: async () => {
+        throw new Error("abort running check should use workflow action");
+      },
+      runWorkflow: async () => {
+        markAbortRunningStarted?.();
+        await new Promise<void>((resolve) => {
+          releaseAbortRunningRun = resolve;
+        });
+        return { workflowRunId: "abort-running-workflow" };
+      },
+    },
+  );
+  const abortRunningSchedule = abortRunningStore.create({
+    trigger: { kind: "interval", everyMs: 60_000 },
+    action: { type: "workflow", workflowId: workflows.workflows[0].id, projectId: defaultProject.id },
+  });
+  const abortRunningTrigger = abortRunningStore.trigger(abortRunningSchedule.id);
+  await abortRunningStarted;
+  const runningRun = abortRunningStore.get(abortRunningSchedule.id).runs[0];
+  const abortedRunningRun = abortRunningStore.abortRun(runningRun.id);
+  if (abortedRunningRun.status !== "aborted" || abortedRunningRun.reason !== "schedule_run_aborted") {
+    throw new Error("running schedule run abort should mark the run aborted");
+  }
+  releaseAbortRunningRun?.();
+  await abortRunningTrigger;
+  const completedAfterAbortRun = abortRunningStore.getRun(runningRun.id);
+  if (completedAfterAbortRun.status !== "aborted" || completedAfterAbortRun.workflowRunId !== "abort-running-workflow") {
+    throw new Error("aborted running schedule run should stay aborted after the executor settles");
+  }
+  abortRunningStore.dispose();
 
   let parallelRunCount = 0;
   const releaseParallelRuns: Array<() => void> = [];
@@ -1216,6 +1300,7 @@ async function main() {
   await expectClientError(() => client.getRun("missing"), { status: 404, code: "not_found" });
   await expectClientError(() => client.listScheduleRuns("missing"), { status: 404, code: "not_found" });
   await expectClientError(() => client.getScheduleRun("missing"), { status: 404, code: "not_found" });
+  await expectClientError(() => client.abortScheduleRun("missing"), { status: 404, code: "not_found" });
 
   console.log("ok");
 }

@@ -67,6 +67,11 @@ export class ScheduleService {
     return run;
   }
 
+  abortScheduleRun(runId: string, projectId?: string) {
+    const run = this.getScheduleRun(runId, projectId);
+    return this.store.abortRun(run.id);
+  }
+
   pauseSchedule(scheduleId: string, projectId?: string) {
     this.getSchedule(scheduleId, projectId);
     return this.store.pause(scheduleId);

@@ -264,6 +264,14 @@ export function registerProjectRoutes({ app, daemon }: RouteDeps) {
     }
   });
 
+  app.post("/v1/projects/:projectId/schedule-runs/:runId/abort", (c) => {
+    try {
+      return c.json({ run: daemon.abortScheduleRun(c.req.param("runId"), c.req.param("projectId")) });
+    } catch (error) {
+      return c.json(jsonError(error, 404), toStatus(error, 404));
+    }
+  });
+
   app.post("/v1/projects/:projectId/schedules/:scheduleId/pause", (c) => {
     try {
       return c.json({ schedule: daemon.pauseSchedule(c.req.param("scheduleId"), c.req.param("projectId")) });

@@ -232,6 +232,22 @@ export class ScheduleStore {
     return run;
   }
 
+  abortRun(runId: string) {
+    const schedule = this.findScheduleForRun(runId);
+    const run = schedule.runs.find((item) => item.id === runId);
+    if (!run) throw new Error(`Unknown schedule run: ${runId}`);
+    if (run.status !== "queued" && run.status !== "running") return run;
+
+    const now = new Date().toISOString();
+    run.status = "aborted";
+    run.finishedAt = now;
+    run.reason = "schedule_run_aborted";
+    schedule.updatedAt = now;
+    this.persist();
+    this.drainQueued(schedule);
+    return run;
+  }
+
   create(request: CreateScheduleRequest) {
     validateTrigger(request.trigger);
     validateAction(request.action);
@@ -335,13 +351,15 @@ export class ScheduleStore {
 
     try {
       await this.runScheduleAction(schedule, run);
-      run.status = "completed";
+      if (!isScheduleRunAborted(run)) run.status = "completed";
     } catch (error) {
-      run.status = "failed";
-      run.error = error instanceof Error ? error.message : String(error);
+      if (!isScheduleRunAborted(run)) {
+        run.status = "failed";
+        run.error = error instanceof Error ? error.message : String(error);
+      }
     } finally {
       const now = new Date().toISOString();
-      run.finishedAt = now;
+      run.finishedAt = run.finishedAt ?? now;
       schedule.lastRunAt = now;
       schedule.updatedAt = now;
       if (!options.automatic) {
@@ -479,13 +497,15 @@ export class ScheduleStore {
 
     try {
       await this.runScheduleAction(schedule, run);
-      run.status = "completed";
+      if (!isScheduleRunAborted(run)) run.status = "completed";
     } catch (error) {
-      run.status = "failed";
-      run.error = error instanceof Error ? error.message : String(error);
+      if (!isScheduleRunAborted(run)) {
+        run.status = "failed";
+        run.error = error instanceof Error ? error.message : String(error);
+      }
     } finally {
       const now = new Date().toISOString();
-      run.finishedAt = now;
+      run.finishedAt = run.finishedAt ?? now;
       schedule.lastRunAt = now;
       schedule.updatedAt = now;
       this.restoreNextRun(schedule, previousNextRunAt);
@@ -585,6 +605,12 @@ export class ScheduleStore {
     return [...this.schedules.values()].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
   }
 
+  private findScheduleForRun(runId: string) {
+    const schedule = this.sortedSchedules().find((item) => item.runs.some((run) => run.id === runId));
+    if (!schedule) throw new Error(`Unknown schedule run: ${runId}`);
+    return schedule;
+  }
+
   private restoreNextRun(schedule: Schedule, previousNextRunAt: string | undefined) {
     if (schedule.status !== "active") {
       schedule.nextRunAt = undefined;
@@ -606,6 +632,10 @@ export class ScheduleStore {
 
 function compareScheduleRuns(a: ScheduleRun, b: ScheduleRun) {
   return (b.startedAt ?? b.scheduledFor).localeCompare(a.startedAt ?? a.scheduledFor);
+}
+
+function isScheduleRunAborted(run: ScheduleRun) {
+  return run.status === "aborted";
 }
 
 function defaultScheduleName(action: ScheduleAction) {

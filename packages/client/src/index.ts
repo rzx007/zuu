@@ -110,6 +110,7 @@ export interface ZuuClient {
   updateProjectSchedule(projectId: string, scheduleId: string, input: UpdateScheduleRequest): Promise<ScheduleResponse>;
   listProjectScheduleRuns(projectId: string, scheduleId: string): Promise<ScheduleRunsResponse>;
   getProjectScheduleRun(projectId: string, runId: string): Promise<ScheduleRunResponse>;
+  abortProjectScheduleRun(projectId: string, runId: string): Promise<ScheduleRunResponse>;
   pauseProjectSchedule(projectId: string, scheduleId: string): Promise<ScheduleResponse>;
   resumeProjectSchedule(projectId: string, scheduleId: string): Promise<ScheduleResponse>;
   triggerProjectSchedule(projectId: string, scheduleId: string): Promise<ScheduleResponse>;
@@ -143,6 +144,7 @@ export interface ZuuClient {
   updateSchedule(scheduleId: string, input: UpdateScheduleRequest): Promise<ScheduleResponse>;
   listScheduleRuns(scheduleId: string): Promise<ScheduleRunsResponse>;
   getScheduleRun(runId: string): Promise<ScheduleRunResponse>;
+  abortScheduleRun(runId: string): Promise<ScheduleRunResponse>;
   pauseSchedule(scheduleId: string): Promise<ScheduleResponse>;
   resumeSchedule(scheduleId: string): Promise<ScheduleResponse>;
   triggerSchedule(scheduleId: string): Promise<ScheduleResponse>;
@@ -549,6 +551,14 @@ export function createZuuClient(options: ZuuClientOptions = {}): ZuuClient {
         undefined,
         apiToken,
       ),
+    abortProjectScheduleRun: (projectId, runId) =>
+      requestJson<ScheduleRunResponse>(
+        fetchImpl,
+        baseUrl,
+        `/v1/projects/${encodeURIComponent(projectId)}/schedule-runs/${encodeURIComponent(runId)}/abort`,
+        { method: "POST" },
+        apiToken,
+      ),
     pauseProjectSchedule: (projectId, scheduleId) =>
       requestJson<ScheduleResponse>(
         fetchImpl,
@@ -724,6 +734,10 @@ export function createZuuClient(options: ZuuClientOptions = {}): ZuuClient {
       ),
     getScheduleRun: (runId) =>
       requestJson<ScheduleRunResponse>(fetchImpl, baseUrl, `/v1/schedule-runs/${encodeURIComponent(runId)}`, undefined, apiToken),
+    abortScheduleRun: (runId) =>
+      requestJson<ScheduleRunResponse>(fetchImpl, baseUrl, `/v1/schedule-runs/${encodeURIComponent(runId)}/abort`, {
+        method: "POST",
+      }, apiToken),
     pauseSchedule: (scheduleId) =>
       requestJson<ScheduleResponse>(fetchImpl, baseUrl, `/v1/schedules/${encodeURIComponent(scheduleId)}/pause`, {
         method: "POST",

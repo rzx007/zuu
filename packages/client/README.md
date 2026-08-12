@@ -100,6 +100,9 @@ await client.updateProjectSchedule(currentProjectId, createdSchedule.schedule.id
 const scheduleRuns = schedules.schedules[0]
   ? await client.listProjectScheduleRuns(currentProjectId, schedules.schedules[0].id)
   : { runs: [] };
+if (scheduleRuns.runs[0]?.status === "queued" || scheduleRuns.runs[0]?.status === "running") {
+  await client.abortProjectScheduleRun(currentProjectId, scheduleRuns.runs[0].id);
+}
 ```
 
 ## 错误处理
