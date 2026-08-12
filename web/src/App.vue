@@ -2000,6 +2000,7 @@ onUnmounted(() => {
                     <strong>{{ run.id.slice(0, 8) }} · {{ run.status }}</strong>
                     <span>{{ runEventCounts[run.id] ?? 0 }} events</span>
                     <span>{{ run.prompt }}</span>
+                    <span v-if="run.error" class="text-destructive">{{ run.error }}</span>
                   </div>
                   <div class="flex flex-wrap justify-end gap-1">
                     <Button v-if="run.status === 'running' || run.status === 'waiting_approval'" variant="outline" size="xs" @click="abortRun(run.id).catch((error) => addMessage('error', errorMessage(error)))">Abort</Button>
