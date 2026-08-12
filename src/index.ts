@@ -293,9 +293,9 @@ app.post("/v1/workflows/:workflowId/runs", async (c) => {
 
 app.get("/v1/workflow-runs", async (c) => {
   try {
-    return c.json({ runs: await daemon.listWorkflowRuns() });
+    return c.json({ runs: await daemon.listWorkflowRuns(c.req.query("projectId")) });
   } catch (error) {
-    return c.json(jsonError(error, 500), toStatus(error, 500));
+    return c.json(jsonError(error, c.req.query("projectId") ? 404 : 500), toStatus(error, c.req.query("projectId") ? 404 : 500));
   }
 });
 
@@ -317,9 +317,9 @@ app.post("/v1/workflow-runs/:runId/abort", async (c) => {
 
 app.get("/v1/schedules", (c) => {
   try {
-    return c.json({ schedules: daemon.listSchedules() });
+    return c.json({ schedules: daemon.listSchedules(c.req.query("projectId")) });
   } catch (error) {
-    return c.json(jsonError(error, 500), toStatus(error, 500));
+    return c.json(jsonError(error, c.req.query("projectId") ? 404 : 500), toStatus(error, c.req.query("projectId") ? 404 : 500));
   }
 });
 

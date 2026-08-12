@@ -90,10 +90,10 @@ export interface ZuuClient {
   listRunEvents(runId: string, afterEventId?: string): Promise<RunEventsResponse>;
   listWorkflows(): Promise<WorkflowsResponse>;
   startWorkflow(workflowId: string, input?: StartWorkflowRequest): Promise<WorkflowRunResponse>;
-  listWorkflowRuns(): Promise<WorkflowRunsResponse>;
+  listWorkflowRuns(projectId?: string): Promise<WorkflowRunsResponse>;
   getWorkflowRun(runId: string): Promise<WorkflowRunResponse>;
   abortWorkflowRun(runId: string): Promise<WorkflowRunResponse>;
-  listSchedules(): Promise<SchedulesResponse>;
+  listSchedules(projectId?: string): Promise<SchedulesResponse>;
   createSchedule(input: CreateScheduleRequest): Promise<ScheduleResponse>;
   getSchedule(scheduleId: string): Promise<ScheduleResponse>;
   pauseSchedule(scheduleId: string): Promise<ScheduleResponse>;
@@ -358,15 +358,22 @@ export function createZuuClient(options: ZuuClientOptions = {}): ZuuClient {
         method: "POST",
         body: JSON.stringify(input),
       }, apiToken),
-    listWorkflowRuns: () =>
-      requestJson<WorkflowRunsResponse>(fetchImpl, baseUrl, "/v1/workflow-runs", undefined, apiToken),
+    listWorkflowRuns: (projectId) =>
+      requestJson<WorkflowRunsResponse>(
+        fetchImpl,
+        baseUrl,
+        withQuery("/v1/workflow-runs", { projectId }),
+        undefined,
+        apiToken,
+      ),
     getWorkflowRun: (runId) =>
       requestJson<WorkflowRunResponse>(fetchImpl, baseUrl, `/v1/workflow-runs/${encodeURIComponent(runId)}`, undefined, apiToken),
     abortWorkflowRun: (runId) =>
       requestJson<WorkflowRunResponse>(fetchImpl, baseUrl, `/v1/workflow-runs/${encodeURIComponent(runId)}/abort`, {
         method: "POST",
       }, apiToken),
-    listSchedules: () => requestJson<SchedulesResponse>(fetchImpl, baseUrl, "/v1/schedules", undefined, apiToken),
+    listSchedules: (projectId) =>
+      requestJson<SchedulesResponse>(fetchImpl, baseUrl, withQuery("/v1/schedules", { projectId }), undefined, apiToken),
     createSchedule: (input) =>
       requestJson<ScheduleResponse>(fetchImpl, baseUrl, "/v1/schedules", {
         method: "POST",

@@ -244,6 +244,13 @@ async function main() {
   if (!workflowRuns.runs.some((run) => run.id === workflowRun.run.id)) {
     throw new Error("workflow run was not listed");
   }
+  const filteredWorkflowRuns = await client.listWorkflowRuns(defaultProject.id);
+  if (!filteredWorkflowRuns.runs.every((run) => run.projectId === defaultProject.id)) {
+    throw new Error("workflow runs should support project filtering");
+  }
+  if (!filteredWorkflowRuns.runs.some((run) => run.id === workflowRun.run.id)) {
+    throw new Error("project-filtered workflow runs should include the default project run");
+  }
   const loadedWorkflowRun = await client.getWorkflowRun(workflowRun.run.id);
   if (loadedWorkflowRun.run.id !== workflowRun.run.id) {
     throw new Error("workflow run lookup returned the wrong run");
@@ -282,7 +289,7 @@ async function main() {
   }
   if (!unavailablePiWorkflowFailed) throw new Error("unavailable pi-package workflow should fail");
 
-  const schedulesBefore = await client.listSchedules();
+  const schedulesBefore = await client.listSchedules(defaultProject.id);
   if (!Array.isArray(schedulesBefore.schedules)) throw new Error("schedules response is invalid");
   const schedule = await client.createSchedule({
     name: "check workflow schedule",
@@ -294,6 +301,16 @@ async function main() {
       inputs: { source: "scripts/check.ts" },
     },
   });
+  if (schedule.schedule.action.projectId !== defaultProject.id) {
+    throw new Error("schedule action should default to the default project");
+  }
+  const filteredSchedules = await client.listSchedules(defaultProject.id);
+  if (!filteredSchedules.schedules.some((item) => item.id === schedule.schedule.id)) {
+    throw new Error("project-filtered schedules should include the default project schedule");
+  }
+  if (!filteredSchedules.schedules.every((item) => item.action.projectId === defaultProject.id)) {
+    throw new Error("schedules should support project filtering");
+  }
   if (schedule.schedule.status !== "active" || !schedule.schedule.nextRunAt) {
     throw new Error("created schedule response is invalid");
   }

@@ -393,12 +393,16 @@ export class ZuuDaemon {
   }
 
   startWorkflow(workflowId: string, request: StartWorkflowRequest = {}) {
-    if (request.projectId) this.projectStore.get(request.projectId);
-    return this.createWorkflowBackend().start(workflowId, request);
+    return this.createWorkflowBackend().start(workflowId, {
+      ...request,
+      projectId: this.projectStore.get(request.projectId).id,
+    });
   }
 
-  listWorkflowRuns() {
-    return this.createWorkflowBackend().listRuns();
+  async listWorkflowRuns(projectId?: string) {
+    if (projectId) this.projectStore.get(projectId);
+    const runs = await this.createWorkflowBackend().listRuns();
+    return runs.filter((run) => !projectId || run.projectId === projectId);
   }
 
   getWorkflowRun(runId: string) {
@@ -418,12 +422,20 @@ export class ZuuDaemon {
     return finalRun;
   }
 
-  listSchedules() {
-    return this.scheduleStore.list();
+  listSchedules(projectId?: string) {
+    if (projectId) this.projectStore.get(projectId);
+    return this.scheduleStore.list(projectId);
   }
 
   createSchedule(request: CreateScheduleRequest) {
-    return this.scheduleStore.create(request);
+    const projectId = this.projectStore.get(request.action.projectId).id;
+    return this.scheduleStore.create({
+      ...request,
+      action: {
+        ...request.action,
+        projectId,
+      },
+    });
   }
 
   getSchedule(scheduleId: string) {

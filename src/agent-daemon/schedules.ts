@@ -129,8 +129,8 @@ export class ScheduleStore {
     this.rescheduleAll();
   }
 
-  list() {
-    return this.sortedSchedules();
+  list(projectId?: string) {
+    return this.sortedSchedules().filter((schedule) => !projectId || schedule.action.projectId === projectId);
   }
 
   get(scheduleId: string) {

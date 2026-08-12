@@ -87,7 +87,7 @@ ZUU_PI_WORKFLOW_RUN=1 pnpm check:pi-workflow
 - `POST /v1/sessions/:sessionId/import`
 
 浏览器 UI 通过 `@zuu/client` 调用 daemon API，业务请求不再散落手写 `fetch` 和 SSE 解析逻辑。
-Project 已作为一等资源持久化在 `.zuu/pi-agent/projects.json`。Daemon 启动后会提供一个稳定的 `default` 项目指向当前仓库；新建 session、prompt、workflow 和 schedule action 都可以传 `projectId`，`GET /v1/runs` 与 `GET /v1/session-files` 支持按项目过滤。直接传 `cwd` 创建 session 时会复用同 cwd 的已有 Project，缺失时才创建新记录；后续建议使用 `projectId`。
+Project 已作为一等资源持久化在 `.zuu/pi-agent/projects.json`。Daemon 启动后会提供一个稳定的 `default` 项目指向当前仓库；新建 session、prompt、workflow 和 schedule action 都可以传 `projectId`，`GET /v1/runs`、`GET /v1/session-files`、`GET /v1/workflow-runs` 与 `GET /v1/schedules` 支持按项目过滤。直接传 `cwd` 创建 session 时会复用同 cwd 的已有 Project，缺失时才创建新记录；workflow 和 schedule 未传 `projectId` 时会归属到 `default`。后续建议使用 `projectId`。
 
 默认情况下，Zuu 会把 Pi 应用状态存放在 `.zuu/pi-agent`，嵌入式应用不需要写入 `~/.pi/agent`。可以通过 `ZUU_AGENT_DIR` 覆盖。
 

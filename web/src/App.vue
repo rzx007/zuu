@@ -410,11 +410,11 @@ async function loadWorkflows() {
 }
 
 async function loadWorkflowRuns() {
-  workflowRuns.value = (await client.listWorkflowRuns()).runs
+  workflowRuns.value = (await client.listWorkflowRuns(currentProjectId())).runs
 }
 
 async function loadSchedules() {
-  schedules.value = (await client.listSchedules()).schedules
+  schedules.value = (await client.listSchedules(currentProjectId())).schedules
 }
 
 async function refreshAll() {

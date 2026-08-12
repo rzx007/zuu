@@ -49,6 +49,10 @@ for await (const event of client.prompt({
 })) {
   console.log(event.type);
 }
+
+const projectRuns = await client.listRuns(undefined, currentProjectId);
+const workflowRuns = await client.listWorkflowRuns(currentProjectId);
+const schedules = await client.listSchedules(currentProjectId);
 ```
 
 ## 错误处理
