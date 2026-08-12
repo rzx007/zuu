@@ -333,14 +333,15 @@ export class ZuuDaemon {
     this.persistRuns();
   }
 
-  getRun(runId: string) {
+  getRun(runId: string, projectId?: string) {
     const run = this.runs.get(runId);
     if (!run) throw new Error(`Unknown run: ${runId}`);
+    if (projectId && run.projectId !== projectId) throw new Error(`Unknown run: ${runId}`);
     return run;
   }
 
-  listRunEvents(runId: string, afterEventId?: string) {
-    this.getRun(runId);
+  listRunEvents(runId: string, afterEventId?: string, projectId?: string) {
+    this.getRun(runId, projectId);
     return this.runEventStore.list(runId, afterEventId);
   }
 
@@ -390,15 +391,16 @@ export class ZuuDaemon {
     });
   }
 
-  listWorkflows() {
+  listWorkflows(projectId?: string) {
+    if (projectId) this.projectStore.get(projectId);
     const backend = this.createWorkflowBackend();
     return backend.listDefinitions().then((workflows) => ({ workflows, backend: backend.getInfo() }));
   }
 
-  startWorkflow(workflowId: string, request: StartWorkflowRequest = {}) {
+  startWorkflow(workflowId: string, request: StartWorkflowRequest = {}, projectId?: string) {
     return this.createWorkflowBackend().start(workflowId, {
       ...request,
-      projectId: this.projectStore.get(request.projectId).id,
+      projectId: this.projectStore.get(projectId ?? request.projectId).id,
     });
   }
 
@@ -408,11 +410,15 @@ export class ZuuDaemon {
     return runs.filter((run) => !projectId || run.projectId === projectId);
   }
 
-  getWorkflowRun(runId: string) {
-    return this.createWorkflowBackend().getRun(runId);
+  async getWorkflowRun(runId: string, projectId?: string) {
+    if (projectId) this.projectStore.get(projectId);
+    const run = await this.createWorkflowBackend().getRun(runId);
+    if (projectId && run.projectId !== projectId) throw new Error(`Unknown workflow run: ${runId}`);
+    return run;
   }
 
-  abortWorkflowRun(runId: string) {
+  async abortWorkflowRun(runId: string, projectId?: string) {
+    await this.getWorkflowRun(runId, projectId);
     return this.createWorkflowBackend().abort(runId);
   }
 
@@ -430,8 +436,8 @@ export class ZuuDaemon {
     return this.scheduleStore.list(projectId);
   }
 
-  createSchedule(request: CreateScheduleRequest) {
-    const projectId = this.projectStore.get(request.action.projectId).id;
+  createSchedule(request: CreateScheduleRequest, projectIdOverride?: string) {
+    const projectId = this.projectStore.get(projectIdOverride ?? request.action.projectId).id;
     return this.scheduleStore.create({
       ...request,
       action: {
@@ -441,23 +447,30 @@ export class ZuuDaemon {
     });
   }
 
-  getSchedule(scheduleId: string) {
-    return this.scheduleStore.get(scheduleId);
+  getSchedule(scheduleId: string, projectId?: string) {
+    if (projectId) this.projectStore.get(projectId);
+    const schedule = this.scheduleStore.get(scheduleId);
+    if (projectId && schedule.action.projectId !== projectId) throw new Error(`Unknown schedule: ${scheduleId}`);
+    return schedule;
   }
 
-  pauseSchedule(scheduleId: string) {
+  pauseSchedule(scheduleId: string, projectId?: string) {
+    this.getSchedule(scheduleId, projectId);
     return this.scheduleStore.pause(scheduleId);
   }
 
-  resumeSchedule(scheduleId: string) {
+  resumeSchedule(scheduleId: string, projectId?: string) {
+    this.getSchedule(scheduleId, projectId);
     return this.scheduleStore.resume(scheduleId);
   }
 
-  triggerSchedule(scheduleId: string) {
+  triggerSchedule(scheduleId: string, projectId?: string) {
+    this.getSchedule(scheduleId, projectId);
     return this.scheduleStore.trigger(scheduleId);
   }
 
-  deleteSchedule(scheduleId: string) {
+  deleteSchedule(scheduleId: string, projectId?: string) {
+    this.getSchedule(scheduleId, projectId);
     return this.scheduleStore.delete(scheduleId);
   }
 

@@ -376,10 +376,10 @@ async function loadProjects() {
 }
 
 async function loadRuns() {
-  runs.value = (await client.listRuns(undefined, currentProjectId())).runs
+  runs.value = (await client.listProjectRuns(currentProjectId())).runs
   await Promise.all(
     runs.value.slice(0, 10).map(async (run) => {
-      runEventCounts[run.id] = (await client.listRunEvents(run.id)).events.length
+      runEventCounts[run.id] = (await client.listProjectRunEvents(currentProjectId(), run.id)).events.length
     }),
   )
 }
@@ -401,7 +401,7 @@ async function loadApprovals() {
 }
 
 async function loadWorkflows() {
-  const response = await client.listWorkflows()
+  const response = await client.listProjectWorkflows(currentProjectId())
   workflows.value = response.workflows
   workflowBackend.value = response.backend
   if (!selectedWorkflowId.value && workflows.value[0]) {
@@ -410,11 +410,11 @@ async function loadWorkflows() {
 }
 
 async function loadWorkflowRuns() {
-  workflowRuns.value = (await client.listWorkflowRuns(currentProjectId())).runs
+  workflowRuns.value = (await client.listProjectWorkflowRuns(currentProjectId())).runs
 }
 
 async function loadSchedules() {
-  schedules.value = (await client.listSchedules(currentProjectId())).schedules
+  schedules.value = (await client.listProjectSchedules(currentProjectId())).schedules
 }
 
 async function refreshAll() {
@@ -610,8 +610,7 @@ async function resolveApproval(approval: Approval, decision: ApprovalDecision) {
 
 async function startWorkflow() {
   if (!selectedWorkflowId.value) return
-  const result = await client.startWorkflow(selectedWorkflowId.value, {
-    projectId: currentProjectId(),
+  const result = await client.startProjectWorkflow(currentProjectId(), selectedWorkflowId.value, {
     sessionId: currentSession.value?.id,
     prompt: workflowPrompt.value.trim() || undefined,
     inputs: {
@@ -624,7 +623,7 @@ async function startWorkflow() {
 }
 
 async function abortWorkflowRun(runId: string) {
-  const result = await client.abortWorkflowRun(runId)
+  const result = await client.abortProjectWorkflowRun(currentProjectId(), runId)
   addMessage('event', `workflow ${result.run.status}: ${result.run.workflowName}`)
   await loadWorkflowRuns()
 }
@@ -665,7 +664,7 @@ async function createSchedule() {
     scheduleKind.value === 'once'
       ? { kind: 'once' as const, runAt: new Date(scheduleRunAt.value).toISOString() }
       : { kind: 'interval' as const, everyMs: everyMinutes * 60_000 }
-  const result = await client.createSchedule({
+  const result = await client.createProjectSchedule(currentProjectId(), {
     name: scheduleName.value.trim() || undefined,
     trigger,
     action,
@@ -675,31 +674,31 @@ async function createSchedule() {
 }
 
 async function pauseSchedule(scheduleId: string) {
-  const result = await client.pauseSchedule(scheduleId)
+  const result = await client.pauseProjectSchedule(currentProjectId(), scheduleId)
   addMessage('event', `schedule paused: ${result.schedule.name}`)
   await loadSchedules()
 }
 
 async function resumeSchedule(scheduleId: string) {
-  const result = await client.resumeSchedule(scheduleId)
+  const result = await client.resumeProjectSchedule(currentProjectId(), scheduleId)
   addMessage('event', `schedule active: ${result.schedule.name}`)
   await loadSchedules()
 }
 
 async function triggerSchedule(scheduleId: string) {
-  const result = await client.triggerSchedule(scheduleId)
+  const result = await client.triggerProjectSchedule(currentProjectId(), scheduleId)
   addMessage('event', `schedule triggered: ${result.schedule.name}`)
   await Promise.all([loadSchedules(), loadWorkflowRuns(), loadRuns()])
 }
 
 async function deleteSchedule(scheduleId: string) {
-  const result = await client.deleteSchedule(scheduleId)
+  const result = await client.deleteProjectSchedule(currentProjectId(), scheduleId)
   addMessage('event', `schedule deleted: ${result.schedule.name}`)
   await loadSchedules()
 }
 
 async function replayRunEvents(runId: string) {
-  const events = (await client.listRunEvents(runId)).events
+  const events = (await client.listProjectRunEvents(currentProjectId(), runId)).events
   addMessage('event', `replayed ${events.length} stored events for run ${runId.slice(0, 8)}`)
   const transcript = events
     .map((event) => {

@@ -78,6 +78,25 @@ export interface ZuuClient {
   createProjectSession(projectId: string, input?: Omit<CreateSessionRequest, "projectId">): Promise<SessionResponse>;
   listProjectStoredSessions(projectId: string): Promise<StoredSessionsResponse>;
   openProjectSession(projectId: string, input: Omit<OpenSessionRequest, "projectId">): Promise<SessionResponse>;
+  listProjectRuns(projectId: string, sessionId?: string): Promise<RunsResponse>;
+  getProjectRun(projectId: string, runId: string): Promise<RunResponse>;
+  listProjectRunEvents(projectId: string, runId: string, afterEventId?: string): Promise<RunEventsResponse>;
+  listProjectWorkflows(projectId: string): Promise<WorkflowsResponse>;
+  startProjectWorkflow(
+    projectId: string,
+    workflowId: string,
+    input?: Omit<StartWorkflowRequest, "projectId">,
+  ): Promise<WorkflowRunResponse>;
+  listProjectWorkflowRuns(projectId: string): Promise<WorkflowRunsResponse>;
+  getProjectWorkflowRun(projectId: string, runId: string): Promise<WorkflowRunResponse>;
+  abortProjectWorkflowRun(projectId: string, runId: string): Promise<WorkflowRunResponse>;
+  listProjectSchedules(projectId: string): Promise<SchedulesResponse>;
+  createProjectSchedule(projectId: string, input: CreateScheduleRequest): Promise<ScheduleResponse>;
+  getProjectSchedule(projectId: string, scheduleId: string): Promise<ScheduleResponse>;
+  pauseProjectSchedule(projectId: string, scheduleId: string): Promise<ScheduleResponse>;
+  resumeProjectSchedule(projectId: string, scheduleId: string): Promise<ScheduleResponse>;
+  triggerProjectSchedule(projectId: string, scheduleId: string): Promise<ScheduleResponse>;
+  deleteProjectSchedule(projectId: string, scheduleId: string): Promise<ScheduleResponse>;
   addPackage(input: PackageMutationRequest): Promise<PackagesResponse>;
   installPackage(input: PackageMutationRequest): Promise<PackageInstallResponse>;
   updatePackage(input: PackageMutationRequest): Promise<PackageOperationStartResponse>;
@@ -312,6 +331,128 @@ export function createZuuClient(options: ZuuClientOptions = {}): ZuuClient {
         method: "POST",
         body: JSON.stringify(input),
       }, apiToken),
+    listProjectRuns: (projectId, sessionId) =>
+      requestJson<RunsResponse>(
+        fetchImpl,
+        baseUrl,
+        withQuery(`/v1/projects/${encodeURIComponent(projectId)}/runs`, { sessionId }),
+        undefined,
+        apiToken,
+      ),
+    getProjectRun: (projectId, runId) =>
+      requestJson<RunResponse>(
+        fetchImpl,
+        baseUrl,
+        `/v1/projects/${encodeURIComponent(projectId)}/runs/${encodeURIComponent(runId)}`,
+        undefined,
+        apiToken,
+      ),
+    listProjectRunEvents: (projectId, runId, afterEventId) =>
+      requestJson<RunEventsResponse>(
+        fetchImpl,
+        baseUrl,
+        withQuery(`/v1/projects/${encodeURIComponent(projectId)}/runs/${encodeURIComponent(runId)}/events`, {
+          afterEventId,
+        }),
+        undefined,
+        apiToken,
+      ),
+    listProjectWorkflows: (projectId) =>
+      requestJson<WorkflowsResponse>(
+        fetchImpl,
+        baseUrl,
+        `/v1/projects/${encodeURIComponent(projectId)}/workflows`,
+        undefined,
+        apiToken,
+      ),
+    startProjectWorkflow: (projectId, workflowId, input = {}) =>
+      requestJson<WorkflowRunResponse>(
+        fetchImpl,
+        baseUrl,
+        `/v1/projects/${encodeURIComponent(projectId)}/workflows/${encodeURIComponent(workflowId)}/runs`,
+        {
+          method: "POST",
+          body: JSON.stringify(input),
+        },
+        apiToken,
+      ),
+    listProjectWorkflowRuns: (projectId) =>
+      requestJson<WorkflowRunsResponse>(
+        fetchImpl,
+        baseUrl,
+        `/v1/projects/${encodeURIComponent(projectId)}/workflow-runs`,
+        undefined,
+        apiToken,
+      ),
+    getProjectWorkflowRun: (projectId, runId) =>
+      requestJson<WorkflowRunResponse>(
+        fetchImpl,
+        baseUrl,
+        `/v1/projects/${encodeURIComponent(projectId)}/workflow-runs/${encodeURIComponent(runId)}`,
+        undefined,
+        apiToken,
+      ),
+    abortProjectWorkflowRun: (projectId, runId) =>
+      requestJson<WorkflowRunResponse>(
+        fetchImpl,
+        baseUrl,
+        `/v1/projects/${encodeURIComponent(projectId)}/workflow-runs/${encodeURIComponent(runId)}/abort`,
+        { method: "POST" },
+        apiToken,
+      ),
+    listProjectSchedules: (projectId) =>
+      requestJson<SchedulesResponse>(
+        fetchImpl,
+        baseUrl,
+        `/v1/projects/${encodeURIComponent(projectId)}/schedules`,
+        undefined,
+        apiToken,
+      ),
+    createProjectSchedule: (projectId, input) =>
+      requestJson<ScheduleResponse>(fetchImpl, baseUrl, `/v1/projects/${encodeURIComponent(projectId)}/schedules`, {
+        method: "POST",
+        body: JSON.stringify(input),
+      }, apiToken),
+    getProjectSchedule: (projectId, scheduleId) =>
+      requestJson<ScheduleResponse>(
+        fetchImpl,
+        baseUrl,
+        `/v1/projects/${encodeURIComponent(projectId)}/schedules/${encodeURIComponent(scheduleId)}`,
+        undefined,
+        apiToken,
+      ),
+    pauseProjectSchedule: (projectId, scheduleId) =>
+      requestJson<ScheduleResponse>(
+        fetchImpl,
+        baseUrl,
+        `/v1/projects/${encodeURIComponent(projectId)}/schedules/${encodeURIComponent(scheduleId)}/pause`,
+        { method: "POST" },
+        apiToken,
+      ),
+    resumeProjectSchedule: (projectId, scheduleId) =>
+      requestJson<ScheduleResponse>(
+        fetchImpl,
+        baseUrl,
+        `/v1/projects/${encodeURIComponent(projectId)}/schedules/${encodeURIComponent(scheduleId)}/resume`,
+        { method: "POST" },
+        apiToken,
+      ),
+    triggerProjectSchedule: (projectId, scheduleId) =>
+      requestJson<ScheduleResponse>(
+        fetchImpl,
+        baseUrl,
+        `/v1/projects/${encodeURIComponent(projectId)}/schedules/${encodeURIComponent(scheduleId)}/trigger`,
+        { method: "POST" },
+        apiToken,
+      ),
+    deleteProjectSchedule: (projectId, scheduleId) =>
+      requestJson<ScheduleResponse>(
+        fetchImpl,
+        baseUrl,
+        `/v1/projects/${encodeURIComponent(projectId)}/schedules/${encodeURIComponent(scheduleId)}`,
+        { method: "DELETE" },
+        apiToken,
+      ),
     addPackage: (input) =>
       requestJson<PackagesResponse>(fetchImpl, baseUrl, "/v1/packages", {
         method: "POST",

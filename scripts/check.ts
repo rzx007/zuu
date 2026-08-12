@@ -152,6 +152,10 @@ async function main() {
   if (projectStoredSessions.sessions.some((session) => session.projectId !== project.project.id)) {
     throw new Error("project stored sessions should include the filtered projectId");
   }
+  const projectRuns = await client.listProjectRuns(project.project.id);
+  if (!Array.isArray(projectRuns.runs)) {
+    throw new Error("project-scoped runs response is invalid");
+  }
   const deletedProject = await client.deleteProject(project.project.id);
   if (deletedProject.project.id !== project.project.id) {
     throw new Error("project delete returned the wrong project");
@@ -160,6 +164,7 @@ async function main() {
   await expectClientError(() => client.deleteProject("default"), { status: 400, code: "validation_failed" });
   await expectClientError(() => client.createProject({ cwd: ".." }), { status: 400, code: "validation_failed" });
   await expectClientError(() => client.listRunEvents("missing"), { status: 404, code: "not_found" });
+  await expectClientError(() => client.listProjectRunEvents(defaultProject.id, "missing"), { status: 404, code: "not_found" });
   const missingEventStream = await fetchFromApp("http://zuu.local/v1/events?runId=missing");
   if (missingEventStream.status !== 404) throw new Error("missing event stream run should fail before streaming");
 
@@ -229,15 +234,14 @@ async function main() {
     throw new Error("event stream client should report open/reconnect, reconnect with Last-Event-ID, dedupe events, and ignore heartbeats");
   }
 
-  const workflows = await client.listWorkflows();
+  const workflows = await client.listProjectWorkflows(defaultProject.id);
   if (!Array.isArray(workflows.workflows) || workflows.workflows.length === 0) {
     throw new Error("workflows response is invalid");
   }
   if (workflows.backend.kind !== "fake" || workflows.backend.status !== "ready") {
     throw new Error("workflow backend info is invalid");
   }
-  const workflowRun = await client.startWorkflow(workflows.workflows[0].id, {
-    projectId: defaultProject.id,
+  const workflowRun = await client.startProjectWorkflow(defaultProject.id, workflows.workflows[0].id, {
     prompt: "contract check",
     inputs: { source: "scripts/check.ts" },
   });
@@ -251,25 +255,26 @@ async function main() {
   if (!workflowRuns.runs.some((run) => run.id === workflowRun.run.id)) {
     throw new Error("workflow run was not listed");
   }
-  const filteredWorkflowRuns = await client.listWorkflowRuns(defaultProject.id);
+  const filteredWorkflowRuns = await client.listProjectWorkflowRuns(defaultProject.id);
   if (!filteredWorkflowRuns.runs.every((run) => run.projectId === defaultProject.id)) {
-    throw new Error("workflow runs should support project filtering");
+    throw new Error("project workflow runs should stay inside the project");
   }
   if (!filteredWorkflowRuns.runs.some((run) => run.id === workflowRun.run.id)) {
     throw new Error("project-filtered workflow runs should include the default project run");
   }
-  const loadedWorkflowRun = await client.getWorkflowRun(workflowRun.run.id);
+  const loadedWorkflowRun = await client.getProjectWorkflowRun(defaultProject.id, workflowRun.run.id);
   if (loadedWorkflowRun.run.id !== workflowRun.run.id) {
     throw new Error("workflow run lookup returned the wrong run");
   }
-  const abortedWorkflowRun = await client.abortWorkflowRun(workflowRun.run.id);
+  const abortedWorkflowRun = await client.abortProjectWorkflowRun(defaultProject.id, workflowRun.run.id);
   if (abortedWorkflowRun.run.id !== workflowRun.run.id) {
     throw new Error("workflow run abort returned the wrong run");
   }
   await expectClientError(() => client.getWorkflowRun("missing"), { status: 404, code: "not_found" });
+  await expectClientError(() => client.getProjectWorkflowRun(defaultProject.id, "missing"), { status: 404, code: "not_found" });
   let missingWorkflowFailed = false;
   try {
-    await client.startWorkflow("missing");
+    await client.startProjectWorkflow(defaultProject.id, "missing");
   } catch {
     missingWorkflowFailed = true;
   }
@@ -296,9 +301,9 @@ async function main() {
   }
   if (!unavailablePiWorkflowFailed) throw new Error("unavailable pi-package workflow should fail");
 
-  const schedulesBefore = await client.listSchedules(defaultProject.id);
+  const schedulesBefore = await client.listProjectSchedules(defaultProject.id);
   if (!Array.isArray(schedulesBefore.schedules)) throw new Error("schedules response is invalid");
-  const schedule = await client.createSchedule({
+  const schedule = await client.createProjectSchedule(defaultProject.id, {
     name: "check workflow schedule",
     trigger: { kind: "interval", everyMs: 60_000 },
     action: {
@@ -311,7 +316,7 @@ async function main() {
   if (schedule.schedule.action.projectId !== defaultProject.id) {
     throw new Error("schedule action should default to the default project");
   }
-  const filteredSchedules = await client.listSchedules(defaultProject.id);
+  const filteredSchedules = await client.listProjectSchedules(defaultProject.id);
   if (!filteredSchedules.schedules.some((item) => item.id === schedule.schedule.id)) {
     throw new Error("project-filtered schedules should include the default project schedule");
   }
@@ -321,16 +326,16 @@ async function main() {
   if (schedule.schedule.status !== "active" || !schedule.schedule.nextRunAt) {
     throw new Error("created schedule response is invalid");
   }
-  const pausedSchedule = await client.pauseSchedule(schedule.schedule.id);
+  const pausedSchedule = await client.pauseProjectSchedule(defaultProject.id, schedule.schedule.id);
   if (pausedSchedule.schedule.status !== "paused" || pausedSchedule.schedule.nextRunAt) {
     throw new Error("pause schedule response is invalid");
   }
-  const resumedSchedule = await client.resumeSchedule(schedule.schedule.id);
+  const resumedSchedule = await client.resumeProjectSchedule(defaultProject.id, schedule.schedule.id);
   if (resumedSchedule.schedule.status !== "active" || !resumedSchedule.schedule.nextRunAt) {
     throw new Error("resume schedule response is invalid");
   }
   const nextRunAtBeforeTrigger = resumedSchedule.schedule.nextRunAt;
-  const triggeredSchedule = await client.triggerSchedule(schedule.schedule.id);
+  const triggeredSchedule = await client.triggerProjectSchedule(defaultProject.id, schedule.schedule.id);
   const scheduleRun = triggeredSchedule.schedule.runs[0];
   if (scheduleRun?.status !== "done" || !scheduleRun.workflowRunId) {
     throw new Error("triggered schedule response is invalid");
@@ -338,17 +343,17 @@ async function main() {
   if (triggeredSchedule.schedule.nextRunAt !== nextRunAtBeforeTrigger) {
     throw new Error("manual schedule trigger should preserve the next automatic run");
   }
-  const loadedSchedule = await client.getSchedule(schedule.schedule.id);
+  const loadedSchedule = await client.getProjectSchedule(defaultProject.id, schedule.schedule.id);
   if (loadedSchedule.schedule.id !== schedule.schedule.id) {
     throw new Error("schedule lookup returned the wrong schedule");
   }
-  const deletedSchedule = await client.deleteSchedule(schedule.schedule.id);
+  const deletedSchedule = await client.deleteProjectSchedule(defaultProject.id, schedule.schedule.id);
   if (deletedSchedule.schedule.id !== schedule.schedule.id) {
     throw new Error("delete schedule returned the wrong schedule");
   }
   let cronScheduleFailed = false;
   try {
-    await client.createSchedule({
+    await client.createProjectSchedule(defaultProject.id, {
       trigger: { kind: "cron", cron: "* * * * *" },
       action: { type: "workflow", workflowId: workflows.workflows[0].id },
     });

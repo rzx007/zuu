@@ -154,6 +154,130 @@ app.post("/v1/projects/:projectId/sessions/open", async (c) => {
   }
 });
 
+app.get("/v1/projects/:projectId/runs", (c) => {
+  try {
+    return c.json({ runs: daemon.listRuns(c.req.query("sessionId"), c.req.param("projectId")) });
+  } catch (error) {
+    return c.json(jsonError(error, 404), toStatus(error, 404));
+  }
+});
+
+app.get("/v1/projects/:projectId/runs/:runId", (c) => {
+  try {
+    return c.json({ run: daemon.getRun(c.req.param("runId"), c.req.param("projectId")) });
+  } catch (error) {
+    return c.json(jsonError(error, 404), toStatus(error, 404));
+  }
+});
+
+app.get("/v1/projects/:projectId/runs/:runId/events", (c) => {
+  try {
+    return c.json({
+      events: daemon.listRunEvents(c.req.param("runId"), c.req.query("afterEventId"), c.req.param("projectId")),
+    });
+  } catch (error) {
+    return c.json(jsonError(error, 404), toStatus(error, 404));
+  }
+});
+
+app.get("/v1/projects/:projectId/workflows", async (c) => {
+  try {
+    return c.json(await daemon.listWorkflows(c.req.param("projectId")));
+  } catch (error) {
+    return c.json(jsonError(error, 404), toStatus(error, 404));
+  }
+});
+
+app.post("/v1/projects/:projectId/workflows/:workflowId/runs", async (c) => {
+  try {
+    const body = parseStartWorkflow(await readJson(c.req, { optional: true }));
+    return c.json({ run: await daemon.startWorkflow(c.req.param("workflowId"), body, c.req.param("projectId")) }, 201);
+  } catch (error) {
+    return c.json(jsonError(error, 400), toStatus(error, 400));
+  }
+});
+
+app.get("/v1/projects/:projectId/workflow-runs", async (c) => {
+  try {
+    return c.json({ runs: await daemon.listWorkflowRuns(c.req.param("projectId")) });
+  } catch (error) {
+    return c.json(jsonError(error, 404), toStatus(error, 404));
+  }
+});
+
+app.get("/v1/projects/:projectId/workflow-runs/:runId", async (c) => {
+  try {
+    return c.json({ run: await daemon.getWorkflowRun(c.req.param("runId"), c.req.param("projectId")) });
+  } catch (error) {
+    return c.json(jsonError(error, 404), toStatus(error, 404));
+  }
+});
+
+app.post("/v1/projects/:projectId/workflow-runs/:runId/abort", async (c) => {
+  try {
+    return c.json({ run: await daemon.abortWorkflowRun(c.req.param("runId"), c.req.param("projectId")) });
+  } catch (error) {
+    return c.json(jsonError(error, 404), toStatus(error, 404));
+  }
+});
+
+app.get("/v1/projects/:projectId/schedules", (c) => {
+  try {
+    return c.json({ schedules: daemon.listSchedules(c.req.param("projectId")) });
+  } catch (error) {
+    return c.json(jsonError(error, 404), toStatus(error, 404));
+  }
+});
+
+app.post("/v1/projects/:projectId/schedules", async (c) => {
+  try {
+    const body = parseCreateSchedule(await readJson(c.req));
+    return c.json({ schedule: daemon.createSchedule(body, c.req.param("projectId")) }, 201);
+  } catch (error) {
+    return c.json(jsonError(error, 400), toStatus(error, 400));
+  }
+});
+
+app.get("/v1/projects/:projectId/schedules/:scheduleId", (c) => {
+  try {
+    return c.json({ schedule: daemon.getSchedule(c.req.param("scheduleId"), c.req.param("projectId")) });
+  } catch (error) {
+    return c.json(jsonError(error, 404), toStatus(error, 404));
+  }
+});
+
+app.post("/v1/projects/:projectId/schedules/:scheduleId/pause", (c) => {
+  try {
+    return c.json({ schedule: daemon.pauseSchedule(c.req.param("scheduleId"), c.req.param("projectId")) });
+  } catch (error) {
+    return c.json(jsonError(error, 404), toStatus(error, 404));
+  }
+});
+
+app.post("/v1/projects/:projectId/schedules/:scheduleId/resume", (c) => {
+  try {
+    return c.json({ schedule: daemon.resumeSchedule(c.req.param("scheduleId"), c.req.param("projectId")) });
+  } catch (error) {
+    return c.json(jsonError(error, 400), toStatus(error, 400));
+  }
+});
+
+app.post("/v1/projects/:projectId/schedules/:scheduleId/trigger", async (c) => {
+  try {
+    return c.json({ schedule: await daemon.triggerSchedule(c.req.param("scheduleId"), c.req.param("projectId")) });
+  } catch (error) {
+    return c.json(jsonError(error, 400), toStatus(error, 400));
+  }
+});
+
+app.delete("/v1/projects/:projectId/schedules/:scheduleId", (c) => {
+  try {
+    return c.json({ schedule: daemon.deleteSchedule(c.req.param("scheduleId"), c.req.param("projectId")) });
+  } catch (error) {
+    return c.json(jsonError(error, 404), toStatus(error, 404));
+  }
+});
+
 app.post("/v1/packages", async (c) => {
   try {
     const body = parsePackageMutation(await readJson(c.req));

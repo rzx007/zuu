@@ -50,6 +50,21 @@ ZUU_PI_WORKFLOW_RUN=1 pnpm check:pi-workflow
 - `POST /v1/projects/:projectId/sessions`
 - `GET /v1/projects/:projectId/session-files`
 - `POST /v1/projects/:projectId/sessions/open`
+- `GET /v1/projects/:projectId/runs`
+- `GET /v1/projects/:projectId/runs/:runId`
+- `GET /v1/projects/:projectId/runs/:runId/events`
+- `GET /v1/projects/:projectId/workflows`
+- `POST /v1/projects/:projectId/workflows/:workflowId/runs`
+- `GET /v1/projects/:projectId/workflow-runs`
+- `GET /v1/projects/:projectId/workflow-runs/:runId`
+- `POST /v1/projects/:projectId/workflow-runs/:runId/abort`
+- `GET /v1/projects/:projectId/schedules`
+- `POST /v1/projects/:projectId/schedules`
+- `GET /v1/projects/:projectId/schedules/:scheduleId`
+- `POST /v1/projects/:projectId/schedules/:scheduleId/pause`
+- `POST /v1/projects/:projectId/schedules/:scheduleId/resume`
+- `POST /v1/projects/:projectId/schedules/:scheduleId/trigger`
+- `DELETE /v1/projects/:projectId/schedules/:scheduleId`
 - `GET /v1/packages`
 - `POST /v1/packages`
 - `POST /v1/packages/install`
@@ -106,6 +121,8 @@ Packages 面板会区分 `configured`、`installed`、`filtered`、`trusted` / `
 API 错误统一返回 `error.message`、`error.status`、`error.retryable`、`error.code` 和可选 `error.details`。`@zuu/client` 会把非 2xx 响应映射成 `ZuuClientError`，调用方可以直接读取 `status`、`code`、`retryable` 和 `details`，不需要解析错误文案。
 
 Prompt SSE 事件会带稳定 `id` 和 `createdAt`，并按 run 写入 `.zuu/pi-agent/run-events.json`。断线后可通过 `GET /v1/runs/:runId/events?afterEventId=<event-id>` 或 `@zuu/client` 的 `listRunEvents(runId, afterEventId)` 补拉事件窗口；也可以通过 `GET /v1/events` 或 `@zuu/client.subscribeEvents()` 先 replay 历史事件再订阅 live 事件。`subscribeEvents()` 默认会保存最后事件 ID、用指数退避自动重连，并去重重复事件。WebUI 会用全局 Event Stream 面板展示 daemon live 事件，并用该事件流节流刷新 runs、approvals、session tree、schedule 和 workflow run 状态。
+
+Project 推荐使用成组路径作为主入口：Session 用 `client.createProjectSession()` 和 `client.listProjectSessions()`；Runs、Workflow Runs 与 Schedules 分别用 `client.listProjectRuns()`、`client.listProjectWorkflowRuns()`、`client.listProjectSchedules()`。全局 `/v1/runs`、`/v1/workflow-runs`、`/v1/schedules` 仍保留给诊断、迁移脚本和需要跨项目汇总的调用方。
 
 ## Client SDK
 

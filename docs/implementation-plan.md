@@ -5,6 +5,13 @@
 > 日期：2026-08-11  
 > 输入：[Spec](./spec.md) · [可行性分析](./feasibility-agent-app.md)
 
+## 当前实现进展
+
+- 已切换到 Node.js + pnpm 运行链路，环境变量通过 Node 24 原生 `--env-file-if-exists=.env` 读取。
+- Daemon 已提供 Project 注册表，并为 sessions、runs、workflow runs、schedules 提供 Project 级 API。
+- WebUI 当前优先通过 `@zuu/client` 的 `listProject*` / `createProject*` 方法访问 Project 内资源。
+- 全局列表接口保留给诊断、脚本和跨项目汇总；业务 UI 不再依赖全局接口加 `projectId` query 的模式。
+
 ## 1. 计划目标
 
 按照 Spec 实现一个可运行、可扩展的 Zuu V1：
