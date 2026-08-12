@@ -14,12 +14,11 @@ import {
   getZuuAgentDir,
 } from "./agent-daemon/environment";
 import { ApprovalService } from "./agent-daemon/approval-service";
-import { subscribeApprovalEvents } from "./agent-daemon/approval-policy";
-import { compactAgentEvent } from "./agent-daemon/events";
 import { ModelService } from "./agent-daemon/model-service";
 import { ProjectService } from "./agent-daemon/project-service";
 import { ScheduleService } from "./agent-daemon/schedule-service";
 import { PackageService } from "./agent-daemon/packages";
+import { PromptService } from "./agent-daemon/prompt-service";
 import { WorkflowService } from "./agent-daemon/workflow-service";
 import type {
   CreateScheduleRequest,
@@ -41,7 +40,6 @@ import type {
   SwitchSessionRequest,
   UpdateProjectRequest,
 } from "@zuu/client";
-import type { RunEventDraft } from "./agent-daemon/run-events";
 import { RunService } from "./agent-daemon/run-service";
 import { SessionService } from "./agent-daemon/session-service";
 
@@ -75,6 +73,12 @@ export class ZuuDaemon {
     activeRunBySessionId: this.activeRunBySessionId,
     eventBus: this.eventBus,
     startedAt: this.startedAt,
+  });
+  private readonly promptService = new PromptService({
+    sessions: this.sessionService,
+    runs: this.runService,
+    eventBus: this.eventBus,
+    activeRunBySessionId: this.activeRunBySessionId,
   });
   private readonly scheduleService = new ScheduleService({
     path: getScheduleStorePath(this.agentDir),
@@ -238,93 +242,8 @@ export class ZuuDaemon {
     return this.sessionService.summarizeSession(session);
   }
 
-  async *prompt(request: PromptRequest): AsyncGenerator<PromptStreamEvent> {
-    const session = await this.sessionService.getOrCreateSession(request);
-    this.sessionService.touchSession(session.sessionId);
-
-    if (request.tools) {
-      session.setActiveToolsByName(request.tools);
-    }
-
-    const run = this.runService.startRun({
-      sessionId: session.sessionId,
-      projectId: this.sessionService.getProjectId(session.sessionId),
-      request,
-    });
-    const runId = run.id;
-    this.activeRunBySessionId.set(session.sessionId, runId);
-    const recordAndPublish = this.runService.createEventRecorder(runId);
-
-    yield recordAndPublish({ runId, type: "session", session: this.sessionService.summarizeSession(session), run });
-
-    const queue: RunEventDraft[] = [];
-    let notify: (() => void) | undefined;
-    let finished = false;
-    let promptError: unknown;
-    let sawError = false;
-
-    const wake = () => {
-      notify?.();
-      notify = undefined;
-    };
-
-    const unsubscribe = session.subscribe((event) => {
-      const compact = compactAgentEvent(event, runId);
-      if (compact) {
-        if (compact.type === "error") sawError = true;
-        queue.push(compact);
-        wake();
-      }
-    });
-    const unsubscribeApprovalEvents = subscribeApprovalEvents(this.eventBus, runId, (event) => {
-      queue.push(event);
-      wake();
-    });
-
-    session
-      .prompt(request.prompt)
-      .catch((error) => {
-        promptError = error;
-      })
-      .finally(() => {
-        finished = true;
-        wake();
-      });
-
-    try {
-      while (!finished || queue.length > 0) {
-        const next = queue.shift();
-        if (next) {
-          yield recordAndPublish(next);
-          continue;
-        }
-
-        await new Promise<void>((resolve) => {
-          notify = resolve;
-        });
-      }
-
-      if (promptError) {
-        const message = promptError instanceof Error ? promptError.message : String(promptError);
-        run.status = run.status === "aborted" ? "aborted" : "error";
-        run.endedAt = new Date().toISOString();
-        this.runService.saveRun(run);
-        yield recordAndPublish({ runId, type: "error", message, run });
-        return;
-      }
-
-      this.sessionService.touchSession(session.sessionId);
-      run.status = run.status === "aborted" ? "aborted" : sawError ? "error" : "done";
-      run.endedAt = new Date().toISOString();
-      this.runService.saveRun(run);
-      yield recordAndPublish({ runId, type: "done", session: this.sessionService.summarizeSession(session), run });
-    } finally {
-      if (this.activeRunBySessionId.get(session.sessionId) === runId) {
-        this.activeRunBySessionId.delete(session.sessionId);
-      }
-      unsubscribeApprovalEvents();
-      unsubscribe();
-    }
+  prompt(request: PromptRequest): AsyncGenerator<PromptStreamEvent> {
+    return this.promptService.prompt(request);
   }
 
   async abort(sessionId: string) {
