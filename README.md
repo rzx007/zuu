@@ -145,7 +145,7 @@ ZUU_EXAMPLE_PROMPT="介绍一下当前项目" pnpm example:client
 
 可通过 `ZUU_WORKFLOW_BACKEND=fake` 或 `ZUU_WORKFLOW_BACKEND=pi-package` 选择 workflow 后端。`pi-package` 模式会探测 `@agwab/pi-workflow` 是否已配置、是否解析到安装路径，以及当前平台是否受支持；ready 后会通过 Pi 的 `/workflow run ...` 或 `/workflow dynamic ...` 命令发起真实 extension 工作，并把 Zuu 侧 launch 结果包装成 `WorkflowRun`。它还没有读取 `pi-workflow` board/run-state，因此阶段、任务和 artifact 仍只是 Zuu launch 层的记录。`@agwab/pi-workflow` 包页面说明原生 Windows 不支持，Windows 用户应使用 WSL2/Linux。
 
-Scheduler MVP 已支持 `once` 和 `interval` trigger，支持 prompt action 和 workflow action，记录最近 schedule runs，并可在 WebUI 中创建、暂停、恢复、手动触发和删除。`cron`、timezone、misfire policy、retry policy、abort schedule run 和真实持久队列仍是后续工作。
+Scheduler MVP 已支持 `once`、`interval` 和基础 5 字段 UTC `cron` trigger，支持 prompt action 和 workflow action，记录最近 schedule runs，并可在 WebUI 中创建、暂停、恢复、手动触发和删除。timezone、misfire policy、retry policy、abort schedule run 和真实持久队列仍是后续工作。
 
 ## WebUI
 

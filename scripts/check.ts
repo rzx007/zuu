@@ -351,16 +351,24 @@ async function main() {
   if (deletedSchedule.schedule.id !== schedule.schedule.id) {
     throw new Error("delete schedule returned the wrong schedule");
   }
-  let cronScheduleFailed = false;
+  const cronSchedule = await client.createProjectSchedule(defaultProject.id, {
+    trigger: { kind: "cron", cron: "*/5 * * * *" },
+    action: { type: "workflow", workflowId: workflows.workflows[0].id },
+  });
+  if (cronSchedule.schedule.trigger.kind !== "cron" || !cronSchedule.schedule.nextRunAt) {
+    throw new Error("cron schedule response is invalid");
+  }
+  await client.deleteProjectSchedule(defaultProject.id, cronSchedule.schedule.id);
+  let cronTimezoneFailed = false;
   try {
     await client.createProjectSchedule(defaultProject.id, {
-      trigger: { kind: "cron", cron: "* * * * *" },
+      trigger: { kind: "cron", cron: "* * * * *", timezone: "Asia/Shanghai" },
       action: { type: "workflow", workflowId: workflows.workflows[0].id },
     });
   } catch {
-    cronScheduleFailed = true;
+    cronTimezoneFailed = true;
   }
-  if (!cronScheduleFailed) throw new Error("cron schedule should fail until a backend is installed");
+  if (!cronTimezoneFailed) throw new Error("cron timezone should fail until timezone orchestration is installed");
 
   const approvals = await client.listApprovals();
   if (!Array.isArray(approvals.approvals)) throw new Error("approvals response is invalid");

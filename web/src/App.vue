@@ -93,9 +93,10 @@ const selectedWorkflowId = ref('')
 const workflowPrompt = ref('Review the current Zuu agent platform slice and produce a workflow artifact.')
 const schedules = ref<Schedule[]>([])
 const scheduleName = ref('Scheduled Zuu run')
-const scheduleKind = ref<'once' | 'interval'>('once')
+const scheduleKind = ref<'once' | 'interval' | 'cron'>('once')
 const scheduleRunAt = ref(toDatetimeLocal(new Date(Date.now() + 10 * 60_000)))
 const scheduleEveryMinutes = ref(30)
+const scheduleCron = ref('*/5 * * * *')
 const scheduleActionType = ref<'workflow' | 'prompt'>('workflow')
 const schedulePrompt = ref('Run a scheduled Zuu status check and summarize the result.')
 const messages = ref<MessageItem[]>([])
@@ -660,10 +661,15 @@ async function createSchedule() {
   const action = scheduleAction()
   if (!action) return
   const everyMinutes = Math.max(1, Number(scheduleEveryMinutes.value) || 1)
-  const trigger =
-    scheduleKind.value === 'once'
-      ? { kind: 'once' as const, runAt: new Date(scheduleRunAt.value).toISOString() }
-      : { kind: 'interval' as const, everyMs: everyMinutes * 60_000 }
+  const trigger = (() => {
+    if (scheduleKind.value === 'once') {
+      return { kind: 'once' as const, runAt: new Date(scheduleRunAt.value).toISOString() }
+    }
+    if (scheduleKind.value === 'interval') {
+      return { kind: 'interval' as const, everyMs: everyMinutes * 60_000 }
+    }
+    return { kind: 'cron' as const, cron: scheduleCron.value.trim() || '*/5 * * * *' }
+  })()
   const result = await client.createProjectSchedule(currentProjectId(), {
     name: scheduleName.value.trim() || undefined,
     trigger,
@@ -1013,6 +1019,7 @@ onUnmounted(() => {
               <select v-model="scheduleKind" class="field-input">
                 <option value="once">Once</option>
                 <option value="interval">Interval</option>
+                <option value="cron">Cron</option>
               </select>
             </label>
             <label class="field-label">
@@ -1027,9 +1034,13 @@ onUnmounted(() => {
             Run at
             <input v-model="scheduleRunAt" class="field-input" type="datetime-local">
           </label>
-          <label v-else class="field-label">
+          <label v-else-if="scheduleKind === 'interval'" class="field-label">
             Every minutes
             <input v-model.number="scheduleEveryMinutes" class="field-input" type="number" min="1">
+          </label>
+          <label v-else class="field-label">
+            Cron
+            <input v-model="scheduleCron" class="field-input" placeholder="*/5 * * * *">
           </label>
           <label v-if="scheduleActionType === 'workflow'" class="field-label">
             Workflow

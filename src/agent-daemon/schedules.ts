@@ -10,6 +10,7 @@ import { JsonFileStore } from "./json-file-store";
 const SCHEDULE_RUN_HISTORY_LIMIT = 50;
 const MAX_TIMER_DELAY_MS = 2_147_483_647;
 const MIN_INTERVAL_MS = 1_000;
+const CRON_SEARCH_LIMIT_MINUTES = 366 * 24 * 60;
 
 type PromptAction = Extract<ScheduleAction, { type: "prompt" }>;
 type WorkflowAction = Extract<ScheduleAction, { type: "workflow" }>;
@@ -77,7 +78,11 @@ function validateTrigger(trigger: ScheduleTrigger) {
   }
 
   if (trigger.kind === "cron") {
-    throw new Error("cron schedules are not supported yet");
+    if (trigger.timezone && trigger.timezone !== "UTC") {
+      throw new Error("trigger.timezone is not supported yet; omit it or use UTC");
+    }
+    parseCron(trigger.cron);
+    return;
   }
 
   throw new Error("trigger.kind must be once, interval, or cron");
@@ -112,6 +117,11 @@ function computeNextRunAt(trigger: ScheduleTrigger, after = Date.now()) {
 
   if (trigger.kind === "interval" && typeof trigger.everyMs === "number") {
     return new Date(after + trigger.everyMs).toISOString();
+  }
+
+  if (trigger.kind === "cron") {
+    const next = nextCronDate(trigger.cron, after);
+    return next?.toISOString();
   }
 
   return undefined;
@@ -311,4 +321,81 @@ export class ScheduleStore {
 
 function defaultScheduleName(action: ScheduleAction) {
   return action.type === "workflow" ? `Workflow: ${action.workflowId}` : "Prompt schedule";
+}
+
+interface CronExpression {
+  minutes: Set<number>;
+  hours: Set<number>;
+  daysOfMonth: Set<number>;
+  months: Set<number>;
+  daysOfWeek: Set<number>;
+}
+
+function parseCron(expression: unknown): CronExpression {
+  if (typeof expression !== "string" || !expression.trim()) {
+    throw new Error("trigger.cron is required");
+  }
+  const fields = expression.trim().split(/\s+/);
+  if (fields.length !== 5) {
+    throw new Error("trigger.cron must contain 5 fields");
+  }
+
+  return {
+    minutes: parseCronField(fields[0], 0, 59, "minute"),
+    hours: parseCronField(fields[1], 0, 23, "hour"),
+    daysOfMonth: parseCronField(fields[2], 1, 31, "day-of-month"),
+    months: parseCronField(fields[3], 1, 12, "month"),
+    daysOfWeek: parseCronField(fields[4], 0, 7, "day-of-week"),
+  };
+}
+
+function parseCronField(field: string, min: number, max: number, label: string) {
+  const values = new Set<number>();
+  for (const part of field.split(",")) {
+    const trimmed = part.trim();
+    if (!trimmed) throw new Error(`trigger.cron ${label} field is invalid`);
+    const [rangePart, stepPart] = trimmed.split("/", 2);
+    const step = stepPart === undefined ? 1 : Number(stepPart);
+    if (!Number.isInteger(step) || step < 1) throw new Error(`trigger.cron ${label} step is invalid`);
+
+    const [start, end] = parseCronRange(rangePart, min, max, label);
+    for (let value = start; value <= end; value += step) {
+      values.add(label === "day-of-week" && value === 7 ? 0 : value);
+    }
+  }
+  return values;
+}
+
+function parseCronRange(value: string, min: number, max: number, label: string): [number, number] {
+  if (value === "*") return [min, max];
+  const [startRaw, endRaw] = value.split("-", 2);
+  const start = Number(startRaw);
+  const end = endRaw === undefined ? start : Number(endRaw);
+  if (!Number.isInteger(start) || !Number.isInteger(end) || start < min || end > max || start > end) {
+    throw new Error(`trigger.cron ${label} range is invalid`);
+  }
+  return [start, end];
+}
+
+function nextCronDate(expression: string | undefined, after: number) {
+  const cron = parseCron(expression);
+  const cursor = new Date(after);
+  cursor.setUTCSeconds(0, 0);
+  cursor.setUTCMinutes(cursor.getUTCMinutes() + 1);
+
+  for (let i = 0; i < CRON_SEARCH_LIMIT_MINUTES; i += 1) {
+    if (matchesCronDate(cursor, cron)) return cursor;
+    cursor.setUTCMinutes(cursor.getUTCMinutes() + 1);
+  }
+  throw new Error("trigger.cron did not produce a run time within one year");
+}
+
+function matchesCronDate(date: Date, cron: CronExpression) {
+  return (
+    cron.minutes.has(date.getUTCMinutes()) &&
+    cron.hours.has(date.getUTCHours()) &&
+    cron.daysOfMonth.has(date.getUTCDate()) &&
+    cron.months.has(date.getUTCMonth() + 1) &&
+    cron.daysOfWeek.has(date.getUTCDay())
+  );
 }
