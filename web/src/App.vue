@@ -385,7 +385,7 @@ async function loadRuns() {
 }
 
 async function loadStoredSessions() {
-  storedSessions.value = (await client.listStoredSessions(undefined, currentProjectId())).sessions
+  storedSessions.value = (await client.listProjectStoredSessions(currentProjectId())).sessions
 }
 
 async function loadSessionTree() {
@@ -568,7 +568,7 @@ async function revokePackageTrust(source: string) {
 }
 
 async function openStoredSession(sessionFile: string) {
-  const { session } = await client.openSession({ sessionFile, projectId: currentProjectId() })
+  const { session } = await client.openProjectSession(currentProjectId(), { sessionFile })
   setActiveSession(session)
   addMessage('event', `opened session: ${session.id}`)
   await Promise.all([loadRuns(), loadStoredSessions(), loadSessionTree(), loadApprovals()])
@@ -588,7 +588,7 @@ async function importSession() {
   const path = importPath.value.trim()
   if (!path) return
   if (!currentSession.value) {
-    const { session } = await client.createSession({ projectId: currentProjectId(), persist: false, name: 'Import anchor' })
+    const { session } = await client.createProjectSession(currentProjectId(), { persist: false, name: 'Import anchor' })
     setActiveSession(session)
   }
   const sessionId = currentSession.value?.id

@@ -37,8 +37,7 @@ Daemon 默认提供 `default` 项目。新建项目后，优先把 `projectId` �
 const { projects } = await client.listProjects();
 const currentProjectId = projects[0]?.id ?? "default";
 
-const { session } = await client.createSession({
-  projectId: currentProjectId,
+const { session } = await client.createProjectSession(currentProjectId, {
   name: "当前项目会话",
 });
 
@@ -51,6 +50,8 @@ for await (const event of client.prompt({
 }
 
 const projectRuns = await client.listRuns(undefined, currentProjectId);
+const projectSessions = await client.listProjectSessions(currentProjectId);
+const storedSessions = await client.listProjectStoredSessions(currentProjectId);
 const workflowRuns = await client.listWorkflowRuns(currentProjectId);
 const schedules = await client.listSchedules(currentProjectId);
 ```

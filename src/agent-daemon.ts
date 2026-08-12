@@ -298,8 +298,11 @@ export class ZuuDaemon {
     return this.createSession(options);
   }
 
-  listSessions() {
-    return [...this.runtimes.values()].map((item) => this.summarizeSession(item.runtime.session));
+  listSessions(projectId?: string) {
+    if (projectId) this.projectStore.get(projectId);
+    return [...this.runtimes.values()]
+      .filter((item) => !projectId || item.projectId === projectId)
+      .map((item) => this.summarizeSession(item.runtime.session));
   }
 
   async listStoredSessions(cwd?: string, projectId?: string) {

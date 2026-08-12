@@ -130,15 +130,22 @@ async function main() {
   if (renamedProject.project.name !== "renamed check project") {
     throw new Error("project update response is invalid");
   }
-  const projectSession = await client.createSession({
-    projectId: project.project.id,
+  const projectSession = await client.createProjectSession(project.project.id, {
     persist: false,
     name: "project check",
   });
   if (projectSession.session.projectId !== project.project.id) {
     throw new Error("project session response should include projectId");
   }
-  const projectStoredSessions = await client.listStoredSessions(undefined, project.project.id);
+  const projectSessions = await client.listProjectSessions(project.project.id);
+  if (!projectSessions.sessions.some((session) => session.id === projectSession.session.id)) {
+    throw new Error("project-scoped sessions should include the project session");
+  }
+  const globalProjectSessions = await client.listSessions(project.project.id);
+  if (!globalProjectSessions.sessions.every((session) => session.projectId === project.project.id)) {
+    throw new Error("global session list should support project filtering");
+  }
+  const projectStoredSessions = await client.listProjectStoredSessions(project.project.id);
   if (!Array.isArray(projectStoredSessions.sessions)) {
     throw new Error("project stored sessions response is invalid");
   }
@@ -613,9 +620,9 @@ async function main() {
     throw new Error("newSession did not replace the active session");
   }
 
-  const persisted = await client.createSession({ name: "stored check" });
+  const persisted = await client.createProjectSession(defaultProject.id, { name: "stored check" });
   if (!persisted.session.sessionFile) throw new Error("persisted session is missing sessionFile");
-  const opened = await client.openSession({ sessionFile: persisted.session.sessionFile });
+  const opened = await client.openProjectSession(defaultProject.id, { sessionFile: persisted.session.sessionFile });
   if (opened.session.id !== persisted.session.id) throw new Error("openSession returned the wrong session");
 
   await expectClientError(() => client.getRun("missing"), { status: 404, code: "not_found" });

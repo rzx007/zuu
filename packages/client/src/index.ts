@@ -74,6 +74,10 @@ export interface ZuuClient {
   getProject(projectId: string): Promise<ProjectResponse>;
   updateProject(projectId: string, input: UpdateProjectRequest): Promise<ProjectResponse>;
   deleteProject(projectId: string): Promise<ProjectResponse>;
+  listProjectSessions(projectId: string): Promise<SessionsResponse>;
+  createProjectSession(projectId: string, input?: Omit<CreateSessionRequest, "projectId">): Promise<SessionResponse>;
+  listProjectStoredSessions(projectId: string): Promise<StoredSessionsResponse>;
+  openProjectSession(projectId: string, input: Omit<OpenSessionRequest, "projectId">): Promise<SessionResponse>;
   addPackage(input: PackageMutationRequest): Promise<PackagesResponse>;
   installPackage(input: PackageMutationRequest): Promise<PackageInstallResponse>;
   updatePackage(input: PackageMutationRequest): Promise<PackageOperationStartResponse>;
@@ -82,7 +86,7 @@ export interface ZuuClient {
   revokePackageTrust(input: PackageMutationRequest): Promise<PackagesResponse>;
   listPackageOperations(): Promise<PackageOperationsResponse>;
   getPackageOperation(operationId: string): Promise<PackageOperationResponse>;
-  listSessions(): Promise<SessionsResponse>;
+  listSessions(projectId?: string): Promise<SessionsResponse>;
   listStoredSessions(cwd?: string, projectId?: string): Promise<StoredSessionsResponse>;
   getSessionTree(sessionId: string): Promise<SessionTreeResponse>;
   listRuns(sessionId?: string, projectId?: string): Promise<RunsResponse>;
@@ -282,6 +286,32 @@ export function createZuuClient(options: ZuuClientOptions = {}): ZuuClient {
       requestJson<ProjectResponse>(fetchImpl, baseUrl, `/v1/projects/${encodeURIComponent(projectId)}`, {
         method: "DELETE",
       }, apiToken),
+    listProjectSessions: (projectId) =>
+      requestJson<SessionsResponse>(
+        fetchImpl,
+        baseUrl,
+        `/v1/projects/${encodeURIComponent(projectId)}/sessions`,
+        undefined,
+        apiToken,
+      ),
+    createProjectSession: (projectId, input = {}) =>
+      requestJson<SessionResponse>(fetchImpl, baseUrl, `/v1/projects/${encodeURIComponent(projectId)}/sessions`, {
+        method: "POST",
+        body: JSON.stringify(input),
+      }, apiToken),
+    listProjectStoredSessions: (projectId) =>
+      requestJson<StoredSessionsResponse>(
+        fetchImpl,
+        baseUrl,
+        `/v1/projects/${encodeURIComponent(projectId)}/session-files`,
+        undefined,
+        apiToken,
+      ),
+    openProjectSession: (projectId, input) =>
+      requestJson<SessionResponse>(fetchImpl, baseUrl, `/v1/projects/${encodeURIComponent(projectId)}/sessions/open`, {
+        method: "POST",
+        body: JSON.stringify(input),
+      }, apiToken),
     addPackage: (input) =>
       requestJson<PackagesResponse>(fetchImpl, baseUrl, "/v1/packages", {
         method: "POST",
@@ -322,7 +352,8 @@ export function createZuuClient(options: ZuuClientOptions = {}): ZuuClient {
         undefined,
         apiToken,
       ),
-    listSessions: () => requestJson<SessionsResponse>(fetchImpl, baseUrl, "/v1/sessions", undefined, apiToken),
+    listSessions: (projectId) =>
+      requestJson<SessionsResponse>(fetchImpl, baseUrl, withQuery("/v1/sessions", { projectId }), undefined, apiToken),
     listStoredSessions: (cwd, projectId) =>
       requestJson<StoredSessionsResponse>(
         fetchImpl,
