@@ -31,7 +31,7 @@ import { createApprovalExtension, subscribeApprovalEvents } from "./agent-daemon
 import { buildDiagnostics } from "./agent-daemon/diagnostics";
 import { compactAgentEvent, entryRole, entryText } from "./agent-daemon/events";
 import { createStatusTool } from "./agent-daemon/status-tool";
-import { FakeWorkflowBackend } from "./agent-daemon/workflows";
+import { createWorkflowBackend } from "./agent-daemon/workflows";
 import type {
   ForkSessionRequest,
   ImportSessionRequest,
@@ -78,7 +78,6 @@ export class ZuuDaemon {
   private readonly agentDir = getZuuAgentDir();
   private readonly runStorePath = getRunStorePath(this.agentDir);
   private readonly approvalStore = new ApprovalStore(getApprovalStorePath(this.agentDir));
-  private readonly workflowBackend = new FakeWorkflowBackend(getWorkflowStorePath(this.agentDir));
   private readonly activeRunBySessionId = new Map<string, string>();
   private readonly eventBus: EventBusController = createEventBus();
   private readonly runs = new Map<string, RunSummary>(
@@ -271,24 +270,33 @@ export class ZuuDaemon {
     return this.approvalStore.resolve(approvalId, request);
   }
 
+  private createWorkflowBackend() {
+    return createWorkflowBackend({
+      path: getWorkflowStorePath(this.agentDir),
+      packages: this.listPackages(),
+      requestedKind: process.env.ZUU_WORKFLOW_BACKEND,
+    });
+  }
+
   listWorkflows() {
-    return this.workflowBackend.listDefinitions();
+    const backend = this.createWorkflowBackend();
+    return backend.listDefinitions().then((workflows) => ({ workflows, backend: backend.getInfo() }));
   }
 
   startWorkflow(workflowId: string, request: StartWorkflowRequest = {}) {
-    return this.workflowBackend.start(workflowId, request);
+    return this.createWorkflowBackend().start(workflowId, request);
   }
 
   listWorkflowRuns() {
-    return this.workflowBackend.listRuns();
+    return this.createWorkflowBackend().listRuns();
   }
 
   getWorkflowRun(runId: string) {
-    return this.workflowBackend.getRun(runId);
+    return this.createWorkflowBackend().getRun(runId);
   }
 
   abortWorkflowRun(runId: string) {
-    return this.workflowBackend.abort(runId);
+    return this.createWorkflowBackend().abort(runId);
   }
 
   private getManagedRuntime(sessionId: string) {
@@ -513,7 +521,7 @@ export class ZuuDaemon {
   }
 
   async diagnostics() {
-    return buildDiagnostics(await this.modelRuntimePromise, this.listSessions()[0]?.model);
+    return buildDiagnostics(await this.modelRuntimePromise, this.createWorkflowBackend().getInfo(), this.listSessions()[0]?.model);
   }
 
   async listModels() {

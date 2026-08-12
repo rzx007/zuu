@@ -56,6 +56,9 @@ async function main() {
   if (!Array.isArray(workflows.workflows) || workflows.workflows.length === 0) {
     throw new Error("workflows response is invalid");
   }
+  if (workflows.backend.kind !== "fake" || workflows.backend.status !== "ready") {
+    throw new Error("workflow backend info is invalid");
+  }
   const workflowRun = await client.startWorkflow(workflows.workflows[0].id, {
     prompt: "contract check",
     inputs: { source: "scripts/check.ts" },

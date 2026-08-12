@@ -4,7 +4,7 @@ import {
   type ModelRuntime,
 } from "@earendil-works/pi-coding-agent";
 import { getZuuAgentDir, packageSourceToString, sdkVersion } from "./environment";
-import type { Diagnostics } from "@zuu/client";
+import type { Diagnostics, WorkflowBackendInfo } from "@zuu/client";
 
 let sdkInfo: ReturnType<typeof sdkVersion> | undefined;
 
@@ -13,7 +13,11 @@ function getSdkInfo() {
   return sdkInfo;
 }
 
-export async function buildDiagnostics(modelRuntime: ModelRuntime, activeModel?: string): Promise<Diagnostics> {
+export async function buildDiagnostics(
+  modelRuntime: ModelRuntime,
+  workflowBackend: WorkflowBackendInfo,
+  activeModel?: string,
+): Promise<Diagnostics> {
   const cwd = process.cwd();
   const agentDir = getZuuAgentDir();
   const settingsManager = SettingsManager.create(cwd, agentDir, { projectTrusted: true });
@@ -32,6 +36,9 @@ export async function buildDiagnostics(modelRuntime: ModelRuntime, activeModel?:
   const gaps: string[] = [];
   if (!packages.some((item) => item.includes("@agwab/pi-workflow"))) {
     gaps.push("Workflow/subagent orchestration is not installed; add npm:@agwab/pi-workflow for reusable workflows.");
+  }
+  if (workflowBackend.kind === "pi-package" && workflowBackend.status !== "ready") {
+    gaps.push(workflowBackend.message ?? "Pi workflow backend is not ready.");
   }
   if (!packages.some((item) => item.includes("pi-crew"))) {
     gaps.push("Cron/interval/one-shot scheduling still needs a daemon scheduler adapter or a package such as pi-crew.");
@@ -64,6 +71,7 @@ export async function buildDiagnostics(modelRuntime: ModelRuntime, activeModel?:
       extensions: extensionResult.extensions.length,
       extensionErrors: extensionResult.errors,
       packages,
+      workflowBackend,
     },
     gaps,
   };

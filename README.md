@@ -71,6 +71,8 @@ Workflow、subagent 和 cron 风格调度目前会被诊断接口明确标记为
 
 当前 workflow API 先使用内置 `FakeWorkflowBackend`，用于验证 WorkflowDefinition、WorkflowRun、Stage、Task 和 Artifact 的 daemon/client/WebUI 合约。它会立即生成一个完成态 run，不会启动真实 subagent；真实编排仍需要后续接入 `pi-workflow` adapter。
 
+可通过 `ZUU_WORKFLOW_BACKEND=fake` 或 `ZUU_WORKFLOW_BACKEND=pi-package` 选择后端。当前 `pi-package` 模式会做显式 readiness 检查，但真实 run-state adapter 尚未绑定；因此未完成前不要把它视为生产可用。
+
 ## WebUI
 
 当前 WebUI 已迁移到 `web/` 下的 Vue + Vite 应用，浏览器侧只通过 `@zuu/client` 调用 daemon API。

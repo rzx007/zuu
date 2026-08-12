@@ -12,6 +12,7 @@ import {
   type SessionTreeEntry,
   type StoredSessionSummary,
   type ThinkingLevel,
+  type WorkflowBackendInfo,
   type WorkflowDefinition,
   type WorkflowRun,
 } from '@zuu/client'
@@ -54,6 +55,7 @@ const importPath = ref('')
 const runs = ref<RunSummary[]>([])
 const approvals = ref<Approval[]>([])
 const workflows = ref<WorkflowDefinition[]>([])
+const workflowBackend = ref<WorkflowBackendInfo>()
 const workflowRuns = ref<WorkflowRun[]>([])
 const selectedWorkflowId = ref('')
 const workflowPrompt = ref('Review the current Zuu agent platform slice and produce a workflow artifact.')
@@ -146,7 +148,9 @@ async function loadApprovals() {
 }
 
 async function loadWorkflows() {
-  workflows.value = (await client.listWorkflows()).workflows
+  const response = await client.listWorkflows()
+  workflows.value = response.workflows
+  workflowBackend.value = response.backend
   if (!selectedWorkflowId.value && workflows.value[0]) {
     selectedWorkflowId.value = workflows.value[0].id
   }
@@ -426,8 +430,11 @@ onMounted(() => {
         <section class="panel-block">
           <div class="section-title">
             <h2>Workflows</h2>
-            <Badge variant="outline">{{ workflows.length }}</Badge>
+            <Badge :variant="workflowBackend?.status === 'ready' ? 'secondary' : 'destructive'">
+              {{ workflowBackend?.kind || 'loading' }}
+            </Badge>
           </div>
+          <p class="empty-text">{{ workflowBackend?.message || `${workflows.length} workflow definitions` }}</p>
           <label class="field-label">
             Definition
             <select v-model="selectedWorkflowId" class="field-input">
@@ -437,6 +444,7 @@ onMounted(() => {
             </select>
           </label>
           <p v-if="selectedWorkflow" class="empty-text">{{ selectedWorkflow.description }}</p>
+          <p v-else-if="!workflows.length" class="empty-text">No workflow definitions available for this backend.</p>
           <Textarea v-model="workflowPrompt" class="min-h-16" />
           <Button size="sm" :disabled="!selectedWorkflowId" @click="startWorkflow().catch((error) => addMessage('error', errorMessage(error)))">Run workflow</Button>
         </section>

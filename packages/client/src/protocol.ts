@@ -203,6 +203,18 @@ export interface WorkflowDefinition {
   tags: string[];
 }
 
+export type WorkflowBackendKind = "fake" | "pi-package";
+export type WorkflowBackendStatus = "ready" | "unavailable";
+
+export interface WorkflowBackendInfo {
+  kind: WorkflowBackendKind;
+  status: WorkflowBackendStatus;
+  label: string;
+  packageInstalled: boolean;
+  packageSource?: string;
+  message?: string;
+}
+
 export interface WorkflowStage {
   id: string;
   runId: string;
@@ -261,6 +273,7 @@ export interface StartWorkflowRequest {
 
 export interface WorkflowsResponse {
   workflows: WorkflowDefinition[];
+  backend: WorkflowBackendInfo;
 }
 
 export interface WorkflowRunsResponse {
@@ -303,6 +316,7 @@ export interface Diagnostics {
     extensions: number;
     extensionErrors: Array<{ path: string; error: string }>;
     packages: string[];
+    workflowBackend: WorkflowBackendInfo;
   };
   gaps: string[];
 }

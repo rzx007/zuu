@@ -115,7 +115,7 @@ app.get("/api/runs/:runId", (c) => {
 
 app.get("/api/workflows", async (c) => {
   try {
-    return c.json({ workflows: await daemon.listWorkflows() });
+    return c.json(await daemon.listWorkflows());
   } catch (error) {
     return c.json(jsonError(error, 500), 500);
   }

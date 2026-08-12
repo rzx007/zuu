@@ -737,6 +737,7 @@ UI end-to-end
 - `GET /api/models` 已支持列出当前已认证可用模型，WebUI 可直接下拉选择。
 - `GET /api/approvals`、`GET /api/approvals/:approvalId` 和 `POST /api/approvals/:approvalId/resolve` 已支持审批列表、详情与处理，审批记录持久化到 `.zuu/pi-agent/approvals.json`。
 - `GET /api/workflows`、`POST /api/workflows/:workflowId/runs`、`GET /api/workflow-runs`、`GET /api/workflow-runs/:runId` 和 `POST /api/workflow-runs/:runId/abort` 已支持最小 workflow 合约；当前后端是 `FakeWorkflowBackend`，用于稳定 Definition/Run/Stage/Task/Artifact DTO 和 UI board，不启动真实 subagent。
+- `ZUU_WORKFLOW_BACKEND` 已支持选择 `fake` 或 `pi-package`；`pi-package` 当前只做 readiness/diagnostics 暴露，尚未绑定真实 `@agwab/pi-workflow` run-state adapter。
 - 内置 Zuu approval policy 已通过 Pi inline extension 接入 `tool_call`，默认阻断 `bash`、`edit`、`write`，并通过 prompt SSE 发出 `approval_requested`；`allow_once` 可消费一次，`allow_session` 可对同 session 的同类工具放行。
 - 可选 `ZUU_API_TOKEN` 已支持保护 `/api/*`，client 和 WebUI 都能发送 Bearer token。
 - 默认路径保护已限制 `cwd`、session 文件和 import 文件在当前项目根内；可通过 `ZUU_ALLOWED_CWD` 追加允许根目录。

@@ -2,6 +2,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import type {
   StartWorkflowRequest,
   WorkflowArtifact,
+  WorkflowBackendInfo,
   WorkflowDefinition,
   WorkflowRun,
   WorkflowRunStatus,
@@ -12,11 +13,18 @@ import type {
 const WORKFLOW_HISTORY_LIMIT = 200;
 
 export interface WorkflowBackend {
+  getInfo(): WorkflowBackendInfo;
   listDefinitions(): Promise<WorkflowDefinition[]>;
   start(workflowId: string, request: StartWorkflowRequest): Promise<WorkflowRun>;
   listRuns(): Promise<WorkflowRun[]>;
   getRun(runId: string): Promise<WorkflowRun>;
   abort(runId: string): Promise<WorkflowRun>;
+}
+
+interface WorkflowBackendOptions {
+  path: string;
+  packages: string[];
+  requestedKind?: string;
 }
 
 const FAKE_WORKFLOWS: WorkflowDefinition[] = [
@@ -115,8 +123,15 @@ function task(
 export class FakeWorkflowBackend implements WorkflowBackend {
   private readonly runs: Map<string, WorkflowRun>;
 
-  constructor(private readonly path: string) {
+  constructor(
+    private readonly path: string,
+    private readonly info: WorkflowBackendInfo,
+  ) {
     this.runs = new Map(loadWorkflowRuns(path).map((run) => [run.id, run]));
+  }
+
+  getInfo() {
+    return this.info;
   }
 
   async listDefinitions() {
@@ -220,4 +235,66 @@ export class FakeWorkflowBackend implements WorkflowBackend {
   private persist() {
     saveWorkflowRuns(this.path, [...this.runs.values()].sort((a, b) => b.startedAt.localeCompare(a.startedAt)));
   }
+}
+
+class UnavailableWorkflowBackend implements WorkflowBackend {
+  constructor(private readonly info: WorkflowBackendInfo) {}
+
+  getInfo() {
+    return this.info;
+  }
+
+  async listDefinitions() {
+    return [];
+  }
+
+  async start(): Promise<WorkflowRun> {
+    throw new Error(this.info.message ?? "Workflow backend is unavailable");
+  }
+
+  async listRuns() {
+    return [];
+  }
+
+  async getRun(runId: string): Promise<WorkflowRun> {
+    throw new Error(`Unknown workflow run: ${runId}`);
+  }
+
+  async abort(runId: string): Promise<WorkflowRun> {
+    throw new Error(`Unknown workflow run: ${runId}`);
+  }
+}
+
+function resolvePackage(packages: string[]) {
+  return packages.find((source) => source.includes("@agwab/pi-workflow"));
+}
+
+export function createWorkflowBackend(options: WorkflowBackendOptions): WorkflowBackend {
+  const packageSource = resolvePackage(options.packages);
+  const packageInstalled = Boolean(packageSource);
+  const requestedKind = options.requestedKind === "pi-package" ? "pi-package" : "fake";
+
+  if (requestedKind === "pi-package") {
+    return new UnavailableWorkflowBackend({
+      kind: "pi-package",
+      status: "unavailable",
+      label: "Pi package workflow",
+      packageInstalled,
+      packageSource,
+      message: packageInstalled
+        ? "The @agwab/pi-workflow package is configured, but Zuu has not bound its run-state adapter yet."
+        : "The @agwab/pi-workflow package is not configured. Add npm:@agwab/pi-workflow or use the fake backend.",
+    });
+  }
+
+  return new FakeWorkflowBackend(options.path, {
+    kind: "fake",
+    status: "ready",
+    label: "Fake workflow backend",
+    packageInstalled,
+    packageSource,
+    message: packageInstalled
+      ? "Fake backend is active; @agwab/pi-workflow is configured and ready for a future adapter."
+      : "Fake backend is active; install @agwab/pi-workflow before enabling the real adapter.",
+  });
 }
