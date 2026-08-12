@@ -16,6 +16,7 @@ import {
 } from "./agent-daemon/environment";
 import { ApiError } from "./http";
 import { ApprovalService } from "./agent-daemon/approval-service";
+import { ApprovalApiService } from "./agent-daemon/approval-api-service";
 import { ModelService } from "./agent-daemon/model-service";
 import { ProjectService } from "./agent-daemon/project-service";
 import { ScheduleService } from "./agent-daemon/schedule-service";
@@ -52,11 +53,11 @@ import { RunService } from "./agent-daemon/run-service";
 import { SessionService } from "./agent-daemon/session-service";
 
 export class ZuuDaemon {
-  private readonly options: { audit?: AuditService };
+  private readonly approvalApiService: ApprovalApiService;
   private readonly packageApiService: PackageApiService;
 
   constructor(options: { audit?: AuditService } = {}) {
-    this.options = options;
+    this.approvalApiService = new ApprovalApiService(this.approvalService, options.audit);
     this.packageApiService = new PackageApiService(this.packageService, options.audit);
   }
 
@@ -206,31 +207,19 @@ export class ZuuDaemon {
   }
 
   createApproval(request: CreateApprovalRequest) {
-    return this.approvalService.create(request);
+    return this.approvalApiService.createApproval(request);
   }
 
   listApprovals(status?: ApprovalStatus) {
-    return this.approvalService.listApprovals(status);
+    return this.approvalApiService.listApprovals(status);
   }
 
   getApproval(approvalId: string) {
-    return this.approvalService.getApproval(approvalId);
+    return this.approvalApiService.getApproval(approvalId);
   }
 
   resolveApproval(approvalId: string, request: ResolveApprovalRequest) {
-    try {
-      const approval = this.approvalService.resolveApproval(approvalId, request);
-      this.recordAudit("approval.resolve", approvalId, { decision: request.decision, status: approval.status });
-      return approval;
-    } catch (error) {
-      this.recordAudit(
-        "approval.resolve",
-        approvalId,
-        { decision: request.decision, error: error instanceof Error ? error.message : String(error) },
-        "failure",
-      );
-      throw error;
-    }
+    return this.approvalApiService.resolveApproval(approvalId, request);
   }
 
   listWorkflows(projectId?: string) {
@@ -412,15 +401,6 @@ export class ZuuDaemon {
     this.scheduleService.dispose();
     await this.sessionService.dispose();
     this.runService.clear();
-  }
-
-  private recordAudit(
-    action: Parameters<AuditService["record"]>[0]["action"],
-    target?: string,
-    details?: Record<string, unknown>,
-    outcome?: Parameters<AuditService["record"]>[0]["outcome"],
-  ) {
-    this.options.audit?.record({ action, target, details, outcome });
   }
 }
 

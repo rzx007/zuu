@@ -4,6 +4,8 @@ import { join } from "node:path";
 import app, { auth } from "../src/index";
 import { AuthService } from "../src/agent-daemon/auth-service";
 import { AuditService } from "../src/agent-daemon/audit-service";
+import { ApprovalApiService } from "../src/agent-daemon/approval-api-service";
+import { ApprovalService } from "../src/agent-daemon/approval-service";
 import { ApprovalStore } from "../src/agent-daemon/approval-store";
 import { createApprovalExtension } from "../src/agent-daemon/approval-policy";
 import { PackageApiService } from "../src/agent-daemon/package-api-service";
@@ -1154,6 +1156,30 @@ async function main() {
   }
   if (approvalStore.consumeGrant({ sessionId: "check-session", kind: "tool", scope: undefined })) {
     throw new Error("allow_once approval should not be reusable");
+  }
+  const approvalApiDir = mkdtempSync(join(tmpdir(), "zuu-approval-api-check-"));
+  const approvalApiAudit = new AuditService(join(approvalApiDir, "audit.json"));
+  const approvalApi = new ApprovalApiService(new ApprovalService(join(approvalApiDir, "approvals.json")), approvalApiAudit);
+  const apiApproval = approvalApi.createApproval({
+    sessionId: "api-check-session",
+    runId: "api-check-run",
+    kind: "tool",
+    title: "API approval",
+    description: "Approval API audit check",
+    risk: "medium",
+  });
+  approvalApi.resolveApproval(apiApproval.id, { decision: "deny" });
+  if (!approvalApiAudit.list({ action: "approval.resolve", outcome: "success", target: apiApproval.id }).some((event) => event.details?.status === "denied")) {
+    throw new Error("approval API resolve should record success audit events");
+  }
+  try {
+    approvalApi.resolveApproval("missing", { decision: "deny" });
+    throw new Error("missing approval API resolve should fail");
+  } catch {
+    // Expected.
+  }
+  if (!approvalApiAudit.list({ action: "approval.resolve", outcome: "failure", target: "missing" }).some((event) => event.details?.decision === "deny")) {
+    throw new Error("approval API resolve failures should be recorded in audit events");
   }
   const expiredApproval = approvalStore.create({
     sessionId: "check-session",
