@@ -120,8 +120,33 @@ function assertReadmeApiListMatchesRoutes() {
   }
 }
 
+function assertRuntimePackageManagerPolicy() {
+  const rootPackage = JSON.parse(readFileSync("package.json", "utf8")) as { packageManager?: string };
+  if (!rootPackage.packageManager?.startsWith("pnpm@")) {
+    throw new Error("root package.json should declare pnpm as the package manager");
+  }
+
+  const policyFiles = [
+    "README.md",
+    "docs/feasibility-agent-app.md",
+    "docs/implementation-plan.md",
+    "docs/protocol-v1.md",
+    "docs/spec.md",
+    "packages/client/README.md",
+    "package.json",
+    "packages/client/package.json",
+    "web/package.json",
+  ];
+  const standaloneBunPattern = /\bBun\b|\bbun\b/;
+  const offenders = policyFiles.filter((file) => standaloneBunPattern.test(readFileSync(file, "utf8")));
+  if (offenders.length) {
+    throw new Error(`Bun references should not be kept in runtime docs or package manifests: ${offenders.join(", ")}`);
+  }
+}
+
 async function main() {
   assertReadmeApiListMatchesRoutes();
+  assertRuntimePackageManagerPolicy();
   const currentApiToken = auth.currentToken();
   const authHeaders = () => ({ authorization: `Bearer ${currentApiToken}` });
   const client = createZuuClient({ baseUrl: "http://zuu.local", fetch: fetchFromApp, apiToken: currentApiToken });
