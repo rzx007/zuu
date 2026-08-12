@@ -245,6 +245,7 @@ export interface AuditEventsQuery {
   action?: AuditEventAction;
   outcome?: AuditEventOutcome;
   target?: string;
+  authScope?: AuthScope;
 }
 
 export interface SessionsResponse {

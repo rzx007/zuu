@@ -93,6 +93,13 @@ async function main() {
   if (!readScopedAuditEvents.events.some((event) => event.target === "GET /v1/projects" && event.details?.authScope === "read")) {
     throw new Error("read token API audit events should include authScope");
   }
+  const readScopeFilteredAuditEvents = await client.listAuditEvents({ action: "api.read", authScope: "read", target: "GET /v1/projects", limit: 20 });
+  if (
+    !readScopeFilteredAuditEvents.events.some((event) => event.target === "GET /v1/projects") ||
+    readScopeFilteredAuditEvents.events.some((event) => event.details?.authScope !== "read")
+  ) {
+    throw new Error("audit events should be filterable by authScope");
+  }
   await expectClientError(() => readOnlyClient.createProject({ cwd: process.cwd(), name: "read token write check" }), {
     status: 403,
     code: "forbidden",
@@ -166,11 +173,11 @@ async function main() {
     fetch: async (input) => {
       const request = input instanceof Request ? input : new Request(input);
       sawAuditRoute =
-        request.url === "http://zuu.local/v1/audit-events?limit=5&action=package.trust&outcome=success&target=npm%3Acheck";
+        request.url === "http://zuu.local/v1/audit-events?limit=5&action=package.trust&outcome=success&target=npm%3Acheck&authScope=admin";
       return Response.json({ events: [] });
     },
   });
-  await auditClient.listAuditEvents({ limit: 5, action: "package.trust", outcome: "success", target: "npm:check" });
+  await auditClient.listAuditEvents({ limit: 5, action: "package.trust", outcome: "success", target: "npm:check", authScope: "admin" });
   if (!sawAuditRoute) throw new Error("audit event client method should call the audit route");
 
   const authServiceDir = mkdtempSync(join(tmpdir(), "zuu-auth-service-check-"));
@@ -196,16 +203,18 @@ async function main() {
   }
 
   const auditService = new AuditService(join(mkdtempSync(join(tmpdir(), "zuu-audit-service-check-")), "audit.json"));
-  const auditEvent = auditService.record({ action: "package.trust", target: "npm:check", details: { source: "npm:check" } });
+  const auditEvent = auditService.record({ action: "package.trust", target: "npm:check", details: { source: "npm:check", authScope: "admin" } });
   auditService.record({ action: "package.add", target: "npm:other", outcome: "failure" });
   if (auditService.list(1).length !== 1 || auditService.list(0).length !== 1) {
     throw new Error("audit service should record and clamp event limits");
   }
   if (
     auditService.list({ action: "package.trust", outcome: "success", target: "check" }).length !== 1 ||
-    auditService.list({ action: "package.trust", outcome: "failure" }).length !== 0
+    auditService.list({ action: "package.trust", outcome: "failure" }).length !== 0 ||
+    auditService.list({ authScope: "admin" }).length !== 1 ||
+    auditService.list({ authScope: "read" }).length !== 0
   ) {
-    throw new Error("audit service should filter by action, outcome, and target");
+    throw new Error("audit service should filter by action, outcome, target, and authScope");
   }
   try {
     envAuth.rotate();
@@ -1374,6 +1383,10 @@ async function main() {
     throw new Error("audit events should be filterable by action and target");
   }
   await expectClientError(() => client.listAuditEvents({ action: "package.trust" as never, outcome: "invalid" as never }), {
+    status: 400,
+    code: "validation_failed",
+  });
+  await expectClientError(() => client.listAuditEvents({ authScope: "invalid" as never }), {
     status: 400,
     code: "validation_failed",
   });

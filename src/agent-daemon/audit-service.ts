@@ -1,4 +1,4 @@
-import type { AuditEvent, AuditEventAction, AuditEventOutcome } from "@zuu/client";
+import type { AuditEvent, AuditEventAction, AuditEventOutcome, AuthScope } from "@zuu/client";
 import { JsonFileStore } from "./json-file-store";
 
 const AUDIT_EVENT_LIMIT = 1_000;
@@ -15,6 +15,7 @@ export interface AuditEventFilter {
   action?: AuditEventAction;
   outcome?: AuditEventOutcome;
   target?: string;
+  authScope?: AuthScope;
 }
 
 export class AuditService {
@@ -38,6 +39,7 @@ export class AuditService {
       .filter((event) => !filter.action || event.action === filter.action)
       .filter((event) => !filter.outcome || event.outcome === filter.outcome)
       .filter((event) => !filter.target || event.target?.includes(filter.target))
+      .filter((event) => !filter.authScope || event.details?.authScope === filter.authScope)
       .slice(0, normalizedLimit);
   }
 

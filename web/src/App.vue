@@ -4,6 +4,7 @@ import {
   createZuuClient,
   type Approval,
   type ApprovalDecision,
+  type AuthScope,
   type AuthStatus,
   type AuditEvent,
   type AuditEventAction,
@@ -74,6 +75,7 @@ const authStatus = ref<AuthStatus>()
 const auditEvents = ref<AuditEvent[]>([])
 const auditAction = ref<'' | AuditEventAction>('')
 const auditOutcome = ref<'' | AuditEventOutcome>('')
+const auditAuthScope = ref<'' | AuthScope>('')
 const auditTarget = ref('')
 const diagnostics = ref<Diagnostics>()
 const projects = ref<ProjectSummary[]>([])
@@ -378,6 +380,7 @@ async function loadAuditEvents() {
     limit: 50,
     action: auditAction.value || undefined,
     outcome: auditOutcome.value || undefined,
+    authScope: auditAuthScope.value || undefined,
     target: auditTarget.value.trim() || undefined,
   })).events
 }
@@ -1471,7 +1474,7 @@ onUnmounted(() => {
                 <h2>Audit</h2>
                 <Button variant="ghost" size="xs" @click="loadAuditEvents">Refresh</Button>
               </div>
-              <div class="grid grid-cols-2 gap-2">
+              <div class="grid grid-cols-1 md:grid-cols-3 gap-2">
                 <select v-model="auditAction" class="field-input">
                   <option value="">Any action</option>
                   <option value="api.read">api.read</option>
@@ -1490,6 +1493,11 @@ onUnmounted(() => {
                   <option value="success">success</option>
                   <option value="failure">failure</option>
                 </select>
+                <select v-model="auditAuthScope" class="field-input">
+                  <option value="">Any scope</option>
+                  <option value="admin">admin</option>
+                  <option value="read">read</option>
+                </select>
               </div>
               <input v-model="auditTarget" class="field-input" placeholder="Target contains" @keydown.enter="loadAuditEvents">
               <div v-if="auditEvents.length" class="list-stack overflow-auto">
@@ -1499,6 +1507,7 @@ onUnmounted(() => {
                     <Badge :variant="event.outcome === 'success' ? 'secondary' : 'destructive'">{{ event.outcome }}</Badge>
                   </div>
                   <span>{{ event.createdAt }}</span>
+                  <span v-if="event.details?.authScope">{{ event.details.authScope }}</span>
                   <p v-if="event.target">{{ event.target }}</p>
                 </div>
               </div>

@@ -1,4 +1,4 @@
-import type { AuditEventAction, AuditEventOutcome } from "@zuu/client";
+import type { AuditEventAction, AuditEventOutcome, AuthScope } from "@zuu/client";
 import { buildHealth } from "../agent-daemon/health";
 import { ApiError, jsonError, toStatus } from "../http";
 import { readJson } from "../http";
@@ -18,6 +18,7 @@ const AUDIT_ACTIONS = new Set([
   "package.revoke_trust",
 ]);
 const AUDIT_OUTCOMES = new Set(["success", "failure"]);
+const AUTH_SCOPES = new Set(["admin", "read"]);
 
 export function registerCoreRoutes({ app, audit, auth, daemon }: RouteDeps) {
   app.get("/v1/health", (c) => c.json(buildHealth()));
@@ -26,12 +27,14 @@ export function registerCoreRoutes({ app, audit, auth, daemon }: RouteDeps) {
     try {
       const action = auditAction(c.req.query("action"));
       const outcome = auditOutcome(c.req.query("outcome"));
+      const authScope = authScopeFilter(c.req.query("authScope"));
       return c.json({
         events: audit.list({
           limit: Number(c.req.query("limit") ?? 100),
           action,
           outcome,
           target: c.req.query("target"),
+          authScope,
         }),
       });
     } catch (error) {
@@ -88,4 +91,10 @@ function auditOutcome(value: string | undefined): AuditEventOutcome | undefined 
   if (value === undefined) return undefined;
   if (!AUDIT_OUTCOMES.has(value)) throw new ApiError("outcome is invalid", { status: 400, code: "validation_failed", details: { field: "outcome" } });
   return value as AuditEventOutcome;
+}
+
+function authScopeFilter(value: string | undefined): AuthScope | undefined {
+  if (value === undefined) return undefined;
+  if (!AUTH_SCOPES.has(value)) throw new ApiError("authScope is invalid", { status: 400, code: "validation_failed", details: { field: "authScope" } });
+  return value as AuthScope;
 }
