@@ -1983,6 +1983,14 @@ async function main() {
   if (resolvedApproval.status !== "allowed" || resolvedApproval.decision !== "allow_once") {
     throw new Error("approval was not resolved");
   }
+  try {
+    approvalStore.resolve(pendingApproval.id, { decision: "deny" });
+    throw new Error("resolved approval should not be resolved twice");
+  } catch (error) {
+    if (!(error instanceof ApiError) || error.status !== 409 || error.code !== "approval_already_resolved") {
+      throw new Error("resolved approval should fail with approval_already_resolved");
+    }
+  }
   const consumedApproval = approvalStore.consumeGrant({ sessionId: "check-session", kind: "tool", scope: undefined });
   if (consumedApproval?.id !== pendingApproval.id || !consumedApproval.usedAt) {
     throw new Error("allow_once approval was not consumed");

@@ -5,7 +5,7 @@ import type {
   CreateApprovalRequest,
   ResolveApprovalRequest,
 } from "@zuu/client";
-import { notFound, validationError } from "../http";
+import { ApiError, notFound, validationError } from "../http";
 import { JsonFileStore } from "./json-file-store";
 
 const APPROVAL_HISTORY_LIMIT = 500;
@@ -143,7 +143,11 @@ export class ApprovalStore {
     assertDecision(request.decision);
     const approval = this.get(id);
     if (approval.status !== "pending") {
-      throw new Error(`Approval is already ${approval.status}`);
+      throw new ApiError(`Approval is already ${approval.status}`, {
+        status: 409,
+        code: "approval_already_resolved",
+        details: { approvalId: id, status: approval.status },
+      });
     }
 
     const now = new Date().toISOString();
