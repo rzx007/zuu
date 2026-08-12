@@ -76,6 +76,7 @@ const messages = ref<MessageItem[]>([])
 const isRunning = ref(false)
 const isRefreshing = ref(false)
 const controller = ref<AbortController>()
+const runEventCounts = reactive<Record<string, number>>({})
 
 const toolChoices = ['read', 'grep', 'find', 'ls', 'bash', 'edit', 'write', 'zuu_status']
 const selectedTools = reactive<Record<string, boolean>>({
@@ -160,6 +161,11 @@ async function loadModels() {
 
 async function loadRuns() {
   runs.value = (await client.listRuns(currentSession.value?.id)).runs
+  await Promise.all(
+    runs.value.slice(0, 10).map(async (run) => {
+      runEventCounts[run.id] = (await client.listRunEvents(run.id)).events.length
+    }),
+  )
 }
 
 async function loadStoredSessions() {
@@ -415,6 +421,20 @@ async function deleteSchedule(scheduleId: string) {
   const result = await client.deleteSchedule(scheduleId)
   addMessage('event', `schedule deleted: ${result.schedule.name}`)
   await loadSchedules()
+}
+
+async function replayRunEvents(runId: string) {
+  const events = (await client.listRunEvents(runId)).events
+  addMessage('event', `replayed ${events.length} stored events for run ${runId.slice(0, 8)}`)
+  const transcript = events
+    .map((event) => {
+      if (event.type === 'text_delta') return event.delta || ''
+      if (event.type === 'error') return `\n[error] ${event.message || 'Unknown agent error'}`
+      return ''
+    })
+    .join('')
+    .trim()
+  if (transcript) addMessage('agent', transcript.slice(0, 4000))
 }
 
 function scheduleTriggerLabel(schedule: Schedule) {
@@ -905,8 +925,10 @@ onUnmounted(() => {
                 <div v-for="run in runs.slice(0, 10)" :key="run.id" class="compact-row">
                   <div class="min-w-0">
                     <strong>{{ run.id.slice(0, 8) }} · {{ run.status }}</strong>
+                    <span>{{ runEventCounts[run.id] ?? 0 }} events</span>
                     <span>{{ run.prompt }}</span>
                   </div>
+                  <Button variant="outline" size="xs" @click="replayRunEvents(run.id).catch((error) => addMessage('error', errorMessage(error)))">Replay</Button>
                 </div>
               </div>
               <p v-else class="empty-text">No runs yet.</p>

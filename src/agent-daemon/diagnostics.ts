@@ -6,6 +6,7 @@ import {
   getApprovalStorePath,
   getPackageOperationStorePath,
   getPackageTrustStorePath,
+  getRunEventStorePath,
   getRunStorePath,
   getScheduleStorePath,
   getWorkflowStorePath,
@@ -52,6 +53,7 @@ export async function buildDiagnostics(
   const blockedPackages = packageView.blockedPackages;
   const stores = [
     inspectJsonStore({ name: "runs", path: getRunStorePath(agentDir), defaultValue: [] }),
+    inspectJsonStore({ name: "run-events", path: getRunEventStorePath(agentDir), defaultValue: [] }),
     inspectJsonStore({ name: "approvals", path: getApprovalStorePath(agentDir), defaultValue: [] }),
     inspectJsonStore({ name: "workflow-runs", path: getWorkflowStorePath(agentDir), defaultValue: [] }),
     inspectJsonStore({ name: "schedules", path: getScheduleStorePath(agentDir), defaultValue: [] }),

@@ -18,6 +18,7 @@ import type {
   PromptRequest,
   PromptStreamEvent,
   RunResponse,
+  RunEventsResponse,
   RunsResponse,
   ResolveApprovalRequest,
   CreateScheduleRequest,
@@ -66,6 +67,7 @@ export interface ZuuClient {
   getSessionTree(sessionId: string): Promise<SessionTreeResponse>;
   listRuns(sessionId?: string): Promise<RunsResponse>;
   getRun(runId: string): Promise<RunResponse>;
+  listRunEvents(runId: string, afterEventId?: string): Promise<RunEventsResponse>;
   listWorkflows(): Promise<WorkflowsResponse>;
   startWorkflow(workflowId: string, input?: StartWorkflowRequest): Promise<WorkflowRunResponse>;
   listWorkflowRuns(): Promise<WorkflowRunsResponse>;
@@ -175,13 +177,21 @@ function parseSseEvents(buffer: string) {
   const events: PromptStreamEvent[] = [];
 
   for (const frame of frames) {
+    const id = frame
+      .split("\n")
+      .find((line) => line.startsWith("id:"))
+      ?.slice(3)
+      .trimStart();
     const data = frame
       .split("\n")
       .filter((line) => line.startsWith("data:"))
       .map((line) => line.slice(5).trimStart())
       .join("\n");
 
-    if (data) events.push(JSON.parse(data) as PromptStreamEvent);
+    if (data) {
+      const event = JSON.parse(data) as PromptStreamEvent;
+      events.push(event.id ? event : { ...event, id });
+    }
   }
 
   return { events, rest };
@@ -257,6 +267,16 @@ export function createZuuClient(options: ZuuClientOptions = {}): ZuuClient {
         apiToken,
       ),
     getRun: (runId) => requestJson<RunResponse>(fetchImpl, baseUrl, `/api/runs/${encodeURIComponent(runId)}`, undefined, apiToken),
+    listRunEvents: (runId, afterEventId) =>
+      requestJson<RunEventsResponse>(
+        fetchImpl,
+        baseUrl,
+        afterEventId
+          ? `/api/runs/${encodeURIComponent(runId)}/events?afterEventId=${encodeURIComponent(afterEventId)}`
+          : `/api/runs/${encodeURIComponent(runId)}/events`,
+        undefined,
+        apiToken,
+      ),
     listWorkflows: () => requestJson<WorkflowsResponse>(fetchImpl, baseUrl, "/api/workflows", undefined, apiToken),
     startWorkflow: (workflowId, input = {}) =>
       requestJson<WorkflowRunResponse>(fetchImpl, baseUrl, `/api/workflows/${encodeURIComponent(workflowId)}/runs`, {

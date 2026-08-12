@@ -161,6 +161,14 @@ app.get("/api/runs/:runId", (c) => {
   }
 });
 
+app.get("/api/runs/:runId/events", (c) => {
+  try {
+    return c.json({ events: daemon.listRunEvents(c.req.param("runId"), c.req.query("afterEventId")) });
+  } catch (error) {
+    return c.json(jsonError(error, 404), toStatus(error, 404));
+  }
+});
+
 app.get("/api/workflows", async (c) => {
   try {
     return c.json(await daemon.listWorkflows());
@@ -316,7 +324,7 @@ app.post("/api/prompt", async (c) => {
     try {
       for await (const event of daemon.prompt(request)) {
         if (stream.aborted) break;
-        await stream.writeSSE({ event: event.type, data: JSON.stringify(event) });
+        await stream.writeSSE({ id: event.id, event: event.type, data: JSON.stringify(event) });
       }
     } catch (error) {
       await stream.writeSSE({

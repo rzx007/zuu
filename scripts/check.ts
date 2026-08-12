@@ -6,6 +6,7 @@ import { ApprovalStore } from "../src/agent-daemon/approval-store";
 import { createApprovalExtension } from "../src/agent-daemon/approval-policy";
 import { PackageService } from "../src/agent-daemon/packages";
 import { PackageTrustStore } from "../src/agent-daemon/package-trust";
+import { RunEventStore } from "../src/agent-daemon/run-events";
 import { loadRunHistory, saveRunHistory } from "../src/agent-daemon/run-history";
 import { createWorkflowBackend } from "../src/agent-daemon/workflows";
 import { createZuuClient, ZuuClientError } from "@zuu/client";
@@ -104,6 +105,7 @@ async function main() {
 
   const { runs } = await client.listRuns();
   if (!Array.isArray(runs)) throw new Error("runs response is invalid");
+  await expectClientError(() => client.listRunEvents("missing"), { status: 404, code: "not_found" });
 
   const workflows = await client.listWorkflows();
   if (!Array.isArray(workflows.workflows) || workflows.workflows.length === 0) {
@@ -409,6 +411,20 @@ async function main() {
   const savedPayload = JSON.parse(readFileSync(corruptRunsPath, "utf8")) as { version?: number; data?: unknown };
   if (savedPayload.version !== 1 || !Array.isArray(savedPayload.data) || savedPayload.data.length !== 1) {
     throw new Error("run history should save through the versioned JSON store");
+  }
+
+  const runEventStorePath = join(mkdtempSync(join(tmpdir(), "zuu-run-event-check-")), "run-events.json");
+  const runEventStore = new RunEventStore(runEventStorePath);
+  const recordRunEvent = runEventStore.createRecorder("event-check-run");
+  const firstRunEvent = recordRunEvent({ runId: "event-check-run", type: "text_delta", delta: "hello" });
+  const secondRunEvent = recordRunEvent({ runId: "event-check-run", type: "done" });
+  if (firstRunEvent.id !== "event-check-run:1" || secondRunEvent.id !== "event-check-run:2") {
+    throw new Error("run events should receive stable sequence IDs");
+  }
+  const reloadedRunEventStore = new RunEventStore(runEventStorePath);
+  const replayedRunEvents = reloadedRunEventStore.list("event-check-run", firstRunEvent.id);
+  if (replayedRunEvents.length !== 1 || replayedRunEvents[0]?.id !== secondRunEvent.id) {
+    throw new Error("run event replay should return events after the requested event ID");
   }
 
   const packageServiceAgentDir = mkdtempSync(join(tmpdir(), "zuu-package-service-check-"));

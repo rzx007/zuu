@@ -428,6 +428,7 @@ Diagnostics 返回模型认证状态、Package 加载错误、Project 错误和 
 - `POST /v1/sessions/:sessionId/follow-ups`
 - `POST /v1/runs/:runId/abort`
 - `GET /v1/runs/:runId`
+- `GET /v1/runs/:runId/events`
 
 Prompt 请求：
 
@@ -441,6 +442,8 @@ interface PromptRequest {
 ```
 
 当 Session 正在运行且没有指定合法 `streamingBehavior` 时，返回 `409 session_busy`。
+
+Prompt SSE 事件必须包含稳定 `id`，并至少按 Run 保留一个可查询的事件窗口。`GET /v1/runs/:runId/events` 必须返回该 Run 已存档的标准 `PromptStreamEvent` 列表，并支持通过 `afterEventId` 补拉指定事件之后的事件；如果 `afterEventId` 不存在，应返回当前窗口内全部事件。
 
 ### 7.7 Workflows
 

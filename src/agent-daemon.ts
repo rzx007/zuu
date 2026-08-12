@@ -20,6 +20,7 @@ import {
   getApprovalStorePath,
   getPackageOperationStorePath,
   getPackageTrustStorePath,
+  getRunEventStorePath,
   getRunStorePath,
   getScheduleStorePath,
   getSessionDir,
@@ -56,6 +57,7 @@ import type {
   ThinkingLevel,
 } from "@zuu/client";
 import { loadRunHistory, saveRunHistory } from "./agent-daemon/run-history";
+import { RunEventStore } from "./agent-daemon/run-events";
 
 interface ManagedRuntime {
   runtime: AgentSessionRuntime;
@@ -80,6 +82,7 @@ export class ZuuDaemon {
   private readonly runtimes = new Map<string, ManagedRuntime>();
   private readonly agentDir = getZuuAgentDir();
   private readonly runStorePath = getRunStorePath(this.agentDir);
+  private readonly runEventStore = new RunEventStore(getRunEventStorePath(this.agentDir));
   private readonly approvalStore = new ApprovalStore(getApprovalStorePath(this.agentDir));
   private readonly activeRunBySessionId = new Map<string, string>();
   private readonly eventBus: EventBusController = createEventBus();
@@ -281,6 +284,11 @@ export class ZuuDaemon {
     return run;
   }
 
+  listRunEvents(runId: string, afterEventId?: string) {
+    this.getRun(runId);
+    return this.runEventStore.list(runId, afterEventId);
+  }
+
   createApproval(request: CreateApprovalRequest) {
     return this.approvalStore.create(request);
   }
@@ -449,8 +457,9 @@ export class ZuuDaemon {
     };
     this.setRun(run);
     this.activeRunBySessionId.set(session.sessionId, runId);
+    const recordEvent = this.runEventStore.createRecorder(runId);
 
-    yield { runId, type: "session", session: this.summarizeSession(session), run };
+    yield recordEvent({ runId, type: "session", session: this.summarizeSession(session), run });
 
     const queue: PromptStreamEvent[] = [];
     let notify: (() => void) | undefined;
@@ -490,7 +499,7 @@ export class ZuuDaemon {
       while (!finished || queue.length > 0) {
         const next = queue.shift();
         if (next) {
-          yield next;
+          yield recordEvent(next);
           continue;
         }
 
@@ -504,7 +513,7 @@ export class ZuuDaemon {
         run.status = run.status === "aborted" ? "aborted" : "error";
         run.endedAt = new Date().toISOString();
         this.persistRuns();
-        yield { runId, type: "error", message, run };
+        yield recordEvent({ runId, type: "error", message, run });
         return;
       }
 
@@ -512,7 +521,7 @@ export class ZuuDaemon {
       run.status = run.status === "aborted" ? "aborted" : sawError ? "error" : "done";
       run.endedAt = new Date().toISOString();
       this.persistRuns();
-      yield { runId, type: "done", session: this.summarizeSession(session), run };
+      yield recordEvent({ runId, type: "done", session: this.summarizeSession(session), run });
     } finally {
       if (this.activeRunBySessionId.get(session.sessionId) === runId) {
         this.activeRunBySessionId.delete(session.sessionId);
