@@ -52,6 +52,44 @@ async function main() {
   const { runs } = await client.listRuns();
   if (!Array.isArray(runs)) throw new Error("runs response is invalid");
 
+  const workflows = await client.listWorkflows();
+  if (!Array.isArray(workflows.workflows) || workflows.workflows.length === 0) {
+    throw new Error("workflows response is invalid");
+  }
+  const workflowRun = await client.startWorkflow(workflows.workflows[0].id, {
+    prompt: "contract check",
+    inputs: { source: "scripts/check.ts" },
+  });
+  if (workflowRun.run.status !== "done" || workflowRun.run.stages.length === 0 || workflowRun.run.tasks.length === 0) {
+    throw new Error("workflow run response is invalid");
+  }
+  const workflowRuns = await client.listWorkflowRuns();
+  if (!workflowRuns.runs.some((run) => run.id === workflowRun.run.id)) {
+    throw new Error("workflow run was not listed");
+  }
+  const loadedWorkflowRun = await client.getWorkflowRun(workflowRun.run.id);
+  if (loadedWorkflowRun.run.id !== workflowRun.run.id) {
+    throw new Error("workflow run lookup returned the wrong run");
+  }
+  const abortedWorkflowRun = await client.abortWorkflowRun(workflowRun.run.id);
+  if (abortedWorkflowRun.run.id !== workflowRun.run.id) {
+    throw new Error("workflow run abort returned the wrong run");
+  }
+  let missingWorkflowRunFailed = false;
+  try {
+    await client.getWorkflowRun("missing");
+  } catch {
+    missingWorkflowRunFailed = true;
+  }
+  if (!missingWorkflowRunFailed) throw new Error("missing workflow run should fail");
+  let missingWorkflowFailed = false;
+  try {
+    await client.startWorkflow("missing");
+  } catch {
+    missingWorkflowFailed = true;
+  }
+  if (!missingWorkflowFailed) throw new Error("missing workflow should fail");
+
   const approvals = await client.listApprovals();
   if (!Array.isArray(approvals.approvals)) throw new Error("approvals response is invalid");
 

@@ -180,6 +180,7 @@
 
   .compact-row,
   .approval-row,
+  .workflow-row,
   .tree-row {
     @apply border-border bg-background/70 flex gap-2 border p-2 text-xs;
     border-radius: 6px;
@@ -190,20 +191,32 @@
   }
 
   .compact-row strong,
+  .workflow-row strong,
   .tree-row strong,
   .approval-row strong {
     @apply block truncate font-semibold;
   }
 
   .compact-row span,
+  .workflow-row span,
   .tree-row span,
   .approval-row p {
     @apply text-muted-foreground block overflow-hidden text-ellipsis;
   }
 
   .approval-row,
+  .workflow-row,
   .tree-row {
     @apply flex-col;
+  }
+
+  .workflow-progress {
+    @apply grid grid-cols-3 gap-1 text-center text-[11px] text-muted-foreground;
+  }
+
+  .workflow-progress span {
+    @apply bg-muted/60 px-1 py-1;
+    border-radius: 4px;
   }
 
   .approval-row p {

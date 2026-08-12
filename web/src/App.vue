@@ -12,6 +12,8 @@ import {
   type SessionTreeEntry,
   type StoredSessionSummary,
   type ThinkingLevel,
+  type WorkflowDefinition,
+  type WorkflowRun,
 } from '@zuu/client'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -51,6 +53,10 @@ const sessionTree = ref<SessionTreeEntry[]>([])
 const importPath = ref('')
 const runs = ref<RunSummary[]>([])
 const approvals = ref<Approval[]>([])
+const workflows = ref<WorkflowDefinition[]>([])
+const workflowRuns = ref<WorkflowRun[]>([])
+const selectedWorkflowId = ref('')
+const workflowPrompt = ref('Review the current Zuu agent platform slice and produce a workflow artifact.')
 const messages = ref<MessageItem[]>([])
 const isRunning = ref(false)
 const isRefreshing = ref(false)
@@ -73,6 +79,7 @@ const pendingApprovals = computed(() => approvals.value.filter((approval) => app
 const flatTree = computed(() => flattenTree(sessionTree.value))
 const statusText = computed(() => (isRunning.value ? 'running' : 'ready'))
 const configuredProviders = computed(() => diagnostics.value?.models.configuredProviders.join(', ') || 'none')
+const selectedWorkflow = computed(() => workflows.value.find((workflow) => workflow.id === selectedWorkflowId.value))
 
 function nextId() {
   messageSeq += 1
@@ -138,6 +145,17 @@ async function loadApprovals() {
   approvals.value = (await client.listApprovals()).approvals
 }
 
+async function loadWorkflows() {
+  workflows.value = (await client.listWorkflows()).workflows
+  if (!selectedWorkflowId.value && workflows.value[0]) {
+    selectedWorkflowId.value = workflows.value[0].id
+  }
+}
+
+async function loadWorkflowRuns() {
+  workflowRuns.value = (await client.listWorkflowRuns()).runs
+}
+
 async function refreshAll() {
   isRefreshing.value = true
   try {
@@ -149,6 +167,8 @@ async function refreshAll() {
       loadStoredSessions(),
       loadSessionTree(),
       loadApprovals(),
+      loadWorkflows(),
+      loadWorkflowRuns(),
     ])
   } finally {
     isRefreshing.value = false
@@ -222,6 +242,26 @@ async function resolveApproval(approval: Approval, decision: ApprovalDecision) {
   const result = await client.resolveApproval(approval.id, { decision })
   addMessage('event', `${decision}: ${result.approval.title}`)
   await Promise.all([loadApprovals(), loadRuns()])
+}
+
+async function startWorkflow() {
+  if (!selectedWorkflowId.value) return
+  const result = await client.startWorkflow(selectedWorkflowId.value, {
+    sessionId: currentSession.value?.id,
+    prompt: workflowPrompt.value.trim() || undefined,
+    inputs: {
+      tools: activeTools.value,
+      model: provider.value && modelName.value ? `${provider.value}/${modelName.value}` : undefined,
+    },
+  })
+  addMessage('event', `workflow done: ${result.run.workflowName} (${result.run.id.slice(0, 8)})`)
+  await loadWorkflowRuns()
+}
+
+async function abortWorkflowRun(runId: string) {
+  const result = await client.abortWorkflowRun(runId)
+  addMessage('event', `workflow ${result.run.status}: ${result.run.workflowName}`)
+  await loadWorkflowRuns()
 }
 
 async function sendPrompt() {
@@ -385,6 +425,24 @@ onMounted(() => {
 
         <section class="panel-block">
           <div class="section-title">
+            <h2>Workflows</h2>
+            <Badge variant="outline">{{ workflows.length }}</Badge>
+          </div>
+          <label class="field-label">
+            Definition
+            <select v-model="selectedWorkflowId" class="field-input">
+              <option v-for="workflow in workflows" :key="workflow.id" :value="workflow.id">
+                {{ workflow.name }}
+              </option>
+            </select>
+          </label>
+          <p v-if="selectedWorkflow" class="empty-text">{{ selectedWorkflow.description }}</p>
+          <Textarea v-model="workflowPrompt" class="min-h-16" />
+          <Button size="sm" :disabled="!selectedWorkflowId" @click="startWorkflow().catch((error) => addMessage('error', errorMessage(error)))">Run workflow</Button>
+        </section>
+
+        <section class="panel-block">
+          <div class="section-title">
             <h2>Stored Sessions</h2>
             <Badge variant="outline">{{ storedSessions.length }}</Badge>
           </div>
@@ -424,7 +482,7 @@ onMounted(() => {
             </article>
           </section>
 
-          <aside class="border-border bg-muted/20 grid min-h-0 grid-rows-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)] gap-3 border-l p-4 max-xl:border-l-0 max-xl:border-t">
+          <aside class="border-border bg-muted/20 flex min-h-0 flex-col gap-3 overflow-auto border-l p-4 max-xl:border-l-0 max-xl:border-t">
             <section class="side-panel">
               <div class="section-title">
                 <h2>Approvals</h2>
@@ -445,6 +503,30 @@ onMounted(() => {
                 </div>
               </div>
               <p v-else class="empty-text">No approvals yet.</p>
+            </section>
+
+            <section class="side-panel">
+              <div class="section-title">
+                <h2>Workflow Runs</h2>
+                <Button variant="ghost" size="xs" @click="loadWorkflowRuns">Refresh</Button>
+              </div>
+              <div v-if="workflowRuns.length" class="list-stack overflow-auto">
+                <div v-for="run in workflowRuns.slice(0, 8)" :key="run.id" class="workflow-row">
+                  <div class="flex items-center justify-between gap-2">
+                    <strong>{{ run.workflowName }}</strong>
+                    <Badge :variant="run.status === 'done' ? 'secondary' : run.status === 'error' || run.status === 'aborted' ? 'destructive' : 'outline'">{{ run.status }}</Badge>
+                  </div>
+                  <span>{{ run.id.slice(0, 8) }} · {{ run.startedAt }}</span>
+                  <div class="workflow-progress">
+                    <span>{{ run.stages.length }} stages</span>
+                    <span>{{ run.tasks.length }} tasks</span>
+                    <span>{{ run.artifacts.length }} artifacts</span>
+                  </div>
+                  <p v-if="run.artifacts[0]?.content">{{ String(run.artifacts[0].content).slice(0, 180) }}</p>
+                  <Button v-if="run.status === 'queued' || run.status === 'running'" variant="outline" size="xs" @click="abortWorkflowRun(run.id).catch((error) => addMessage('error', errorMessage(error)))">Abort</Button>
+                </div>
+              </div>
+              <p v-else class="empty-text">No workflow runs yet.</p>
             </section>
 
             <section class="side-panel">

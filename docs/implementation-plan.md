@@ -736,6 +736,7 @@ UI end-to-end
 - `GET/POST/DELETE /api/packages` 已支持查看和维护 Pi package source 列表。
 - `GET /api/models` 已支持列出当前已认证可用模型，WebUI 可直接下拉选择。
 - `GET /api/approvals`、`GET /api/approvals/:approvalId` 和 `POST /api/approvals/:approvalId/resolve` 已支持审批列表、详情与处理，审批记录持久化到 `.zuu/pi-agent/approvals.json`。
+- `GET /api/workflows`、`POST /api/workflows/:workflowId/runs`、`GET /api/workflow-runs`、`GET /api/workflow-runs/:runId` 和 `POST /api/workflow-runs/:runId/abort` 已支持最小 workflow 合约；当前后端是 `FakeWorkflowBackend`，用于稳定 Definition/Run/Stage/Task/Artifact DTO 和 UI board，不启动真实 subagent。
 - 内置 Zuu approval policy 已通过 Pi inline extension 接入 `tool_call`，默认阻断 `bash`、`edit`、`write`，并通过 prompt SSE 发出 `approval_requested`；`allow_once` 可消费一次，`allow_session` 可对同 session 的同类工具放行。
 - 可选 `ZUU_API_TOKEN` 已支持保护 `/api/*`，client 和 WebUI 都能发送 Bearer token。
 - 默认路径保护已限制 `cwd`、session 文件和 import 文件在当前项目根内；可通过 `ZUU_ALLOWED_CWD` 追加允许根目录。
@@ -745,14 +746,14 @@ UI end-to-end
 
 - `@zuu/client` 已是 workspace 包，但还没有独立构建产物、版本发布流程和第三方示例。
 - run registry 已有文件持久化，但还没有 SSE 重连 replay、事件明细存档或跨进程写入协调。
-- WebUI 已迁移到 Vue + Vite，并支持打开持久化 session、查看当前 session tree、按 entry fork、从本地 JSONL 路径 import，以及处理 pending approvals。
+- WebUI 已迁移到 Vue + Vite，并支持打开持久化 session、查看当前 session tree、按 entry fork、从本地 JSONL 路径 import、处理 pending approvals，以及启动/查看 fake workflow runs。
 - Package API 只维护 source 列表，尚未接入 package 安装进度、信任确认和资源冲突 UI。
 - Approval 已接入 Pi tool call 拦截和 SSE 事件，但当前策略是 fail-closed：危险工具被阻断后需要用户 resolve 并重试 prompt，尚未实现挂起并恢复同一个 tool call 的交互式等待。
 - 当前 API token 是单 token 配置，尚未实现 token 轮换、权限分级和审计日志。
 - 路径保护是根目录级 allowlist，尚未做到按工具/动作细粒度授权。
 - 默认工具集偏只读，`bash`、`edit`、`write` 需要 UI 显式启用。
 - 当前环境下真实模型 stream 可能因为网络返回 `Connection error`；daemon 已将 SDK assistant error 映射为 SSE error。
-- Workflow/subagent/scheduler 尚未安装 packages，diagnostics 会明确报告缺口。
+- Workflow/subagent/scheduler 尚未安装真实 packages，diagnostics 会明确报告缺口；当前 fake workflow backend 只用于 API/Client/UI 合约验证。
 
-后续计划应从此切片继续收敛，而不是另起炉灶：Client workspace 包、run registry 持久化、package source 管理、approval tool-call 拦截和 Vue WebUI approval 操作面已经落地，接下来应优先推进 workflow adapter 和 scheduler backend。
+后续计划应从此切片继续收敛，而不是另起炉灶：Client workspace 包、run registry 持久化、package source 管理、approval tool-call 拦截、Vue WebUI approval 操作面和 fake workflow 合约已经落地，接下来应优先把 `FakeWorkflowBackend` 替换/桥接到真实 `pi-workflow` adapter，再推进 scheduler backend。
 

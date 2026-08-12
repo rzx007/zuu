@@ -32,6 +32,10 @@ export function getApprovalStorePath(agentDir: string) {
   return join(agentDir, "approvals.json");
 }
 
+export function getWorkflowStorePath(agentDir: string) {
+  return join(agentDir, "workflow-runs.json");
+}
+
 function normalizePathForCompare(pathname: string) {
   const resolved = resolve(pathname);
   return process.platform === "win32" ? resolved.toLowerCase() : resolved;

@@ -21,6 +21,7 @@ import {
   getApprovalStorePath,
   getRunStorePath,
   getSessionDir,
+  getWorkflowStorePath,
   getZuuAgentDir,
   normalizePackageSource,
   packageSourceToString,
@@ -30,6 +31,7 @@ import { createApprovalExtension, subscribeApprovalEvents } from "./agent-daemon
 import { buildDiagnostics } from "./agent-daemon/diagnostics";
 import { compactAgentEvent, entryRole, entryText } from "./agent-daemon/events";
 import { createStatusTool } from "./agent-daemon/status-tool";
+import { FakeWorkflowBackend } from "./agent-daemon/workflows";
 import type {
   ForkSessionRequest,
   ImportSessionRequest,
@@ -45,6 +47,7 @@ import type {
   SessionActionResponse,
   SessionSummary,
   SessionTreeEntry,
+  StartWorkflowRequest,
   StoredSessionSummary,
   SwitchSessionRequest,
   ThinkingLevel,
@@ -75,6 +78,7 @@ export class ZuuDaemon {
   private readonly agentDir = getZuuAgentDir();
   private readonly runStorePath = getRunStorePath(this.agentDir);
   private readonly approvalStore = new ApprovalStore(getApprovalStorePath(this.agentDir));
+  private readonly workflowBackend = new FakeWorkflowBackend(getWorkflowStorePath(this.agentDir));
   private readonly activeRunBySessionId = new Map<string, string>();
   private readonly eventBus: EventBusController = createEventBus();
   private readonly runs = new Map<string, RunSummary>(
@@ -265,6 +269,26 @@ export class ZuuDaemon {
 
   resolveApproval(approvalId: string, request: ResolveApprovalRequest) {
     return this.approvalStore.resolve(approvalId, request);
+  }
+
+  listWorkflows() {
+    return this.workflowBackend.listDefinitions();
+  }
+
+  startWorkflow(workflowId: string, request: StartWorkflowRequest = {}) {
+    return this.workflowBackend.start(workflowId, request);
+  }
+
+  listWorkflowRuns() {
+    return this.workflowBackend.listRuns();
+  }
+
+  getWorkflowRun(runId: string) {
+    return this.workflowBackend.getRun(runId);
+  }
+
+  abortWorkflowRun(runId: string) {
+    return this.workflowBackend.abort(runId);
   }
 
   private getManagedRuntime(sessionId: string) {

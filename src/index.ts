@@ -16,6 +16,7 @@ import type {
   PackageMutationRequest,
   PromptRequest,
   ResolveApprovalRequest,
+  StartWorkflowRequest,
   SwitchSessionRequest,
 } from "@zuu/client";
 
@@ -107,6 +108,47 @@ app.get("/api/runs", (c) => {
 app.get("/api/runs/:runId", (c) => {
   try {
     return c.json({ run: daemon.getRun(c.req.param("runId")) });
+  } catch (error) {
+    return c.json(jsonError(error, 404), 404);
+  }
+});
+
+app.get("/api/workflows", async (c) => {
+  try {
+    return c.json({ workflows: await daemon.listWorkflows() });
+  } catch (error) {
+    return c.json(jsonError(error, 500), 500);
+  }
+});
+
+app.post("/api/workflows/:workflowId/runs", async (c) => {
+  try {
+    const body = (await c.req.json().catch(() => ({}))) as StartWorkflowRequest;
+    return c.json({ run: await daemon.startWorkflow(c.req.param("workflowId"), body) }, 201);
+  } catch (error) {
+    return c.json(jsonError(error, 400), 400);
+  }
+});
+
+app.get("/api/workflow-runs", async (c) => {
+  try {
+    return c.json({ runs: await daemon.listWorkflowRuns() });
+  } catch (error) {
+    return c.json(jsonError(error, 500), 500);
+  }
+});
+
+app.get("/api/workflow-runs/:runId", async (c) => {
+  try {
+    return c.json({ run: await daemon.getWorkflowRun(c.req.param("runId")) });
+  } catch (error) {
+    return c.json(jsonError(error, 404), 404);
+  }
+});
+
+app.post("/api/workflow-runs/:runId/abort", async (c) => {
+  try {
+    return c.json({ run: await daemon.abortWorkflowRun(c.req.param("runId")) });
   } catch (error) {
     return c.json(jsonError(error, 404), 404);
   }

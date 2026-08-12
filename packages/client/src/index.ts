@@ -20,8 +20,12 @@ import type {
   SessionResponse,
   SessionsResponse,
   SessionTreeResponse,
+  StartWorkflowRequest,
   StoredSessionsResponse,
   SwitchSessionRequest,
+  WorkflowRunResponse,
+  WorkflowRunsResponse,
+  WorkflowsResponse,
 } from "./protocol";
 
 export type * from "./protocol";
@@ -48,6 +52,11 @@ export interface ZuuClient {
   getSessionTree(sessionId: string): Promise<SessionTreeResponse>;
   listRuns(sessionId?: string): Promise<RunsResponse>;
   getRun(runId: string): Promise<RunResponse>;
+  listWorkflows(): Promise<WorkflowsResponse>;
+  startWorkflow(workflowId: string, input?: StartWorkflowRequest): Promise<WorkflowRunResponse>;
+  listWorkflowRuns(): Promise<WorkflowRunsResponse>;
+  getWorkflowRun(runId: string): Promise<WorkflowRunResponse>;
+  abortWorkflowRun(runId: string): Promise<WorkflowRunResponse>;
   listApprovals(status?: ApprovalStatus): Promise<ApprovalsResponse>;
   getApproval(approvalId: string): Promise<ApprovalResponse>;
   resolveApproval(approvalId: string, input: ResolveApprovalRequest): Promise<ApprovalResponse>;
@@ -159,6 +168,20 @@ export function createZuuClient(options: ZuuClientOptions = {}): ZuuClient {
         apiToken,
       ),
     getRun: (runId) => requestJson<RunResponse>(fetchImpl, baseUrl, `/api/runs/${encodeURIComponent(runId)}`, undefined, apiToken),
+    listWorkflows: () => requestJson<WorkflowsResponse>(fetchImpl, baseUrl, "/api/workflows", undefined, apiToken),
+    startWorkflow: (workflowId, input = {}) =>
+      requestJson<WorkflowRunResponse>(fetchImpl, baseUrl, `/api/workflows/${encodeURIComponent(workflowId)}/runs`, {
+        method: "POST",
+        body: JSON.stringify(input),
+      }, apiToken),
+    listWorkflowRuns: () =>
+      requestJson<WorkflowRunsResponse>(fetchImpl, baseUrl, "/api/workflow-runs", undefined, apiToken),
+    getWorkflowRun: (runId) =>
+      requestJson<WorkflowRunResponse>(fetchImpl, baseUrl, `/api/workflow-runs/${encodeURIComponent(runId)}`, undefined, apiToken),
+    abortWorkflowRun: (runId) =>
+      requestJson<WorkflowRunResponse>(fetchImpl, baseUrl, `/api/workflow-runs/${encodeURIComponent(runId)}/abort`, {
+        method: "POST",
+      }, apiToken),
     listApprovals: (status) =>
       requestJson<ApprovalsResponse>(
         fetchImpl,

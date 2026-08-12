@@ -192,6 +192,85 @@ export interface RunResponse {
   run: RunSummary;
 }
 
+export type WorkflowRunStatus = "queued" | "running" | "done" | "error" | "aborted";
+export type WorkflowArtifactKind = "text" | "json" | "file";
+
+export interface WorkflowDefinition {
+  id: string;
+  name: string;
+  description: string;
+  version: string;
+  tags: string[];
+}
+
+export interface WorkflowStage {
+  id: string;
+  runId: string;
+  name: string;
+  status: WorkflowRunStatus;
+  startedAt?: string;
+  endedAt?: string;
+  summary?: string;
+}
+
+export interface WorkflowTask {
+  id: string;
+  runId: string;
+  stageId: string;
+  name: string;
+  status: WorkflowRunStatus;
+  startedAt?: string;
+  endedAt?: string;
+  input?: unknown;
+  output?: unknown;
+  artifactIds: string[];
+}
+
+export interface WorkflowArtifact {
+  id: string;
+  runId: string;
+  taskId?: string;
+  name: string;
+  kind: WorkflowArtifactKind;
+  mimeType?: string;
+  content?: unknown;
+  createdAt: string;
+}
+
+export interface WorkflowRun {
+  id: string;
+  workflowId: string;
+  workflowName: string;
+  status: WorkflowRunStatus;
+  source: "user" | "schedule" | "api";
+  sessionId?: string;
+  prompt?: string;
+  startedAt: string;
+  endedAt?: string;
+  stages: WorkflowStage[];
+  tasks: WorkflowTask[];
+  artifacts: WorkflowArtifact[];
+  error?: string;
+}
+
+export interface StartWorkflowRequest {
+  sessionId?: string;
+  prompt?: string;
+  inputs?: Record<string, unknown>;
+}
+
+export interface WorkflowsResponse {
+  workflows: WorkflowDefinition[];
+}
+
+export interface WorkflowRunsResponse {
+  runs: WorkflowRun[];
+}
+
+export interface WorkflowRunResponse {
+  run: WorkflowRun;
+}
+
 export interface ApprovalsResponse {
   approvals: Approval[];
 }
