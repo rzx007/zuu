@@ -3,7 +3,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import app from "../src/index";
 import { ApprovalStore } from "../src/agent-daemon/approval-store";
+import { createApprovalExtension } from "../src/agent-daemon/approval-policy";
 import { createZuuClient } from "@zuu/client";
+import { createEventBus } from "@earendil-works/pi-coding-agent";
 
 const fetchFromApp: typeof fetch = async (input, init) => {
   const request = input instanceof Request ? input : new Request(input, init);
@@ -93,6 +95,13 @@ async function main() {
   if (resolvedApproval.status !== "allowed" || resolvedApproval.decision !== "allow_once") {
     throw new Error("approval was not resolved");
   }
+  const consumedApproval = approvalStore.consumeGrant({ sessionId: "check-session", kind: "tool", scope: undefined });
+  if (consumedApproval?.id !== pendingApproval.id || !consumedApproval.usedAt) {
+    throw new Error("allow_once approval was not consumed");
+  }
+  if (approvalStore.consumeGrant({ sessionId: "check-session", kind: "tool", scope: undefined })) {
+    throw new Error("allow_once approval should not be reusable");
+  }
   const expiredApproval = approvalStore.create({
     sessionId: "check-session",
     runId: "check-run",
@@ -104,6 +113,47 @@ async function main() {
   });
   if (approvalStore.get(expiredApproval.id).status !== "expired") {
     throw new Error("expired approval did not expire");
+  }
+
+  const extensionStore = new ApprovalStore(join(mkdtempSync(join(tmpdir(), "zuu-approval-extension-check-")), "approvals.json"));
+  const extension = createApprovalExtension({
+    approvalStore: extensionStore,
+    getActiveRunId: (sessionId) => (sessionId === "extension-session" ? "extension-run" : undefined),
+  });
+  const toolCallHandlers: Array<(event: unknown, ctx: unknown) => unknown> = [];
+  const approvalEvents: unknown[] = [];
+  const eventBus = createEventBus();
+  eventBus.on("zuu:approval", (event) => approvalEvents.push(event));
+  const extensionFactory = typeof extension === "function" ? extension : extension.factory;
+  await extensionFactory({
+    on: (event: string, handler: (event: unknown, ctx: unknown) => unknown) => {
+      if (event === "tool_call") toolCallHandlers.push(handler);
+    },
+    events: eventBus,
+  } as never);
+  const toolCallContext = {
+    sessionManager: {
+      getSessionId: () => "extension-session",
+    },
+  };
+  const blocked = await toolCallHandlers[0]?.(
+    { type: "tool_call", toolName: "bash", toolCallId: "tool-call-check", input: { command: "echo check" } },
+    toolCallContext,
+  );
+  if (!blocked || typeof blocked !== "object" || !("block" in blocked) || blocked.block !== true) {
+    throw new Error("approval extension should block unapproved dangerous tools");
+  }
+  const requested = extensionStore.list("pending")[0];
+  if (!requested || requested.scope !== "tool:bash" || approvalEvents.length !== 1) {
+    throw new Error("approval extension did not create a pending approval");
+  }
+  extensionStore.resolve(requested.id, { decision: "allow_session" });
+  const allowed = await toolCallHandlers[0]?.(
+    { type: "tool_call", toolName: "bash", toolCallId: "tool-call-check-2", input: { command: "echo check" } },
+    toolCallContext,
+  );
+  if (allowed !== undefined || approvalEvents.length < 2) {
+    throw new Error("approval extension should allow session-granted tools");
   }
 
   const packages = await client.listPackages();

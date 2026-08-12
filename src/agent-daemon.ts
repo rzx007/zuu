@@ -1,5 +1,6 @@
 import { fileURLToPath } from "node:url";
 import {
+  createEventBus,
   createAgentSessionFromServices,
   createAgentSessionRuntime,
   createAgentSessionServices,
@@ -9,6 +10,7 @@ import {
   type AgentSessionRuntime,
   type CreateAgentSessionRuntimeFactory,
   type DefaultResourceLoader,
+  type EventBusController,
   type SessionInfo,
   type SessionTreeNode,
 } from "@earendil-works/pi-coding-agent";
@@ -24,6 +26,7 @@ import {
   packageSourceToString,
 } from "./agent-daemon/environment";
 import { ApprovalStore, assertApprovalStatus } from "./agent-daemon/approval-store";
+import { createApprovalExtension, subscribeApprovalEvents } from "./agent-daemon/approval-policy";
 import { buildDiagnostics } from "./agent-daemon/diagnostics";
 import { compactAgentEvent, entryRole, entryText } from "./agent-daemon/events";
 import { createStatusTool } from "./agent-daemon/status-tool";
@@ -72,6 +75,8 @@ export class ZuuDaemon {
   private readonly agentDir = getZuuAgentDir();
   private readonly runStorePath = getRunStorePath(this.agentDir);
   private readonly approvalStore = new ApprovalStore(getApprovalStorePath(this.agentDir));
+  private readonly activeRunBySessionId = new Map<string, string>();
+  private readonly eventBus: EventBusController = createEventBus();
   private readonly runs = new Map<string, RunSummary>(
     loadRunHistory(this.runStorePath).map((run) => [run.id, run]),
   );
@@ -88,6 +93,13 @@ export class ZuuDaemon {
         modelRuntime,
         settingsManager,
         resourceLoaderOptions: {
+          eventBus: this.eventBus,
+          extensionFactories: [
+            createApprovalExtension({
+              approvalStore: this.approvalStore,
+              getActiveRunId: (sessionId) => this.activeRunBySessionId.get(sessionId),
+            }),
+          ],
           appendSystemPrompt: [
             "You are running inside Zuu, a small daemon-hosted Pi SDK agent app.",
             "Be explicit about files changed, commands run, and assumptions.",
@@ -337,6 +349,7 @@ export class ZuuDaemon {
       startedAt: new Date().toISOString(),
     };
     this.setRun(run);
+    this.activeRunBySessionId.set(session.sessionId, runId);
 
     yield { runId, type: "session", session: this.summarizeSession(session), run };
 
@@ -358,6 +371,10 @@ export class ZuuDaemon {
         queue.push(compact);
         wake();
       }
+    });
+    const unsubscribeApprovalEvents = subscribeApprovalEvents(this.eventBus, runId, (event) => {
+      queue.push(event);
+      wake();
     });
 
     session
@@ -398,6 +415,10 @@ export class ZuuDaemon {
       this.persistRuns();
       yield { runId, type: "done", session: this.summarizeSession(session), run };
     } finally {
+      if (this.activeRunBySessionId.get(session.sessionId) === runId) {
+        this.activeRunBySessionId.delete(session.sessionId);
+      }
+      unsubscribeApprovalEvents();
       unsubscribe();
     }
   }

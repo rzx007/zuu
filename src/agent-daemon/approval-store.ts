@@ -61,6 +61,7 @@ export class ApprovalStore {
       sessionId: request.sessionId,
       runId: request.runId,
       kind: request.kind,
+      scope: request.scope,
       title: request.title,
       description: request.description,
       risk: request.risk,
@@ -75,12 +76,31 @@ export class ApprovalStore {
   }
 
   list(status?: ApprovalStatus) {
-    this.expirePending();
+    this.expireApprovals();
     return this.sortedApprovals().filter((approval) => !status || approval.status === status);
   }
 
+  consumeGrant(request: Pick<CreateApprovalRequest, "sessionId" | "kind" | "scope">) {
+    this.expireApprovals();
+    const grant = this.sortedApprovals().find((approval) => {
+      return (
+        approval.sessionId === request.sessionId &&
+        approval.kind === request.kind &&
+        approval.scope === request.scope &&
+        approval.status === "allowed" &&
+        (approval.decision === "allow_session" || (approval.decision === "allow_once" && !approval.usedAt))
+      );
+    });
+    if (grant?.decision === "allow_once") {
+      grant.usedAt = new Date().toISOString();
+      grant.updatedAt = grant.usedAt;
+      this.persist();
+    }
+    return grant;
+  }
+
   get(id: string) {
-    this.expirePending();
+    this.expireApprovals();
     const approval = this.approvals.get(id);
     if (!approval) throw new Error(`Unknown approval: ${id}`);
     return approval;
@@ -102,11 +122,15 @@ export class ApprovalStore {
     return approval;
   }
 
-  private expirePending() {
+  private expireApprovals() {
     const now = Date.now();
     let changed = false;
     for (const approval of this.approvals.values()) {
-      if (approval.status === "pending" && approval.expiresAt && Date.parse(approval.expiresAt) <= now) {
+      if (
+        (approval.status === "pending" || approval.status === "allowed") &&
+        approval.expiresAt &&
+        Date.parse(approval.expiresAt) <= now
+      ) {
         approval.status = "expired";
         approval.updatedAt = new Date().toISOString();
         changed = true;

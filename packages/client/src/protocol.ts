@@ -33,6 +33,7 @@ export interface Approval {
   sessionId: string;
   runId: string;
   kind: ApprovalKind;
+  scope?: string;
   title: string;
   description: string;
   risk: ApprovalRisk;
@@ -41,6 +42,7 @@ export interface Approval {
   updatedAt: string;
   expiresAt?: string;
   resolvedAt?: string;
+  usedAt?: string;
   decision?: ApprovalDecision;
 }
 
@@ -48,6 +50,7 @@ export interface CreateApprovalRequest {
   sessionId: string;
   runId: string;
   kind: ApprovalKind;
+  scope?: string;
   title: string;
   description: string;
   risk: ApprovalRisk;
@@ -83,6 +86,8 @@ export interface PromptStreamEvent {
     | "tool_update"
     | "tool_end"
     | "agent_event"
+    | "approval_requested"
+    | "approval_resolved"
     | "done"
     | "error";
   session?: SessionSummary;
@@ -96,6 +101,7 @@ export interface PromptStreamEvent {
     isError?: boolean;
   };
   eventType?: string;
+  approval?: Approval;
   run?: RunSummary;
 }
 

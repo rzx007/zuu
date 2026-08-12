@@ -771,6 +771,11 @@ const page = String.raw`<!doctype html>
             addMessage("event", "tool start: " + event.tool.name);
           } else if (event.type === "tool_end") {
             addMessage("event", "tool end: " + event.tool.name + (event.tool.isError ? " (error)" : ""));
+          } else if (event.type === "approval_requested" && event.approval) {
+            addMessage("event", "approval required: " + event.approval.title + " (" + event.approval.id + ")");
+            await loadRuns().catch(() => {});
+          } else if (event.type === "approval_resolved" && event.approval) {
+            addMessage("event", "approval granted: " + event.approval.title);
           } else if (event.type === "error") {
             addMessage("event", "error: " + event.message);
             await loadRuns().catch(() => {});
