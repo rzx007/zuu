@@ -14,7 +14,6 @@ import {
   getScheduleStorePath,
   getZuuAgentDir,
 } from "./agent-daemon/environment";
-import { ApiError } from "./http";
 import { ApprovalService } from "./agent-daemon/approval-service";
 import { ApprovalApiService } from "./agent-daemon/approval-api-service";
 import { ModelService } from "./agent-daemon/model-service";
@@ -49,16 +48,19 @@ import type {
   UpdateSessionRequest,
 } from "@zuu/client";
 import { runModelSmoke } from "./agent-daemon/model-smoke";
+import { RunApiService } from "./agent-daemon/run-api-service";
 import { RunService } from "./agent-daemon/run-service";
 import { SessionService } from "./agent-daemon/session-service";
 
 export class ZuuDaemon {
   private readonly approvalApiService: ApprovalApiService;
   private readonly packageApiService: PackageApiService;
+  private readonly runApiService: RunApiService;
 
   constructor(options: { audit?: AuditService } = {}) {
     this.approvalApiService = new ApprovalApiService(this.approvalService, options.audit);
     this.packageApiService = new PackageApiService(this.packageService, options.audit);
+    this.runApiService = new RunApiService(this.runService, this.sessionService);
   }
 
   private readonly agentDir = getZuuAgentDir();
@@ -171,39 +173,27 @@ export class ZuuDaemon {
   }
 
   listRuns(sessionId?: string, projectId?: string) {
-    return this.runService.listRuns(sessionId, projectId);
+    return this.runApiService.listRuns(sessionId, projectId);
   }
 
   getRun(runId: string, projectId?: string) {
-    return this.runService.getRun(runId, projectId);
+    return this.runApiService.getRun(runId, projectId);
   }
 
   async abortRun(runId: string, projectId?: string) {
-    const run = this.runService.getRun(runId, projectId);
-    if (run.status !== "running" && run.status !== "waiting_approval") {
-      throw new ApiError("Run is not active", {
-        status: 409,
-        code: "run_not_active",
-        details: { runId, status: run.status },
-      });
-    }
-    await this.sessionService.abort(run.sessionId);
-    run.status = "aborted";
-    run.finishedAt = new Date().toISOString();
-    this.runService.saveRun(run);
-    return run;
+    return this.runApiService.abortRun(runId, projectId);
   }
 
   listRunEvents(runId: string, afterEventId?: string, projectId?: string) {
-    return this.runService.listRunEvents(runId, afterEventId, projectId);
+    return this.runApiService.listRunEvents(runId, afterEventId, projectId);
   }
 
   listEvents(query: EventStreamQuery = {}) {
-    return this.runService.listEvents(query);
+    return this.runApiService.listEvents(query);
   }
 
   subscribeEvents(query: EventStreamQuery, listener: (event: PromptStreamEvent) => void) {
-    return this.runService.subscribeEvents(query, listener);
+    return this.runApiService.subscribeEvents(query, listener);
   }
 
   createApproval(request: CreateApprovalRequest) {

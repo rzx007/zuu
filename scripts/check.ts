@@ -12,6 +12,8 @@ import { PackageApiService } from "../src/agent-daemon/package-api-service";
 import { PackageService } from "../src/agent-daemon/packages";
 import { PackageTrustStore } from "../src/agent-daemon/package-trust";
 import { PromptService } from "../src/agent-daemon/prompt-service";
+import { RunApiService } from "../src/agent-daemon/run-api-service";
+import { RunService } from "../src/agent-daemon/run-service";
 import { ProjectStore } from "../src/agent-daemon/projects";
 import { RunEventStore } from "../src/agent-daemon/run-events";
 import { loadRunHistory, saveRunHistory } from "../src/agent-daemon/run-history";
@@ -1418,6 +1420,32 @@ async function main() {
   const replayedRunEvents = reloadedRunEventStore.list("event-check-run", firstRunEvent.id);
   if (replayedRunEvents.length !== 1 || replayedRunEvents[0]?.id !== secondRunEvent.id) {
     throw new Error("run event replay should return events after the requested event ID");
+  }
+  const runApiDir = mkdtempSync(join(tmpdir(), "zuu-run-api-check-"));
+  const runApiRunService = new RunService(join(runApiDir, "runs.json"), join(runApiDir, "run-events.json"));
+  const abortedSessionIds: string[] = [];
+  const runApiService = new RunApiService(runApiRunService, {
+    abort: async (sessionId: string) => {
+      abortedSessionIds.push(sessionId);
+      return {};
+    },
+  } as never);
+  const apiRun = runApiRunService.startRun({
+    sessionId: "run-api-session",
+    projectId: "default",
+    request: { prompt: "run api check", source: "api" },
+  });
+  const abortedApiRun = await runApiService.abortRun(apiRun.id);
+  if (abortedApiRun.status !== "aborted" || abortedSessionIds[0] !== "run-api-session" || !abortedApiRun.finishedAt) {
+    throw new Error("run API abort should abort the session and persist the run state");
+  }
+  try {
+    await runApiService.abortRun(apiRun.id);
+    throw new Error("inactive run abort should fail");
+  } catch (error) {
+    if (!(error instanceof ApiError) || error.status !== 409 || error.code !== "run_not_active") {
+      throw new Error("inactive run abort should fail with run_not_active");
+    }
   }
 
   const packageServiceAgentDir = mkdtempSync(join(tmpdir(), "zuu-package-service-check-"));
