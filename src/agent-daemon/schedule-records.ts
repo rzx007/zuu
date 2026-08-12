@@ -1,6 +1,7 @@
 import type { Schedule, ScheduleRetryPolicy, ScheduleRun } from "@zuu/client";
 import { JsonFileStore } from "./json-file-store";
 
+export const SCHEDULE_RUN_HISTORY_LIMIT = 50;
 export const SCHEDULE_RUN_STATUSES = new Set(["queued", "running", "completed", "failed", "skipped", "aborted"]);
 export const SCHEDULE_OVERLAP_POLICIES = new Set(["skip", "queue", "parallel"]);
 export const SCHEDULE_MISFIRE_POLICIES = new Set(["skip", "run_once"]);
@@ -31,6 +32,10 @@ export function isScheduleRetryPolicy(value: unknown): value is ScheduleRetryPol
         value.retryableCodes === undefined ||
         (Array.isArray(value.retryableCodes) && value.retryableCodes.every((code) => typeof code === "string"))),
   );
+}
+
+export function prependScheduleRun(schedule: Schedule, run: ScheduleRun) {
+  schedule.runs = [run, ...schedule.runs].slice(0, SCHEDULE_RUN_HISTORY_LIMIT);
 }
 
 function isSchedule(value: unknown): value is Schedule {

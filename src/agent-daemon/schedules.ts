@@ -9,15 +9,23 @@ import { notFound, validationError } from "../http";
 import {
   isScheduleRetryPolicy,
   loadSchedules,
+  prependScheduleRun,
   saveSchedules,
   SCHEDULE_MISFIRE_POLICIES,
   SCHEDULE_OVERLAP_POLICIES,
 } from "./schedule-records";
+import {
+  createMisfireSkippedRun,
+  createOverlapSkippedRun,
+  createQueueFullSkippedRun,
+  createQueuedOverlapRun,
+  createRunningScheduleRun,
+  type ScheduleTriggerOptions,
+} from "./schedule-run-factory";
 import type { ScheduleLease } from "./schedule-lease";
 import { runScheduleAction, type ScheduleExecutor } from "./schedule-runner";
 import { computeNextRunAt, validateScheduleTrigger } from "./schedule-timing";
 
-const SCHEDULE_RUN_HISTORY_LIMIT = 50;
 const MAX_TIMER_DELAY_MS = 2_147_483_647;
 export type { ScheduleExecutor } from "./schedule-runner";
 
@@ -209,17 +217,11 @@ export class ScheduleStore {
     }
 
     const previousNextRunAt = schedule.nextRunAt;
-    const startedAt = new Date().toISOString();
     if (!options.automatic) this.clearTimer(schedule.id);
-    const run: ScheduleRun = {
-      id: crypto.randomUUID(),
-      scheduleId: schedule.id,
-      status: "running",
-      scheduledFor: options.automatic && previousNextRunAt ? previousNextRunAt : startedAt,
-      startedAt,
-    };
-    schedule.runs = [run, ...schedule.runs].slice(0, SCHEDULE_RUN_HISTORY_LIMIT);
-    schedule.updatedAt = startedAt;
+    const runningRun = createRunningScheduleRun(schedule, previousNextRunAt, options);
+    const run: ScheduleRun = runningRun;
+    prependScheduleRun(schedule, run);
+    schedule.updatedAt = runningRun.startedAt;
     if (options.automatic) {
       this.updateNextRun(schedule);
     }
@@ -280,20 +282,12 @@ export class ScheduleStore {
     schedule.nextRunAt = computeNextRunAt(schedule.trigger);
   }
 
-  private skipOverlap(schedule: Schedule, options: { automatic?: boolean }) {
+  private skipOverlap(schedule: Schedule, options: ScheduleTriggerOptions) {
     const previousNextRunAt = schedule.nextRunAt;
-    const now = new Date().toISOString();
     this.clearTimer(schedule.id);
-    const run: ScheduleRun = {
-      id: crypto.randomUUID(),
-      scheduleId: schedule.id,
-      status: "skipped",
-      scheduledFor: options.automatic && previousNextRunAt ? previousNextRunAt : now,
-      finishedAt: now,
-      reason: "schedule_overlap",
-    };
-    schedule.runs = [run, ...schedule.runs].slice(0, SCHEDULE_RUN_HISTORY_LIMIT);
-    schedule.updatedAt = now;
+    const run = createOverlapSkippedRun(schedule, previousNextRunAt, options);
+    prependScheduleRun(schedule, run);
+    schedule.updatedAt = run.finishedAt;
     if (options.automatic) {
       this.updateNextRun(schedule);
     } else {
@@ -304,23 +298,17 @@ export class ScheduleStore {
     return schedule;
   }
 
-  private queueOverlap(schedule: Schedule, options: { automatic?: boolean }) {
+  private queueOverlap(schedule: Schedule, options: ScheduleTriggerOptions) {
     if (schedule.runs.some((run) => run.status === "queued")) {
       return this.skipQueueFull(schedule, options);
     }
 
     const previousNextRunAt = schedule.nextRunAt;
-    const now = new Date().toISOString();
+    const recordedAt = new Date().toISOString();
     this.clearTimer(schedule.id);
-    const run: ScheduleRun = {
-      id: crypto.randomUUID(),
-      scheduleId: schedule.id,
-      status: "queued",
-      scheduledFor: options.automatic && previousNextRunAt ? previousNextRunAt : now,
-      reason: "schedule_overlap",
-    };
-    schedule.runs = [run, ...schedule.runs].slice(0, SCHEDULE_RUN_HISTORY_LIMIT);
-    schedule.updatedAt = now;
+    const run = createQueuedOverlapRun(schedule, previousNextRunAt, options, recordedAt);
+    prependScheduleRun(schedule, run);
+    schedule.updatedAt = recordedAt;
     if (options.automatic) {
       this.updateNextRun(schedule);
     } else {
@@ -331,20 +319,12 @@ export class ScheduleStore {
     return schedule;
   }
 
-  private skipQueueFull(schedule: Schedule, options: { automatic?: boolean }) {
+  private skipQueueFull(schedule: Schedule, options: ScheduleTriggerOptions) {
     const previousNextRunAt = schedule.nextRunAt;
-    const now = new Date().toISOString();
     this.clearTimer(schedule.id);
-    const run: ScheduleRun = {
-      id: crypto.randomUUID(),
-      scheduleId: schedule.id,
-      status: "skipped",
-      scheduledFor: options.automatic && previousNextRunAt ? previousNextRunAt : now,
-      finishedAt: now,
-      reason: "schedule_queue_full",
-    };
-    schedule.runs = [run, ...schedule.runs].slice(0, SCHEDULE_RUN_HISTORY_LIMIT);
-    schedule.updatedAt = now;
+    const run = createQueueFullSkippedRun(schedule, previousNextRunAt, options);
+    prependScheduleRun(schedule, run);
+    schedule.updatedAt = run.finishedAt;
     if (options.automatic) {
       this.updateNextRun(schedule);
     } else {
@@ -394,20 +374,10 @@ export class ScheduleStore {
   }
 
   private skipMisfire(schedule: Schedule) {
-    const missedRunAt = schedule.nextRunAt;
-    if (!missedRunAt) return;
-
-    const now = new Date().toISOString();
-    const run: ScheduleRun = {
-      id: crypto.randomUUID(),
-      scheduleId: schedule.id,
-      status: "skipped",
-      scheduledFor: missedRunAt,
-      finishedAt: now,
-      reason: "schedule_misfire",
-    };
-    schedule.runs = [run, ...schedule.runs].slice(0, SCHEDULE_RUN_HISTORY_LIMIT);
-    schedule.updatedAt = now;
+    const run = createMisfireSkippedRun(schedule);
+    if (!run) return;
+    prependScheduleRun(schedule, run);
+    schedule.updatedAt = run.finishedAt;
     this.updateNextRun(schedule);
   }
 
