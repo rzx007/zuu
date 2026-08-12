@@ -591,6 +591,16 @@ async function main() {
   if (globallyUpdatedSession.session.name !== "global session rename") {
     throw new Error("global session update returned the wrong session");
   }
+  await expectClientError(() => client.getProjectSession(defaultProject.id, projectSession.session.id), { status: 404, code: "not_found" });
+  await expectClientError(
+    () => client.updateProjectSession(defaultProject.id, projectSession.session.id, { name: "wrong project" }),
+    { status: 404, code: "not_found" },
+  );
+  await expectClientError(() => client.getSession(projectSession.session.id, defaultProject.id), { status: 404, code: "not_found" });
+  await expectClientError(
+    () => client.updateSession(projectSession.session.id, { name: "wrong global project" }, defaultProject.id),
+    { status: 404, code: "not_found" },
+  );
   const deletedProjectSession = await client.deleteProjectSession(project.project.id, projectSession.session.id);
   if (deletedProjectSession.session.id !== projectSession.session.id) {
     throw new Error("project session delete returned the wrong session");

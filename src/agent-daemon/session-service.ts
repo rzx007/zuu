@@ -126,7 +126,7 @@ export class SessionService {
       const existing = this.runtimes.get(options.sessionId);
       if (existing) {
         if (options.projectId && existing.projectId !== options.projectId) {
-          throw new Error(`Session ${options.sessionId} does not belong to project ${options.projectId}`);
+          notFound(`Unknown session: ${options.sessionId}`, { sessionId: options.sessionId, projectId: options.projectId });
         }
         return existing.runtime.session;
       }
@@ -318,7 +318,7 @@ export class SessionService {
   private assertSessionProject(managed: ManagedRuntime, sessionId: string, projectId: string) {
     this.options.projects.get(projectId);
     if (managed.projectId !== projectId) {
-      throw new Error(`Session ${sessionId} does not belong to project ${projectId}`);
+      notFound(`Unknown session: ${sessionId}`, { sessionId, projectId });
     }
   }
 

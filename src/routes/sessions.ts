@@ -17,21 +17,13 @@ import { writePromptStreamEvent } from "./sse";
 import type { RouteDeps } from "./types";
 
 export function registerSessionRoutes({ app, daemon }: RouteDeps) {
-  function sessionFallbackStatus(error: unknown, fallbackStatus = 400) {
-    return error instanceof Error &&
-      (error.message.startsWith("Unknown session") || error.message.includes("does not belong to project"))
-      ? 404
-      : fallbackStatus;
-  }
-
   async function streamPromptResponse(c: Context, request: PromptRequest) {
     const events = daemon.prompt(request);
     let first: IteratorResult<PromptStreamEvent>;
     try {
       first = await events.next();
     } catch (error) {
-      const fallbackStatus = sessionFallbackStatus(error);
-      return c.json(jsonError(error, fallbackStatus), toStatus(error, fallbackStatus));
+      return c.json(jsonError(error, 400), toStatus(error, 400));
     }
 
     return streamSSE(c, async (stream) => {
@@ -85,8 +77,7 @@ export function registerSessionRoutes({ app, daemon }: RouteDeps) {
       const body = parseUpdateSession(await readJson(c.req));
       return c.json({ session: daemon.updateSession(c.req.param("sessionId"), body, c.req.query("projectId")) });
     } catch (error) {
-      const fallbackStatus = sessionFallbackStatus(error);
-      return c.json(jsonError(error, fallbackStatus), toStatus(error, fallbackStatus));
+      return c.json(jsonError(error, 400), toStatus(error, 400));
     }
   });
 

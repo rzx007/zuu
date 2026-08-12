@@ -79,11 +79,7 @@ export function registerProjectRoutes({ app, daemon }: RouteDeps) {
       const body = parseUpdateSession(await readJson(c.req));
       return c.json({ session: daemon.updateSession(c.req.param("sessionId"), body, c.req.param("projectId")) });
     } catch (error) {
-      const fallbackStatus = error instanceof Error &&
-        (error.message.startsWith("Unknown session") || error.message.includes("does not belong to project"))
-        ? 404
-        : 400;
-      return c.json(jsonError(error, fallbackStatus), toStatus(error, fallbackStatus));
+      return c.json(jsonError(error, 400), toStatus(error, 400));
     }
   });
 
