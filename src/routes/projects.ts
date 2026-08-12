@@ -98,6 +98,14 @@ export function registerProjectRoutes({ app, daemon }: RouteDeps) {
     }
   });
 
+  app.post("/v1/projects/:projectId/runs/:runId/abort", async (c) => {
+    try {
+      return c.json({ run: await daemon.abortRun(c.req.param("runId"), c.req.param("projectId")) });
+    } catch (error) {
+      return c.json(jsonError(error, 404), toStatus(error, 404));
+    }
+  });
+
   app.get("/v1/projects/:projectId/runs/:runId/events", (c) => {
     try {
       return c.json({

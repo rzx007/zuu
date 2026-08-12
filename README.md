@@ -52,6 +52,7 @@ ZUU_PI_WORKFLOW_RUN=1 pnpm check:pi-workflow
 - `POST /v1/projects/:projectId/sessions/open`
 - `GET /v1/projects/:projectId/runs`
 - `GET /v1/projects/:projectId/runs/:runId`
+- `POST /v1/projects/:projectId/runs/:runId/abort`
 - `GET /v1/projects/:projectId/runs/:runId/events`
 - `GET /v1/projects/:projectId/workflows`
 - `POST /v1/projects/:projectId/workflows/:workflowId/runs`
@@ -79,6 +80,7 @@ ZUU_PI_WORKFLOW_RUN=1 pnpm check:pi-workflow
 - `GET /v1/sessions/:sessionId/tree`
 - `GET /v1/runs`
 - `GET /v1/runs/:runId`
+- `POST /v1/runs/:runId/abort`
 - `GET /v1/runs/:runId/events`
 - `GET /v1/workflows`
 - `POST /v1/workflows/:workflowId/runs`

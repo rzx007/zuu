@@ -164,7 +164,9 @@ async function main() {
   await expectClientError(() => client.deleteProject("default"), { status: 400, code: "validation_failed" });
   await expectClientError(() => client.createProject({ cwd: ".." }), { status: 400, code: "validation_failed" });
   await expectClientError(() => client.listRunEvents("missing"), { status: 404, code: "not_found" });
+  await expectClientError(() => client.abortRun("missing"), { status: 404, code: "not_found" });
   await expectClientError(() => client.listProjectRunEvents(defaultProject.id, "missing"), { status: 404, code: "not_found" });
+  await expectClientError(() => client.abortProjectRun(defaultProject.id, "missing"), { status: 404, code: "not_found" });
   const missingEventStream = await fetchFromApp("http://zuu.local/v1/events?runId=missing");
   if (missingEventStream.status !== 404) throw new Error("missing event stream run should fail before streaming");
 

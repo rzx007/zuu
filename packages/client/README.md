@@ -50,6 +50,9 @@ for await (const event of client.prompt({
 }
 
 const projectRuns = await client.listProjectRuns(currentProjectId);
+if (projectRuns.runs[0]?.status === "running" || projectRuns.runs[0]?.status === "waiting_approval") {
+  await client.abortProjectRun(currentProjectId, projectRuns.runs[0].id);
+}
 const projectSessions = await client.listProjectSessions(currentProjectId);
 const storedSessions = await client.listProjectStoredSessions(currentProjectId);
 const workflows = await client.listProjectWorkflows(currentProjectId);

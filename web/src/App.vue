@@ -717,6 +717,13 @@ async function replayRunEvents(runId: string) {
   if (transcript) addMessage('agent', transcript.slice(0, 4000))
 }
 
+async function abortRun(runId: string) {
+  const result = await client.abortProjectRun(currentProjectId(), runId)
+  upsertRun(result.run)
+  addMessage('event', `run aborted: ${runId.slice(0, 8)}`)
+  await Promise.all([loadRuns(), loadStoredSessions(), loadSessionTree()])
+}
+
 function scheduleTriggerLabel(schedule: Schedule) {
   if (schedule.trigger.kind === 'once') return `once at ${schedule.trigger.runAt || 'unset'}`
   if (schedule.trigger.kind === 'interval') return `every ${Math.round((schedule.trigger.everyMs || 0) / 60_000)} min`
@@ -1271,7 +1278,10 @@ onUnmounted(() => {
                     <span>{{ runEventCounts[run.id] ?? 0 }} events</span>
                     <span>{{ run.prompt }}</span>
                   </div>
-                  <Button variant="outline" size="xs" @click="replayRunEvents(run.id).catch((error) => addMessage('error', errorMessage(error)))">Replay</Button>
+                  <div class="flex flex-wrap justify-end gap-1">
+                    <Button v-if="run.status === 'running' || run.status === 'waiting_approval'" variant="outline" size="xs" @click="abortRun(run.id).catch((error) => addMessage('error', errorMessage(error)))">Abort</Button>
+                    <Button variant="outline" size="xs" @click="replayRunEvents(run.id).catch((error) => addMessage('error', errorMessage(error)))">Replay</Button>
+                  </div>
                 </div>
               </div>
               <p v-else class="empty-text">No runs yet.</p>

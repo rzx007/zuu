@@ -80,6 +80,7 @@ export interface ZuuClient {
   openProjectSession(projectId: string, input: Omit<OpenSessionRequest, "projectId">): Promise<SessionResponse>;
   listProjectRuns(projectId: string, sessionId?: string): Promise<RunsResponse>;
   getProjectRun(projectId: string, runId: string): Promise<RunResponse>;
+  abortProjectRun(projectId: string, runId: string): Promise<RunResponse>;
   listProjectRunEvents(projectId: string, runId: string, afterEventId?: string): Promise<RunEventsResponse>;
   listProjectWorkflows(projectId: string): Promise<WorkflowsResponse>;
   startProjectWorkflow(
@@ -110,6 +111,7 @@ export interface ZuuClient {
   getSessionTree(sessionId: string): Promise<SessionTreeResponse>;
   listRuns(sessionId?: string, projectId?: string): Promise<RunsResponse>;
   getRun(runId: string): Promise<RunResponse>;
+  abortRun(runId: string): Promise<RunResponse>;
   listRunEvents(runId: string, afterEventId?: string): Promise<RunEventsResponse>;
   listWorkflows(): Promise<WorkflowsResponse>;
   startWorkflow(workflowId: string, input?: StartWorkflowRequest): Promise<WorkflowRunResponse>;
@@ -347,6 +349,14 @@ export function createZuuClient(options: ZuuClientOptions = {}): ZuuClient {
         undefined,
         apiToken,
       ),
+    abortProjectRun: (projectId, runId) =>
+      requestJson<RunResponse>(
+        fetchImpl,
+        baseUrl,
+        `/v1/projects/${encodeURIComponent(projectId)}/runs/${encodeURIComponent(runId)}/abort`,
+        { method: "POST" },
+        apiToken,
+      ),
     listProjectRunEvents: (projectId, runId, afterEventId) =>
       requestJson<RunEventsResponse>(
         fetchImpl,
@@ -514,6 +524,10 @@ export function createZuuClient(options: ZuuClientOptions = {}): ZuuClient {
         apiToken,
       ),
     getRun: (runId) => requestJson<RunResponse>(fetchImpl, baseUrl, `/v1/runs/${encodeURIComponent(runId)}`, undefined, apiToken),
+    abortRun: (runId) =>
+      requestJson<RunResponse>(fetchImpl, baseUrl, `/v1/runs/${encodeURIComponent(runId)}/abort`, {
+        method: "POST",
+      }, apiToken),
     listRunEvents: (runId, afterEventId) =>
       requestJson<RunEventsResponse>(
         fetchImpl,

@@ -13,6 +13,7 @@ import {
   getScheduleStorePath,
   getZuuAgentDir,
 } from "./agent-daemon/environment";
+import { ApiError } from "./http";
 import { ApprovalService } from "./agent-daemon/approval-service";
 import { ModelService } from "./agent-daemon/model-service";
 import { ProjectService } from "./agent-daemon/project-service";
@@ -147,6 +148,22 @@ export class ZuuDaemon {
 
   getRun(runId: string, projectId?: string) {
     return this.runService.getRun(runId, projectId);
+  }
+
+  async abortRun(runId: string, projectId?: string) {
+    const run = this.runService.getRun(runId, projectId);
+    if (run.status !== "running" && run.status !== "waiting_approval") {
+      throw new ApiError("Run is not active", {
+        status: 409,
+        code: "run_not_active",
+        details: { runId, status: run.status },
+      });
+    }
+    await this.sessionService.abort(run.sessionId);
+    run.status = "aborted";
+    run.finishedAt = new Date().toISOString();
+    this.runService.saveRun(run);
+    return run;
   }
 
   listRunEvents(runId: string, afterEventId?: string, projectId?: string) {

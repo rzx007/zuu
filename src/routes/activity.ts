@@ -20,6 +20,14 @@ export function registerActivityRoutes({ app, daemon }: RouteDeps) {
     }
   });
 
+  app.post("/v1/runs/:runId/abort", async (c) => {
+    try {
+      return c.json({ run: await daemon.abortRun(c.req.param("runId")) });
+    } catch (error) {
+      return c.json(jsonError(error, 404), toStatus(error, 404));
+    }
+  });
+
   app.get("/v1/runs/:runId/events", (c) => {
     try {
       return c.json({ events: daemon.listRunEvents(c.req.param("runId"), c.req.query("afterEventId")) });
