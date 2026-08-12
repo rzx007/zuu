@@ -1,5 +1,7 @@
 import type {
+  CreateProjectRequest,
   CreateScheduleRequest,
+  CreateSessionRequest,
   ForkSessionRequest,
   ImportSessionRequest,
   NewSessionRequest,
@@ -12,6 +14,7 @@ import type {
   StartWorkflowRequest,
   SwitchSessionRequest,
   ThinkingLevel,
+  UpdateProjectRequest,
 } from "@zuu/client";
 import {
   assertObject,
@@ -32,19 +35,42 @@ export function parsePackageMutation(value: unknown): PackageMutationRequest {
   return { source: requireString(value.source, "source") };
 }
 
-export function parseCreateSession(value: unknown): Record<string, unknown> {
+export function parseCreateProject(value: unknown): CreateProjectRequest {
   assertObject(value);
-  optionalString(value.cwd, "cwd");
-  optionalString(value.name, "name");
-  optionalString(value.sessionFile, "sessionFile");
-  optionalBoolean(value.persist, "persist");
-  return value;
+  return {
+    name: optionalString(value.name, "name"),
+    cwd: requireString(value.cwd, "cwd"),
+  };
+}
+
+export function parseUpdateProject(value: unknown): UpdateProjectRequest {
+  assertObject(value);
+  return {
+    name: optionalString(value.name, "name"),
+    cwd: optionalString(value.cwd, "cwd"),
+  };
+}
+
+export function parseCreateSession(value: unknown): CreateSessionRequest {
+  assertObject(value);
+  return {
+    projectId: optionalString(value.projectId, "projectId"),
+    cwd: optionalString(value.cwd, "cwd"),
+    name: optionalString(value.name, "name"),
+    sessionFile: optionalString(value.sessionFile, "sessionFile"),
+    continueRecent: optionalBoolean(value.continueRecent, "continueRecent"),
+    model: parseModel(value.model),
+    thinkingLevel: parseThinkingLevel(value.thinkingLevel),
+    tools: optionalStringArray(value.tools, "tools"),
+    persist: optionalBoolean(value.persist, "persist"),
+  };
 }
 
 export function parseOpenSession(value: unknown): OpenSessionRequest {
   assertObject(value);
   return {
     sessionFile: requireString(value.sessionFile, "sessionFile"),
+    projectId: optionalString(value.projectId, "projectId"),
     cwdOverride: optionalString(value.cwdOverride, "cwdOverride"),
     name: optionalString(value.name, "name"),
     model: parseModel(value.model),
@@ -58,6 +84,7 @@ export function parsePrompt(value: unknown): PromptRequest {
   return {
     prompt: requireString(value.prompt, "prompt"),
     sessionId: optionalString(value.sessionId, "sessionId"),
+    projectId: optionalString(value.projectId, "projectId"),
     name: optionalString(value.name, "name"),
     cwd: optionalString(value.cwd, "cwd"),
     sessionFile: optionalString(value.sessionFile, "sessionFile"),
@@ -76,6 +103,7 @@ export function parseStartWorkflow(value: unknown): StartWorkflowRequest {
     validationError("source must be user, schedule, or api", { field: "source" });
   }
   return {
+    projectId: optionalString(value.projectId, "projectId"),
     sessionId: optionalString(value.sessionId, "sessionId"),
     prompt: optionalString(value.prompt, "prompt"),
     inputs: optionalRecord(value.inputs, "inputs"),
@@ -187,6 +215,7 @@ function parseScheduleAction(value: unknown): ScheduleAction {
     return {
       type,
       prompt: requireString(value.prompt, "action.prompt"),
+      projectId: optionalString(value.projectId, "action.projectId"),
       sessionId: optionalString(value.sessionId, "action.sessionId"),
       name: optionalString(value.name, "action.name"),
       model: parseModel(value.model),
@@ -200,6 +229,7 @@ function parseScheduleAction(value: unknown): ScheduleAction {
       type,
       workflowId: requireString(value.workflowId, "action.workflowId"),
       prompt: optionalString(value.prompt, "action.prompt"),
+      projectId: optionalString(value.projectId, "action.projectId"),
       sessionId: optionalString(value.sessionId, "action.sessionId"),
       inputs: optionalRecord(value.inputs, "action.inputs"),
     };

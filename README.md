@@ -41,6 +41,11 @@ ZUU_PI_WORKFLOW_RUN=1 pnpm check:pi-workflow
 - `GET /v1/diagnostics`
 - `GET /v1/events`：以 SSE 方式订阅 daemon 级事件，支持 `runId`、`sessionId`、`afterEventId` 和 `Last-Event-ID`
 - `GET /v1/models`
+- `GET /v1/projects`
+- `POST /v1/projects`
+- `GET /v1/projects/:projectId`
+- `PATCH /v1/projects/:projectId`
+- `DELETE /v1/projects/:projectId`
 - `GET /v1/packages`
 - `POST /v1/packages`
 - `POST /v1/packages/install`
@@ -82,10 +87,11 @@ ZUU_PI_WORKFLOW_RUN=1 pnpm check:pi-workflow
 - `POST /v1/sessions/:sessionId/import`
 
 浏览器 UI 通过 `@zuu/client` 调用 daemon API，业务请求不再散落手写 `fetch` 和 SSE 解析逻辑。
+Project 已作为一等资源持久化在 `.zuu/pi-agent/projects.json`。Daemon 启动后会提供一个稳定的 `default` 项目指向当前仓库；新建 session、prompt、workflow 和 schedule action 都可以传 `projectId`，`GET /v1/runs` 与 `GET /v1/session-files` 支持按项目过滤。直接传 `cwd` 创建 session 时会复用同 cwd 的已有 Project，缺失时才创建新记录；后续建议使用 `projectId`。
 
 默认情况下，Zuu 会把 Pi 应用状态存放在 `.zuu/pi-agent`，嵌入式应用不需要写入 `~/.pi/agent`。可以通过 `ZUU_AGENT_DIR` 覆盖。
 
-当前轻量持久化文件统一使用版本化 JSON store：`runs.json`、`run-events.json`、`approvals.json`、`workflow-runs.json`、`schedules.json`、`package-operations.json` 和 `package-trust.json` 都会先写入临时文件再原子替换。启动时如果读到损坏 JSON，会把原文件备份为 `.corrupt-*.bak`，再恢复为空数据；`GET /v1/diagnostics` 的 `resources.stores` 会暴露每个 store 的路径、记录数、恢复状态和错误信息。
+当前轻量持久化文件统一使用版本化 JSON store：`projects.json`、`runs.json`、`run-events.json`、`approvals.json`、`workflow-runs.json`、`schedules.json`、`package-operations.json` 和 `package-trust.json` 都会先写入临时文件再原子替换。启动时如果读到损坏 JSON，会把原文件备份为 `.corrupt-*.bak`，再恢复为空数据；`GET /v1/diagnostics` 的 `resources.stores` 会暴露每个 store 的路径、记录数、恢复状态和错误信息。
 
 Packages 面板会区分 `configured`、`installed`、`filtered`、`trusted` / `untrusted` 和 `enabled` / `blocked`，`GET /v1/packages` 返回结构化 package 列表。`POST /v1/packages` 只登记 package source；安装或更新前需要先通过 `POST /v1/packages/trust` 或 WebUI 的 Trust 按钮信任 source。未信任 package 会保留在配置清单中，但不会进入 Pi `ResourceLoader` 或 workflow backend 的加载链路。
 

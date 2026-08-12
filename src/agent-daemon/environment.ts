@@ -32,6 +32,10 @@ export function getRunEventStorePath(agentDir: string) {
   return join(agentDir, "run-events.json");
 }
 
+export function getProjectStorePath(agentDir: string) {
+  return join(agentDir, "projects.json");
+}
+
 export function getApprovalStorePath(agentDir: string) {
   return join(agentDir, "approvals.json");
 }

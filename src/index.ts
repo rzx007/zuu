@@ -10,6 +10,7 @@ import { ZuuDaemon } from "./agent-daemon";
 import { jsonError, readJson, toStatus } from "./http";
 import {
   parseCompact,
+  parseCreateProject,
   parseCreateSchedule,
   parseCreateSession,
   parseForkSession,
@@ -21,6 +22,7 @@ import {
   parseResolveApproval,
   parseStartWorkflow,
   parseSwitchSession,
+  parseUpdateProject,
 } from "./request-validation";
 import type {
   ApprovalStatus,
@@ -77,6 +79,42 @@ app.get("/v1/models", async (c) => {
     return c.json(await daemon.listModels());
   } catch (error) {
     return c.json(jsonError(error, 500), toStatus(error, 500));
+  }
+});
+
+app.get("/v1/projects", (c) => c.json({ projects: daemon.listProjects() }));
+
+app.post("/v1/projects", async (c) => {
+  try {
+    const body = parseCreateProject(await readJson(c.req));
+    return c.json({ project: daemon.createProject(body) }, 201);
+  } catch (error) {
+    return c.json(jsonError(error, 400), toStatus(error, 400));
+  }
+});
+
+app.get("/v1/projects/:projectId", (c) => {
+  try {
+    return c.json({ project: daemon.getProject(c.req.param("projectId")) });
+  } catch (error) {
+    return c.json(jsonError(error, 404), toStatus(error, 404));
+  }
+});
+
+app.patch("/v1/projects/:projectId", async (c) => {
+  try {
+    const body = parseUpdateProject(await readJson(c.req));
+    return c.json({ project: daemon.updateProject(c.req.param("projectId"), body) });
+  } catch (error) {
+    return c.json(jsonError(error, 400), toStatus(error, 400));
+  }
+});
+
+app.delete("/v1/projects/:projectId", (c) => {
+  try {
+    return c.json({ project: daemon.deleteProject(c.req.param("projectId")) });
+  } catch (error) {
+    return c.json(jsonError(error, 400), toStatus(error, 400));
   }
 });
 
@@ -138,7 +176,7 @@ app.get("/v1/sessions", (c) => c.json({ sessions: daemon.listSessions() }));
 
 app.get("/v1/session-files", async (c) => {
   try {
-    return c.json({ sessions: await daemon.listStoredSessions(c.req.query("cwd")) });
+    return c.json({ sessions: await daemon.listStoredSessions(c.req.query("cwd"), c.req.query("projectId")) });
   } catch (error) {
     return c.json(jsonError(error, 500), toStatus(error, 500));
   }
@@ -154,7 +192,8 @@ app.get("/v1/sessions/:sessionId/tree", (c) => {
 
 app.get("/v1/runs", (c) => {
   const sessionId = c.req.query("sessionId");
-  return c.json({ runs: daemon.listRuns(sessionId) });
+  const projectId = c.req.query("projectId");
+  return c.json({ runs: daemon.listRuns(sessionId, projectId) });
 });
 
 app.get("/v1/runs/:runId", (c) => {

@@ -1,4 +1,7 @@
 import type {
+  CreateProjectRequest,
+  CreateScheduleRequest,
+  CreateSessionRequest,
   Diagnostics,
   EventStreamQuery,
   ForkSessionRequest,
@@ -15,14 +18,15 @@ import type {
   PackageOperationResponse,
   PackageOperationsResponse,
   PackagesResponse,
-  ModelsResponse,
   PromptRequest,
   PromptStreamEvent,
+  ProjectResponse,
+  ProjectsResponse,
+  ModelsResponse,
   RunResponse,
   RunEventsResponse,
   RunsResponse,
   ResolveApprovalRequest,
-  CreateScheduleRequest,
   ScheduleResponse,
   SchedulesResponse,
   SessionActionResponse,
@@ -32,6 +36,7 @@ import type {
   StartWorkflowRequest,
   StoredSessionsResponse,
   SwitchSessionRequest,
+  UpdateProjectRequest,
   WorkflowRunResponse,
   WorkflowRunsResponse,
   WorkflowsResponse,
@@ -64,6 +69,11 @@ export interface ZuuClient {
   diagnostics(): Promise<Diagnostics>;
   listPackages(): Promise<PackagesResponse>;
   listModels(): Promise<ModelsResponse>;
+  listProjects(): Promise<ProjectsResponse>;
+  createProject(input: CreateProjectRequest): Promise<ProjectResponse>;
+  getProject(projectId: string): Promise<ProjectResponse>;
+  updateProject(projectId: string, input: UpdateProjectRequest): Promise<ProjectResponse>;
+  deleteProject(projectId: string): Promise<ProjectResponse>;
   addPackage(input: PackageMutationRequest): Promise<PackagesResponse>;
   installPackage(input: PackageMutationRequest): Promise<PackageInstallResponse>;
   updatePackage(input: PackageMutationRequest): Promise<PackageOperationStartResponse>;
@@ -73,9 +83,9 @@ export interface ZuuClient {
   listPackageOperations(): Promise<PackageOperationsResponse>;
   getPackageOperation(operationId: string): Promise<PackageOperationResponse>;
   listSessions(): Promise<SessionsResponse>;
-  listStoredSessions(cwd?: string): Promise<StoredSessionsResponse>;
+  listStoredSessions(cwd?: string, projectId?: string): Promise<StoredSessionsResponse>;
   getSessionTree(sessionId: string): Promise<SessionTreeResponse>;
-  listRuns(sessionId?: string): Promise<RunsResponse>;
+  listRuns(sessionId?: string, projectId?: string): Promise<RunsResponse>;
   getRun(runId: string): Promise<RunResponse>;
   listRunEvents(runId: string, afterEventId?: string): Promise<RunEventsResponse>;
   listWorkflows(): Promise<WorkflowsResponse>;
@@ -93,7 +103,7 @@ export interface ZuuClient {
   listApprovals(status?: ApprovalStatus): Promise<ApprovalsResponse>;
   getApproval(approvalId: string): Promise<ApprovalResponse>;
   resolveApproval(approvalId: string, input: ResolveApprovalRequest): Promise<ApprovalResponse>;
-  createSession(input?: Record<string, unknown>): Promise<SessionResponse>;
+  createSession(input?: CreateSessionRequest): Promise<SessionResponse>;
   openSession(input: OpenSessionRequest): Promise<SessionResponse>;
   prompt(input: PromptRequest, options?: PromptStreamOptions): AsyncGenerator<PromptStreamEvent>;
   subscribeEvents(options?: EventStreamOptions): AsyncGenerator<PromptStreamEvent>;
@@ -124,6 +134,14 @@ export class ZuuClientError extends Error {
 function joinUrl(baseUrl: string, path: string) {
   const normalizedBase = baseUrl.replace(/\/+$/, "");
   return `${normalizedBase}${path}`;
+}
+
+function withQuery(path: string, query: Record<string, string | undefined>) {
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(query)) {
+    if (value) params.set(key, value);
+  }
+  return params.size ? `${path}?${params}` : path;
 }
 
 async function parseJsonResponse<T>(response: Response): Promise<T> {
@@ -247,6 +265,23 @@ export function createZuuClient(options: ZuuClientOptions = {}): ZuuClient {
     diagnostics: () => requestJson<Diagnostics>(fetchImpl, baseUrl, "/v1/diagnostics", undefined, apiToken),
     listPackages: () => requestJson<PackagesResponse>(fetchImpl, baseUrl, "/v1/packages", undefined, apiToken),
     listModels: () => requestJson<ModelsResponse>(fetchImpl, baseUrl, "/v1/models", undefined, apiToken),
+    listProjects: () => requestJson<ProjectsResponse>(fetchImpl, baseUrl, "/v1/projects", undefined, apiToken),
+    createProject: (input) =>
+      requestJson<ProjectResponse>(fetchImpl, baseUrl, "/v1/projects", {
+        method: "POST",
+        body: JSON.stringify(input),
+      }, apiToken),
+    getProject: (projectId) =>
+      requestJson<ProjectResponse>(fetchImpl, baseUrl, `/v1/projects/${encodeURIComponent(projectId)}`, undefined, apiToken),
+    updateProject: (projectId, input) =>
+      requestJson<ProjectResponse>(fetchImpl, baseUrl, `/v1/projects/${encodeURIComponent(projectId)}`, {
+        method: "PATCH",
+        body: JSON.stringify(input),
+      }, apiToken),
+    deleteProject: (projectId) =>
+      requestJson<ProjectResponse>(fetchImpl, baseUrl, `/v1/projects/${encodeURIComponent(projectId)}`, {
+        method: "DELETE",
+      }, apiToken),
     addPackage: (input) =>
       requestJson<PackagesResponse>(fetchImpl, baseUrl, "/v1/packages", {
         method: "POST",
@@ -288,21 +323,21 @@ export function createZuuClient(options: ZuuClientOptions = {}): ZuuClient {
         apiToken,
       ),
     listSessions: () => requestJson<SessionsResponse>(fetchImpl, baseUrl, "/v1/sessions", undefined, apiToken),
-    listStoredSessions: (cwd) =>
+    listStoredSessions: (cwd, projectId) =>
       requestJson<StoredSessionsResponse>(
         fetchImpl,
         baseUrl,
-        cwd ? `/v1/session-files?cwd=${encodeURIComponent(cwd)}` : "/v1/session-files",
+        withQuery("/v1/session-files", { cwd, projectId }),
         undefined,
         apiToken,
       ),
     getSessionTree: (sessionId) =>
       requestJson<SessionTreeResponse>(fetchImpl, baseUrl, `/v1/sessions/${encodeURIComponent(sessionId)}/tree`, undefined, apiToken),
-    listRuns: (sessionId) =>
+    listRuns: (sessionId, projectId) =>
       requestJson<RunsResponse>(
         fetchImpl,
         baseUrl,
-        sessionId ? `/v1/runs?sessionId=${encodeURIComponent(sessionId)}` : "/v1/runs",
+        withQuery("/v1/runs", { sessionId, projectId }),
         undefined,
         apiToken,
       ),

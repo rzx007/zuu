@@ -20,6 +20,7 @@ import {
   getApprovalStorePath,
   getPackageOperationStorePath,
   getPackageTrustStorePath,
+  getProjectStorePath,
   getRunEventStorePath,
   getRunStorePath,
   getScheduleStorePath,
@@ -31,12 +32,15 @@ import { ApprovalStore, assertApprovalStatus } from "./agent-daemon/approval-sto
 import { createApprovalExtension, subscribeApprovalEvents } from "./agent-daemon/approval-policy";
 import { buildDiagnostics } from "./agent-daemon/diagnostics";
 import { compactAgentEvent, entryRole, entryText } from "./agent-daemon/events";
+import { ProjectStore } from "./agent-daemon/projects";
 import { ScheduleStore } from "./agent-daemon/schedules";
 import { PackageService } from "./agent-daemon/packages";
 import { createStatusTool } from "./agent-daemon/status-tool";
 import { createWorkflowBackend } from "./agent-daemon/workflows";
 import type {
   CreateScheduleRequest,
+  CreateSessionRequest,
+  CreateProjectRequest,
   EventStreamQuery,
   ForkSessionRequest,
   ImportSessionRequest,
@@ -45,6 +49,7 @@ import type {
   ApprovalStatus,
   CreateApprovalRequest,
   PackageMutationRequest,
+  ProjectSummary,
   PromptRequest,
   PromptStreamEvent,
   ResolveApprovalRequest,
@@ -56,27 +61,20 @@ import type {
   StoredSessionSummary,
   SwitchSessionRequest,
   ThinkingLevel,
+  UpdateProjectRequest,
 } from "@zuu/client";
 import { loadRunHistory, saveRunHistory } from "./agent-daemon/run-history";
 import { matchesEventQuery, RunEventStore, type RunEventDraft } from "./agent-daemon/run-events";
 
 interface ManagedRuntime {
   runtime: AgentSessionRuntime;
+  projectId: string;
   cwd: string;
   createdAt: string;
   updatedAt: string;
 }
 
-interface CreateSessionOptions {
-  cwd?: string;
-  name?: string;
-  sessionFile?: string;
-  continueRecent?: boolean;
-  model?: PromptRequest["model"];
-  thinkingLevel?: ThinkingLevel;
-  tools?: string[];
-  persist?: boolean;
-}
+type CreateSessionOptions = CreateSessionRequest;
 
 type EventListener = (event: PromptStreamEvent) => void;
 
@@ -87,6 +85,7 @@ export class ZuuDaemon {
   private readonly runStorePath = getRunStorePath(this.agentDir);
   private readonly runEventStore = new RunEventStore(getRunEventStorePath(this.agentDir));
   private readonly eventListeners = new Set<EventListener>();
+  private readonly projectStore = new ProjectStore(getProjectStorePath(this.agentDir), this.agentDir);
   private readonly approvalStore = new ApprovalStore(getApprovalStorePath(this.agentDir));
   private readonly activeRunBySessionId = new Map<string, string>();
   private readonly eventBus: EventBusController = createEventBus();
@@ -112,6 +111,7 @@ export class ZuuDaemon {
     },
     runWorkflow: async (action) => {
       const run = await this.startWorkflow(action.workflowId, {
+        projectId: action.projectId,
         sessionId: action.sessionId,
         prompt: action.prompt,
         inputs: action.inputs,
@@ -183,11 +183,38 @@ export class ZuuDaemon {
     });
   }
 
+  listProjects() {
+    return this.projectStore.list();
+  }
+
+  getProject(projectId: string) {
+    return this.projectStore.get(projectId);
+  }
+
+  createProject(request: CreateProjectRequest) {
+    return this.projectStore.create(request);
+  }
+
+  updateProject(projectId: string, request: UpdateProjectRequest) {
+    return this.projectStore.update(projectId, request);
+  }
+
+  deleteProject(projectId: string) {
+    return this.projectStore.delete(projectId);
+  }
+
+  private resolveProject(options: { projectId?: string; cwd?: string }): ProjectSummary {
+    if (options.projectId) return this.projectStore.get(options.projectId);
+    if (!options.cwd) return this.projectStore.get();
+
+    return this.projectStore.findByCwd(options.cwd) ?? this.projectStore.create({ cwd: options.cwd });
+  }
+
   private createSessionManager(options: CreateSessionOptions, cwd: string, sessionDir: string) {
     assertAllowedPath(cwd, "cwd");
     if (options.sessionFile) {
       assertAllowedPath(options.sessionFile, "sessionFile");
-      return SessionManager.open(options.sessionFile, sessionDir, options.cwd);
+      return SessionManager.open(options.sessionFile, sessionDir, cwd);
     }
 
     if (options.continueRecent) {
@@ -205,10 +232,16 @@ export class ZuuDaemon {
     if (options.sessionFile) {
       assertAllowedPath(options.sessionFile, "sessionFile");
       const existing = this.findRuntimeBySessionFile(options.sessionFile);
-      if (existing) return existing.runtime.session;
+      if (existing) {
+        if (options.projectId && existing.projectId !== options.projectId) {
+          throw new Error(`Session file is already open in project ${existing.projectId}`);
+        }
+        return existing.runtime.session;
+      }
     }
 
-    const cwd = options.cwd ?? process.cwd();
+    const project = this.resolveProject(options);
+    const cwd = project.cwd;
     assertAllowedPath(cwd, "cwd");
     const agentDir = getZuuAgentDir();
     const sessionDir = getSessionDir(agentDir);
@@ -225,7 +258,13 @@ export class ZuuDaemon {
     if (options.name) session.setSessionName(options.name);
 
     const now = new Date().toISOString();
-    const managed: ManagedRuntime = { runtime, cwd: runtime.cwd, createdAt: now, updatedAt: now };
+    const managed: ManagedRuntime = {
+      runtime,
+      projectId: project.id,
+      cwd: runtime.cwd,
+      createdAt: now,
+      updatedAt: now,
+    };
     this.bindRuntime(managed);
     this.runtimes.set(session.sessionId, managed);
     return session;
@@ -238,6 +277,7 @@ export class ZuuDaemon {
 
     return this.createSession({
       ...options,
+      projectId: options.projectId,
       cwd: options.cwdOverride,
       sessionFile: options.sessionFile,
     });
@@ -246,7 +286,12 @@ export class ZuuDaemon {
   async getOrCreateSession(options: CreateSessionOptions & { sessionId?: string }) {
     if (options.sessionId) {
       const existing = this.runtimes.get(options.sessionId);
-      if (existing) return existing.runtime.session;
+      if (existing) {
+        if (options.projectId && existing.projectId !== options.projectId) {
+          throw new Error(`Session ${options.sessionId} does not belong to project ${options.projectId}`);
+        }
+        return existing.runtime.session;
+      }
       throw new Error(`Unknown session: ${options.sessionId}`);
     }
 
@@ -257,19 +302,22 @@ export class ZuuDaemon {
     return [...this.runtimes.values()].map((item) => this.summarizeSession(item.runtime.session));
   }
 
-  async listStoredSessions(cwd?: string) {
-    if (cwd) assertAllowedPath(cwd, "cwd");
+  async listStoredSessions(cwd?: string, projectId?: string) {
+    const projectCwd = projectId ? this.projectStore.get(projectId).cwd : undefined;
+    const targetCwd = cwd ?? projectCwd;
+    if (targetCwd) assertAllowedPath(targetCwd, "cwd");
     const agentDir = getZuuAgentDir();
     const sessionDir = getSessionDir(agentDir);
-    const sessions = cwd ? await SessionManager.list(cwd, sessionDir) : await SessionManager.listAll(sessionDir);
+    const sessions = targetCwd ? await SessionManager.list(targetCwd, sessionDir) : await SessionManager.listAll(sessionDir);
     return sessions
-      .map((session) => this.summarizeStoredSession(session))
+      .map((session) => this.summarizeStoredSession(session, projectId))
       .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
   }
 
-  listRuns(sessionId?: string) {
+  listRuns(sessionId?: string, projectId?: string) {
     return [...this.runs.values()]
       .filter((run) => !sessionId || run.sessionId === sessionId)
+      .filter((run) => !projectId || run.projectId === projectId)
       .sort((a, b) => b.startedAt.localeCompare(a.startedAt));
   }
 
@@ -345,6 +393,7 @@ export class ZuuDaemon {
   }
 
   startWorkflow(workflowId: string, request: StartWorkflowRequest = {}) {
+    if (request.projectId) this.projectStore.get(request.projectId);
     return this.createWorkflowBackend().start(workflowId, request);
   }
 
@@ -417,6 +466,7 @@ export class ZuuDaemon {
     const managed = this.runtimes.get(session.sessionId);
     return {
       id: session.sessionId,
+      projectId: managed?.projectId ?? this.projectStore.get().id,
       name: session.sessionName,
       cwd: managed?.cwd ?? process.cwd(),
       model: session.model ? `${session.model.provider}/${session.model.id}` : undefined,
@@ -430,10 +480,11 @@ export class ZuuDaemon {
     };
   }
 
-  summarizeStoredSession(session: SessionInfo): StoredSessionSummary {
+  summarizeStoredSession(session: SessionInfo, projectId?: string): StoredSessionSummary {
     return {
       id: session.id,
       path: session.path,
+      projectId,
       cwd: session.cwd,
       name: session.name,
       parentSessionPath: session.parentSessionPath,
@@ -474,6 +525,7 @@ export class ZuuDaemon {
     const run: RunSummary = {
       id: runId,
       sessionId: session.sessionId,
+      projectId: this.getManagedRuntime(session.sessionId).projectId,
       status: "running",
       prompt: request.prompt,
       startedAt: new Date().toISOString(),

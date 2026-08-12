@@ -29,6 +29,28 @@ const diagnostics = await client.diagnostics();
 const packages = await client.listPackages();
 ```
 
+## Project
+
+Daemon 默认提供 `default` 项目。新建项目后，优先把 `projectId` 传给 session、prompt、workflow 和 schedule，而不是在每次调用里重复传 `cwd`。
+
+```ts
+const { projects } = await client.listProjects();
+const currentProjectId = projects[0]?.id ?? "default";
+
+const { session } = await client.createSession({
+  projectId: currentProjectId,
+  name: "当前项目会话",
+});
+
+for await (const event of client.prompt({
+  projectId: currentProjectId,
+  sessionId: session.id,
+  prompt: "总结这个项目的当前状态",
+})) {
+  console.log(event.type);
+}
+```
+
 ## 错误处理
 
 非 2xx 响应会抛出 `ZuuClientError`，其中包含稳定的 `status`、`code`、`retryable` 和可选 `details`。

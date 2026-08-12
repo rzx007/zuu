@@ -7,7 +7,14 @@ export function loadRunHistory(path: string): RunSummary[] {
   return createRunHistoryStore(path)
     .load(Array.isArray)
     .filter((run): run is RunSummary => {
-      return Boolean(run && typeof run === "object" && "id" in run && "sessionId" in run && "status" in run);
+      return Boolean(
+        run &&
+          typeof run === "object" &&
+          "id" in run &&
+          "sessionId" in run &&
+          "projectId" in run &&
+          "status" in run,
+      );
     });
 }
 

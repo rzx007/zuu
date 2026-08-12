@@ -1,7 +1,38 @@
 export type ThinkingLevel = "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
 
+export type ProjectStatus = "ready" | "unavailable";
+
+export interface ProjectSummary {
+  id: string;
+  name: string;
+  cwd: string;
+  agentDir: string;
+  status: ProjectStatus;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateProjectRequest {
+  name?: string;
+  cwd: string;
+}
+
+export interface UpdateProjectRequest {
+  name?: string;
+  cwd?: string;
+}
+
+export interface ProjectsResponse {
+  projects: ProjectSummary[];
+}
+
+export interface ProjectResponse {
+  project: ProjectSummary;
+}
+
 export interface SessionSummary {
   id: string;
+  projectId: string;
   name?: string;
   cwd: string;
   model?: string;
@@ -17,6 +48,7 @@ export interface SessionSummary {
 export interface RunSummary {
   id: string;
   sessionId: string;
+  projectId: string;
   status: "running" | "done" | "error" | "aborted";
   prompt: string;
   startedAt: string;
@@ -64,6 +96,7 @@ export interface ResolveApprovalRequest {
 export interface PromptRequest {
   prompt: string;
   sessionId?: string;
+  projectId?: string;
   name?: string;
   cwd?: string;
   sessionFile?: string;
@@ -137,6 +170,7 @@ export interface SessionTreeResponse {
 export interface StoredSessionSummary {
   id: string;
   path: string;
+  projectId?: string;
   cwd: string;
   name?: string;
   parentSessionPath?: string;
@@ -153,6 +187,7 @@ export interface StoredSessionsResponse {
 
 export interface OpenSessionRequest {
   sessionFile: string;
+  projectId?: string;
   cwdOverride?: string;
   name?: string;
   model?: PromptRequest["model"];
@@ -267,6 +302,7 @@ export interface WorkflowRun {
   workflowName: string;
   status: WorkflowRunStatus;
   source: "user" | "schedule" | "api";
+  projectId?: string;
   sessionId?: string;
   prompt?: string;
   startedAt: string;
@@ -278,6 +314,7 @@ export interface WorkflowRun {
 }
 
 export interface StartWorkflowRequest {
+  projectId?: string;
   sessionId?: string;
   prompt?: string;
   inputs?: Record<string, unknown>;
@@ -313,6 +350,7 @@ export type ScheduleAction =
   | {
       type: "prompt";
       prompt: string;
+      projectId?: string;
       sessionId?: string;
       name?: string;
       model?: PromptRequest["model"];
@@ -324,6 +362,7 @@ export type ScheduleAction =
       type: "workflow";
       workflowId: string;
       prompt?: string;
+      projectId?: string;
       sessionId?: string;
       inputs?: Record<string, unknown>;
     };
@@ -356,6 +395,18 @@ export interface CreateScheduleRequest {
   name?: string;
   trigger: ScheduleTrigger;
   action: ScheduleAction;
+}
+
+export interface CreateSessionRequest {
+  projectId?: string;
+  cwd?: string;
+  name?: string;
+  sessionFile?: string;
+  continueRecent?: boolean;
+  model?: PromptRequest["model"];
+  thinkingLevel?: ThinkingLevel;
+  tools?: string[];
+  persist?: boolean;
 }
 
 export interface SchedulesResponse {

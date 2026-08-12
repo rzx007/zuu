@@ -99,6 +99,7 @@ export class PiPackageWorkflowBackend implements WorkflowBackend {
       workflowName: definition.name,
       status: "running",
       source: request.source ?? "user",
+      projectId: request.projectId,
       sessionId: request.sessionId,
       prompt: request.prompt,
       startedAt: now,
@@ -111,6 +112,7 @@ export class PiPackageWorkflowBackend implements WorkflowBackend {
     try {
       const agentRun = await this.options.launchPrompt({
         prompt: command,
+        projectId: request.projectId,
         sessionId: request.sessionId,
         name: `Workflow: ${definition.name}`,
       });

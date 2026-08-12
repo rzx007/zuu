@@ -6,6 +6,7 @@ import { ApprovalStore } from "../src/agent-daemon/approval-store";
 import { createApprovalExtension } from "../src/agent-daemon/approval-policy";
 import { PackageService } from "../src/agent-daemon/packages";
 import { PackageTrustStore } from "../src/agent-daemon/package-trust";
+import { ProjectStore } from "../src/agent-daemon/projects";
 import { RunEventStore } from "../src/agent-daemon/run-events";
 import { loadRunHistory, saveRunHistory } from "../src/agent-daemon/run-history";
 import { createWorkflowBackend } from "../src/agent-daemon/workflows";
@@ -60,6 +61,9 @@ async function main() {
   if (!Array.isArray(diagnostics.resources.stores)) {
     throw new Error("store diagnostics response is invalid");
   }
+  if (!diagnostics.resources.stores.some((store) => store.name === "projects")) {
+    throw new Error("project store diagnostics should be reported");
+  }
 
   let sawAuthHeader = false;
   const authClient = createZuuClient({
@@ -109,6 +113,45 @@ async function main() {
 
   const { runs } = await client.listRuns();
   if (!Array.isArray(runs)) throw new Error("runs response is invalid");
+  const projects = await client.listProjects();
+  const defaultProject = projects.projects.find((project) => project.id === "default");
+  if (!defaultProject || defaultProject.cwd !== process.cwd()) {
+    throw new Error("default project response is invalid");
+  }
+  const project = await client.createProject({ cwd: process.cwd(), name: "check project" });
+  if (project.project.name !== "check project" || project.project.status !== "ready") {
+    throw new Error("created project response is invalid");
+  }
+  const loadedProject = await client.getProject(project.project.id);
+  if (loadedProject.project.id !== project.project.id) {
+    throw new Error("project lookup returned the wrong project");
+  }
+  const renamedProject = await client.updateProject(project.project.id, { name: "renamed check project" });
+  if (renamedProject.project.name !== "renamed check project") {
+    throw new Error("project update response is invalid");
+  }
+  const projectSession = await client.createSession({
+    projectId: project.project.id,
+    persist: false,
+    name: "project check",
+  });
+  if (projectSession.session.projectId !== project.project.id) {
+    throw new Error("project session response should include projectId");
+  }
+  const projectStoredSessions = await client.listStoredSessions(undefined, project.project.id);
+  if (!Array.isArray(projectStoredSessions.sessions)) {
+    throw new Error("project stored sessions response is invalid");
+  }
+  if (projectStoredSessions.sessions.some((session) => session.projectId !== project.project.id)) {
+    throw new Error("project stored sessions should include the filtered projectId");
+  }
+  const deletedProject = await client.deleteProject(project.project.id);
+  if (deletedProject.project.id !== project.project.id) {
+    throw new Error("project delete returned the wrong project");
+  }
+  await expectClientError(() => client.getProject(project.project.id), { status: 404, code: "not_found" });
+  await expectClientError(() => client.deleteProject("default"), { status: 400, code: "validation_failed" });
+  await expectClientError(() => client.createProject({ cwd: ".." }), { status: 400, code: "validation_failed" });
   await expectClientError(() => client.listRunEvents("missing"), { status: 404, code: "not_found" });
   const missingEventStream = await fetchFromApp("http://zuu.local/v1/events?runId=missing");
   if (missingEventStream.status !== 404) throw new Error("missing event stream run should fail before streaming");
@@ -187,9 +230,13 @@ async function main() {
     throw new Error("workflow backend info is invalid");
   }
   const workflowRun = await client.startWorkflow(workflows.workflows[0].id, {
+    projectId: defaultProject.id,
     prompt: "contract check",
     inputs: { source: "scripts/check.ts" },
   });
+  if (workflowRun.run.projectId !== defaultProject.id) {
+    throw new Error("workflow run should include projectId");
+  }
   if (workflowRun.run.status !== "done" || workflowRun.run.stages.length === 0 || workflowRun.run.tasks.length === 0) {
     throw new Error("workflow run response is invalid");
   }
@@ -474,6 +521,7 @@ async function main() {
     {
       id: "store-check-run",
       sessionId: "store-check-session",
+      projectId: "default",
       status: "done",
       prompt: "store check",
       startedAt: "2026-08-12T00:00:00.000Z",
@@ -483,6 +531,17 @@ async function main() {
   const savedPayload = JSON.parse(readFileSync(corruptRunsPath, "utf8")) as { version?: number; data?: unknown };
   if (savedPayload.version !== 1 || !Array.isArray(savedPayload.data) || savedPayload.data.length !== 1) {
     throw new Error("run history should save through the versioned JSON store");
+  }
+
+  const projectStoreDir = mkdtempSync(join(tmpdir(), "zuu-project-store-check-"));
+  const projectStore = new ProjectStore(join(projectStoreDir, "projects.json"), projectStoreDir);
+  const storedProject = projectStore.create({ cwd: process.cwd(), name: "stored project" });
+  if (projectStore.get(storedProject.id).name !== "stored project") {
+    throw new Error("project store should persist created projects");
+  }
+  projectStore.update(storedProject.id, { name: "updated stored project" });
+  if (projectStore.delete(storedProject.id).name !== "updated stored project") {
+    throw new Error("project store should update and delete projects");
   }
 
   const runEventStorePath = join(mkdtempSync(join(tmpdir(), "zuu-run-event-check-")), "run-events.json");
