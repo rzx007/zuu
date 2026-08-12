@@ -55,6 +55,7 @@ export class PromptService {
     let finished = false;
     let promptError: unknown;
     let sawError = false;
+    let streamErrorMessage: string | undefined;
 
     const wake = () => {
       notify?.();
@@ -64,7 +65,10 @@ export class PromptService {
     const unsubscribe = session.subscribe((event) => {
       const compact = compactAgentEvent(event, runId);
       if (compact) {
-        if (compact.type === "error") sawError = true;
+        if (compact.type === "error") {
+          sawError = true;
+          streamErrorMessage ??= compact.message;
+        }
         queue.push(compact);
         wake();
       }
@@ -117,6 +121,7 @@ export class PromptService {
       this.options.sessions.touchSession(session.sessionId);
       run.status = run.status === "aborted" ? "aborted" : sawError ? "failed" : "completed";
       run.finishedAt = new Date().toISOString();
+      if (run.status === "failed") run.error = streamErrorMessage;
       this.options.runs.saveRun(run);
       yield recordAndPublish({
         runId,

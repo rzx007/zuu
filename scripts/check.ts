@@ -2837,6 +2837,72 @@ async function main() {
     throw new Error("prompt service should pass streamingBehavior to the Pi SDK session");
   }
 
+  let errorSubscriber: ((event: unknown) => void) | undefined;
+  let savedErrorRun: { status?: string; error?: string } | undefined;
+  const errorSession = {
+    sessionId: "error-session",
+    isStreaming: false,
+    prompt: async () => {
+      errorSubscriber?.({
+        type: "message_end",
+        message: { role: "assistant", stopReason: "error", errorMessage: "provider failed" },
+      });
+    },
+    subscribe: (subscriber: (event: unknown) => void) => {
+      errorSubscriber = subscriber;
+      return () => {
+        errorSubscriber = undefined;
+      };
+    },
+    setActiveToolsByName: () => {},
+  };
+  const errorPromptService = new PromptService({
+    sessions: {
+      getOrCreateSession: async () => errorSession,
+      touchSession: () => {},
+      getProjectId: () => "default",
+      summarizeSession: () => ({
+        id: "error-session",
+        projectId: "default",
+        cwd: process.cwd(),
+        thinkingLevel: "medium",
+        activeTools: [],
+        messageCount: 0,
+        isStreaming: false,
+        createdAt: "2026-08-12T00:00:00.000Z",
+        updatedAt: "2026-08-12T00:00:00.000Z",
+      }),
+    },
+    runs: {
+      startRun: () => ({
+        id: "error-run",
+        sessionId: "error-session",
+        projectId: "default",
+        source: "user",
+        status: "running",
+        prompt: "error",
+        startedAt: "2026-08-12T00:00:00.000Z",
+      }),
+      createEventRecorder: (runId: string) => (event: { runId: string; type: string }) => ({
+        id: `${runId}:${++runEventSequence}`,
+        createdAt: "2026-08-12T00:00:00.000Z",
+        ...event,
+      }),
+      saveRun: (run: { status?: string; error?: string }) => {
+        savedErrorRun = { status: run.status, error: run.error };
+      },
+    },
+    eventBus: { on: () => () => {} },
+    activeRunBySessionId: new Map<string, string>(),
+    approvalWaitBySessionId: new Map<string, boolean>(),
+  } as never);
+  for await (const event of errorPromptService.prompt({ sessionId: "error-session", prompt: "error" })) {
+    if (event.type === "done") break;
+  }
+  if (savedErrorRun?.status !== "failed" || savedErrorRun.error !== "provider failed") {
+    throw new Error("prompt service should persist assistant error messages on failed runs");
+  }
+
   await expectClientError(() => client.createSession({ cwd: "..", persist: false }), {
     status: 400,
     code: "validation_failed",
