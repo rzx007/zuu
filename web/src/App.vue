@@ -10,6 +10,7 @@ import {
   type PackageSummary,
   type PromptRequest,
   type PromptStreamEvent,
+  type ProjectSummary,
   type RunSummary,
   type Schedule,
   type ScheduleAction,
@@ -50,6 +51,7 @@ interface LiveEventItem {
 
 const tokenKey = 'zuu.apiToken'
 const eventCursorKey = 'zuu.lastEventId'
+const projectKey = 'zuu.projectId'
 let client = createZuuClient({ apiToken: localStorage.getItem(tokenKey) || undefined })
 let messageSeq = 0
 let packageOperationPollId: number | undefined
@@ -62,6 +64,12 @@ const countedEventOrder: string[] = []
 
 const apiToken = ref(localStorage.getItem(tokenKey) || '')
 const diagnostics = ref<Diagnostics>()
+const projects = ref<ProjectSummary[]>([])
+const selectedProjectId = ref(localStorage.getItem(projectKey) || '')
+const projectName = ref('')
+const projectCwd = ref('')
+const newProjectName = ref('')
+const newProjectCwd = ref('')
 const packages = ref<PackageSummary[]>([])
 const packageOperations = ref<PackageOperation[]>([])
 const packageSource = ref('')
@@ -120,7 +128,16 @@ const configuredProviders = computed(() => diagnostics.value?.models.configuredP
 const resourceDiagnostics = computed(() => diagnostics.value?.resources.resourceDiagnostics || [])
 const blockedPackages = computed(() => diagnostics.value?.resources.blockedPackages || [])
 const storeDiagnostics = computed(() => diagnostics.value?.resources.stores || [])
+const currentProject = computed(() => projects.value.find((project) => project.id === currentProjectId()))
+const currentProjectName = computed(() => currentProject.value?.name || currentProjectId())
+const currentProjectCwd = computed(() => currentProject.value?.cwd || '')
 const selectedWorkflow = computed(() => workflows.value.find((workflow) => workflow.id === selectedWorkflowId.value))
+const currentProjectSchedules = computed(() =>
+  schedules.value.filter((schedule) => schedule.action.projectId === currentProjectId()),
+)
+const currentProjectWorkflowRuns = computed(() =>
+  workflowRuns.value.filter((run) => run.projectId === currentProjectId()),
+)
 const runningPackageOperations = computed(() => packageOperations.value.filter((operation) => operation.status === 'running'))
 const eventStatusVariant = computed(() => {
   if (eventStreamStatus.value === 'live') return 'secondary'
@@ -155,12 +172,28 @@ function addMessage(role: MessageRole, text = '') {
   return message
 }
 
+function currentProjectId() {
+  return selectedProjectId.value || projects.value[0]?.id || 'default'
+}
+
+function syncProjectForm() {
+  const project = currentProject.value
+  projectName.value = project?.name || ''
+  projectCwd.value = project?.cwd || ''
+  newProjectCwd.value = project?.cwd || newProjectCwd.value
+}
+
 function setActiveSession(session: SessionSummary) {
+  if (session.projectId && session.projectId !== currentProjectId()) {
+    selectedProjectId.value = session.projectId
+    localStorage.setItem(projectKey, session.projectId)
+  }
   currentSession.value = session
   sessionName.value = session.name || sessionName.value
 }
 
 function upsertRun(run: RunSummary) {
+  if (run.projectId !== currentProjectId()) return
   runs.value = [run, ...runs.value.filter((item) => item.id !== run.id)].sort((a, b) => b.startedAt.localeCompare(a.startedAt))
 }
 
@@ -238,7 +271,11 @@ function handleDaemonEvent(event: PromptStreamEvent) {
   countRunEvent(event)
   rememberLiveEvent(event)
 
-  if (event.session && (event.session.isStreaming || currentSession.value?.id === event.session.id)) {
+  if (
+    event.session &&
+    event.session.projectId === currentProjectId() &&
+    (event.session.isStreaming || currentSession.value?.id === event.session.id)
+  ) {
     setActiveSession(event.session)
   }
   if (event.run) upsertRun(event.run)
@@ -328,8 +365,18 @@ async function loadModels() {
   models.value = response.models
 }
 
+async function loadProjects() {
+  const response = await client.listProjects()
+  projects.value = response.projects
+  if (!projects.value.some((project) => project.id === selectedProjectId.value)) {
+    selectedProjectId.value = projects.value.find((project) => project.id === 'default')?.id || projects.value[0]?.id || 'default'
+  }
+  localStorage.setItem(projectKey, currentProjectId())
+  syncProjectForm()
+}
+
 async function loadRuns() {
-  runs.value = (await client.listRuns(currentSession.value?.id)).runs
+  runs.value = (await client.listRuns(undefined, currentProjectId())).runs
   await Promise.all(
     runs.value.slice(0, 10).map(async (run) => {
       runEventCounts[run.id] = (await client.listRunEvents(run.id)).events.length
@@ -338,7 +385,7 @@ async function loadRuns() {
 }
 
 async function loadStoredSessions() {
-  storedSessions.value = (await client.listStoredSessions()).sessions
+  storedSessions.value = (await client.listStoredSessions(undefined, currentProjectId())).sessions
 }
 
 async function loadSessionTree() {
@@ -373,6 +420,7 @@ async function loadSchedules() {
 async function refreshAll() {
   isRefreshing.value = true
   try {
+    await loadProjects()
     await Promise.all([
       loadDiagnostics(),
       loadPackages(),
@@ -406,6 +454,59 @@ function chooseModel() {
   const [nextProvider, nextModel] = selectedModel.value.split('/', 2)
   provider.value = nextProvider || ''
   modelName.value = nextModel || ''
+}
+
+async function switchProject() {
+  localStorage.setItem(projectKey, currentProjectId())
+  syncProjectForm()
+  if (currentSession.value?.projectId !== currentProjectId()) {
+    currentSession.value = undefined
+    sessionTree.value = []
+  }
+  runs.value = []
+  storedSessions.value = []
+  for (const key of Object.keys(runEventCounts)) {
+    delete runEventCounts[key]
+  }
+  await Promise.all([loadRuns(), loadStoredSessions(), loadSessionTree(), loadApprovals(), loadWorkflowRuns(), loadSchedules()])
+}
+
+async function createProject() {
+  const cwd = newProjectCwd.value.trim()
+  if (!cwd) return
+  const response = await client.createProject({
+    cwd,
+    name: newProjectName.value.trim() || undefined,
+  })
+  projects.value = [response.project, ...projects.value.filter((project) => project.id !== response.project.id)]
+  selectedProjectId.value = response.project.id
+  localStorage.setItem(projectKey, response.project.id)
+  newProjectName.value = ''
+  syncProjectForm()
+  addMessage('event', `project created: ${response.project.name}`)
+  await switchProject()
+}
+
+async function updateProject() {
+  const projectId = currentProjectId()
+  const response = await client.updateProject(projectId, {
+    name: projectName.value.trim() || undefined,
+    cwd: projectCwd.value.trim() || undefined,
+  })
+  projects.value = projects.value.map((project) => (project.id === response.project.id ? response.project : project))
+  syncProjectForm()
+  addMessage('event', `project updated: ${response.project.name}`)
+  await Promise.all([loadStoredSessions(), loadRuns(), loadDiagnostics()])
+}
+
+async function deleteProject() {
+  const project = currentProject.value
+  if (!project || project.id === 'default') return
+  const response = await client.deleteProject(project.id)
+  addMessage('event', `project deleted: ${response.project.name}`)
+  selectedProjectId.value = projects.value.find((item) => item.id === 'default')?.id || 'default'
+  await loadProjects()
+  await switchProject()
 }
 
 async function addPackage() {
@@ -467,7 +568,7 @@ async function revokePackageTrust(source: string) {
 }
 
 async function openStoredSession(sessionFile: string) {
-  const { session } = await client.openSession({ sessionFile })
+  const { session } = await client.openSession({ sessionFile, projectId: currentProjectId() })
   setActiveSession(session)
   addMessage('event', `opened session: ${session.id}`)
   await Promise.all([loadRuns(), loadStoredSessions(), loadSessionTree(), loadApprovals()])
@@ -487,7 +588,7 @@ async function importSession() {
   const path = importPath.value.trim()
   if (!path) return
   if (!currentSession.value) {
-    const { session } = await client.createSession({ persist: false, name: 'Import anchor' })
+    const { session } = await client.createSession({ projectId: currentProjectId(), persist: false, name: 'Import anchor' })
     setActiveSession(session)
   }
   const sessionId = currentSession.value?.id
@@ -510,6 +611,7 @@ async function resolveApproval(approval: Approval, decision: ApprovalDecision) {
 async function startWorkflow() {
   if (!selectedWorkflowId.value) return
   const result = await client.startWorkflow(selectedWorkflowId.value, {
+    projectId: currentProjectId(),
     sessionId: currentSession.value?.id,
     prompt: workflowPrompt.value.trim() || undefined,
     inputs: {
@@ -533,6 +635,7 @@ function scheduleAction(): ScheduleAction | undefined {
     return {
       type: 'workflow',
       workflowId: selectedWorkflowId.value,
+      projectId: currentProjectId(),
       sessionId: currentSession.value?.id,
       prompt: schedulePrompt.value.trim() || undefined,
       inputs: {
@@ -545,6 +648,7 @@ function scheduleAction(): ScheduleAction | undefined {
   return {
     type: 'prompt',
     prompt: schedulePrompt.value.trim() || prompt.value.trim(),
+    projectId: currentProjectId(),
     sessionId: currentSession.value?.id,
     name: sessionName.value.trim() || undefined,
     thinkingLevel: thinkingLevel.value,
@@ -657,6 +761,7 @@ async function sendPrompt() {
 
   const request: PromptRequest = {
     prompt: text,
+    projectId: currentProjectId(),
     sessionId: currentSession.value?.id,
     name: sessionName.value.trim() || undefined,
     thinkingLevel: thinkingLevel.value,
@@ -736,6 +841,36 @@ onUnmounted(() => {
             <Badge variant="outline">{{ statusText }}</Badge>
           </div>
           <p class="text-muted-foreground text-xs">Pi SDK daemon, session runtime, tool approvals and package diagnostics.</p>
+        </section>
+
+        <section class="panel-block">
+          <div class="section-title">
+            <h2>Project</h2>
+            <Badge variant="outline">{{ projects.length }}</Badge>
+          </div>
+          <label class="field-label">
+            Active project
+            <select v-model="selectedProjectId" class="field-input" @change="switchProject().catch((error) => addMessage('error', errorMessage(error)))">
+              <option v-for="project in projects" :key="project.id" :value="project.id">
+                {{ project.name }} / {{ project.status }}
+              </option>
+            </select>
+          </label>
+          <p class="empty-text truncate">{{ currentProjectCwd || 'No project loaded.' }}</p>
+          <div class="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
+            <input v-model="projectName" class="field-input min-w-0" placeholder="Project name" @keydown.enter="updateProject().catch((error) => addMessage('error', errorMessage(error)))">
+            <Button variant="outline" size="sm" @click="updateProject().catch((error) => addMessage('error', errorMessage(error)))">Rename</Button>
+          </div>
+          <input v-model="projectCwd" class="field-input" placeholder="D:\code\personal-project\zuu">
+          <div class="flex gap-2">
+            <Button variant="ghost" size="sm" :disabled="currentProject?.id === 'default'" @click="deleteProject().catch((error) => addMessage('error', errorMessage(error)))">Delete</Button>
+            <Button variant="outline" size="sm" class="ml-auto" @click="loadProjects().catch((error) => addMessage('error', errorMessage(error)))">Refresh</Button>
+          </div>
+          <div class="project-create">
+            <input v-model="newProjectName" class="field-input min-w-0" placeholder="New project">
+            <input v-model="newProjectCwd" class="field-input min-w-0" placeholder="cwd">
+            <Button size="sm" @click="createProject().catch((error) => addMessage('error', errorMessage(error)))">Create</Button>
+          </div>
         </section>
 
         <section class="panel-block">
@@ -867,7 +1002,7 @@ onUnmounted(() => {
         <section class="panel-block">
           <div class="section-title">
             <h2>Schedules</h2>
-            <Badge variant="outline">{{ schedules.length }}</Badge>
+            <Badge variant="outline">{{ currentProjectSchedules.length }}</Badge>
           </div>
           <label class="field-label">
             Name
@@ -907,8 +1042,8 @@ onUnmounted(() => {
           </label>
           <Textarea v-model="schedulePrompt" class="min-h-16" />
           <Button size="sm" :disabled="scheduleActionType === 'workflow' && !selectedWorkflowId" @click="createSchedule().catch((error) => addMessage('error', errorMessage(error)))">Create schedule</Button>
-          <div v-if="schedules.length" class="list-stack max-h-56 overflow-auto">
-            <div v-for="schedule in schedules.slice(0, 6)" :key="schedule.id" class="compact-row">
+          <div v-if="currentProjectSchedules.length" class="list-stack max-h-56 overflow-auto">
+            <div v-for="schedule in currentProjectSchedules.slice(0, 6)" :key="schedule.id" class="compact-row">
               <div class="min-w-0">
                 <strong>{{ schedule.name }}</strong>
                 <span>{{ schedule.status }} / {{ scheduleTriggerLabel(schedule) }}</span>
@@ -948,7 +1083,7 @@ onUnmounted(() => {
         <header class="border-border bg-background flex items-center justify-between gap-3 border-b px-5 py-4 max-md:flex-col max-md:items-start">
           <div class="min-w-0">
             <h2 class="truncate text-base font-semibold">{{ currentSession?.name || 'New session' }}</h2>
-            <p class="text-muted-foreground truncate text-xs">{{ currentSession?.model || currentSession?.sessionFile || 'Ask the agent to inspect this project.' }}</p>
+            <p class="text-muted-foreground truncate text-xs">{{ currentProjectName }} / {{ currentSession?.model || currentSession?.sessionFile || 'Ask the agent to inspect this project.' }}</p>
           </div>
           <div class="flex shrink-0 items-center gap-2">
             <Badge v-if="pendingApprovals.length" variant="destructive">{{ pendingApprovals.length }} pending approval</Badge>
@@ -1071,8 +1206,8 @@ onUnmounted(() => {
                 <h2>Schedule Runs</h2>
                 <Button variant="ghost" size="xs" @click="loadSchedules">Refresh</Button>
               </div>
-              <div v-if="schedules.length" class="list-stack overflow-auto">
-                <div v-for="schedule in schedules.slice(0, 8)" :key="schedule.id" class="workflow-row">
+              <div v-if="currentProjectSchedules.length" class="list-stack overflow-auto">
+                <div v-for="schedule in currentProjectSchedules.slice(0, 8)" :key="schedule.id" class="workflow-row">
                   <div class="flex items-center justify-between gap-2">
                     <strong>{{ schedule.name }}</strong>
                     <Badge :variant="schedule.status === 'active' ? 'secondary' : 'outline'">{{ schedule.status }}</Badge>
@@ -1095,8 +1230,8 @@ onUnmounted(() => {
                 <h2>Workflow Runs</h2>
                 <Button variant="ghost" size="xs" @click="loadWorkflowRuns">Refresh</Button>
               </div>
-              <div v-if="workflowRuns.length" class="list-stack overflow-auto">
-                <div v-for="run in workflowRuns.slice(0, 8)" :key="run.id" class="workflow-row">
+              <div v-if="currentProjectWorkflowRuns.length" class="list-stack overflow-auto">
+                <div v-for="run in currentProjectWorkflowRuns.slice(0, 8)" :key="run.id" class="workflow-row">
                   <div class="flex items-center justify-between gap-2">
                     <strong>{{ run.workflowName }}</strong>
                     <Badge :variant="run.status === 'done' ? 'secondary' : run.status === 'error' || run.status === 'aborted' ? 'destructive' : 'outline'">{{ run.status }}</Badge>

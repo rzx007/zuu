@@ -162,6 +162,10 @@
     @apply size-3.5;
   }
 
+  .project-create {
+    @apply grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] gap-2;
+  }
+
   .meta-grid {
     @apply grid grid-cols-2 gap-2 text-xs;
   }
