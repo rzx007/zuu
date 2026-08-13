@@ -4,6 +4,7 @@ import { ApiError } from "../http";
 import { subscribeApprovalEvents } from "./approval-events";
 import { compactAgentEvent } from "./events";
 import { PromptEventQueue } from "./prompt-event-queue";
+import { startPromptRunActivity } from "./prompt-run-activity";
 import { completePromptRun, failPromptRun } from "./prompt-run-finalization";
 import type { RunService } from "./run-service";
 import type { SessionService } from "./session-service";
@@ -34,15 +35,15 @@ export class PromptService {
       session.setActiveToolsByName(request.tools);
     }
 
-    const run = this.options.runs.startRun({
-      sessionId: session.sessionId,
-      projectId: this.options.sessions.getProjectId(session.sessionId),
+    const activity = startPromptRunActivity({
       request,
+      session,
+      sessions: this.options.sessions,
+      runs: this.options.runs,
+      activeRunBySessionId: this.options.activeRunBySessionId,
+      approvalWaitBySessionId: this.options.approvalWaitBySessionId,
     });
-    const runId = run.id;
-    this.options.activeRunBySessionId.set(session.sessionId, runId);
-    this.options.approvalWaitBySessionId.set(session.sessionId, request.source !== "schedule");
-    const recordAndPublish = this.options.runs.createEventRecorder(runId);
+    const { run, runId, recordAndPublish } = activity;
 
     yield recordAndPublish({
       runId,
@@ -99,10 +100,7 @@ export class PromptService {
         session: this.options.sessions.summarizeSession(session),
       });
     } finally {
-      if (this.options.activeRunBySessionId.get(session.sessionId) === runId) {
-        this.options.activeRunBySessionId.delete(session.sessionId);
-      }
-      this.options.approvalWaitBySessionId.delete(session.sessionId);
+      activity.release();
       unsubscribeApprovalEvents();
       unsubscribe();
     }
