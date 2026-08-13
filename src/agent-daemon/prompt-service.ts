@@ -4,6 +4,7 @@ import { ApiError } from "../http";
 import { subscribeApprovalEvents } from "./approval-policy";
 import { compactAgentEvent } from "./events";
 import { PromptEventQueue } from "./prompt-event-queue";
+import { completePromptRun, failPromptRun } from "./prompt-run-finalization";
 import type { RunService } from "./run-service";
 import type { SessionService } from "./session-service";
 
@@ -88,25 +89,14 @@ export class PromptService {
       }
 
       if (queue.error) {
-        const message = queue.error instanceof Error ? queue.error.message : String(queue.error);
-        run.status = run.status === "aborted" ? "aborted" : "failed";
-        run.finishedAt = new Date().toISOString();
-        run.error = message;
-        this.options.runs.saveRun(run);
-        yield recordAndPublish({ runId, type: "error", message, run });
+        yield recordAndPublish(failPromptRun(run, queue.error, (next) => this.options.runs.saveRun(next)));
         return;
       }
 
       this.options.sessions.touchSession(session.sessionId);
-      run.status = run.status === "aborted" ? "aborted" : sawError ? "failed" : "completed";
-      run.finishedAt = new Date().toISOString();
-      if (run.status === "failed") run.error = streamErrorMessage;
-      this.options.runs.saveRun(run);
       yield recordAndPublish({
-        runId,
-        type: "done",
+        ...completePromptRun(run, { sawError, streamErrorMessage }, (next) => this.options.runs.saveRun(next)),
         session: this.options.sessions.summarizeSession(session),
-        run,
       });
     } finally {
       if (this.options.activeRunBySessionId.get(session.sessionId) === runId) {
