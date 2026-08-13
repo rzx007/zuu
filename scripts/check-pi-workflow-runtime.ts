@@ -1,8 +1,5 @@
-import { existsSync, readFileSync } from "node:fs";
 import { createZuuClient } from "@zuu/client";
-import { getAuthTokenStorePath, getZuuAgentDir } from "../src/agent-daemon/agent-paths";
-import { isTokenExpired, type AuthTokenRecord } from "../src/agent-daemon/auth-tokens";
-import { isAuthTokenRecord } from "../src/agent-daemon/auth-token-validation";
+import { scriptAdminApiToken } from "./local-auth";
 
 const baseUrl = process.env.ZUU_PI_WORKFLOW_BASE_URL ?? "http://127.0.0.1:3001";
 const workflowId = process.env.ZUU_PI_WORKFLOW_ID ?? "deep-research";
@@ -20,23 +17,9 @@ function asJson(value: unknown) {
 }
 
 function apiToken() {
-  const envToken = process.env.ZUU_API_TOKEN?.trim();
-  if (envToken) return envToken;
-
-  const record = loadLocalTokenRecord();
-  const token = record?.tokens.find((item) => item.scope === "admin" && !isTokenExpired(item));
+  const token = scriptAdminApiToken();
   if (!token) fail("ZUU_API_TOKEN is not set and no active local admin token was found.");
-  return token.token;
-}
-
-function loadLocalTokenRecord(): AuthTokenRecord | undefined {
-  const path = getAuthTokenStorePath(getZuuAgentDir());
-  if (!existsSync(path)) return undefined;
-
-  const payload = JSON.parse(readFileSync(path, "utf8")) as unknown;
-  if (!payload || typeof payload !== "object" || !("data" in payload)) return undefined;
-  const data = (payload as { data: unknown }).data;
-  return isAuthTokenRecord(data) ? data : undefined;
+  return token;
 }
 
 async function main() {
