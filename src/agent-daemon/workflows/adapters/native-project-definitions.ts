@@ -85,8 +85,38 @@ function stepsField(record: Record<string, unknown>, path: string): NativeWorkfl
       name: stringField(stepRecord, "name", path),
       prompt: stringField(stepRecord, "prompt", path),
       dependsOn: Array.isArray(dependsOn) ? dependsOn.filter((item): item is string => typeof item === "string") : undefined,
+      retryPolicy: retryPolicyField(stepRecord, path),
+      timeoutMs: optionalNonNegativeIntegerField(stepRecord, "timeoutMs", path),
     };
   });
+}
+
+function retryPolicyField(record: Record<string, unknown>, path: string) {
+  const value = record.retryPolicy;
+  if (value === undefined) return undefined;
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    invalidProjectDefinition(path, "retryPolicy must be an object.");
+  }
+
+  const retryRecord = value as Record<string, unknown>;
+  const maxAttempts = optionalNonNegativeIntegerField(retryRecord, "maxAttempts", path);
+  const backoffMs = optionalNonNegativeIntegerField(retryRecord, "backoffMs", path);
+  if (maxAttempts === undefined) {
+    invalidProjectDefinition(path, "retryPolicy.maxAttempts must be a positive integer.");
+  }
+  return {
+    maxAttempts,
+    backoffMs,
+  };
+}
+
+function optionalNonNegativeIntegerField(record: Record<string, unknown>, field: string, path: string) {
+  const value = record[field];
+  if (value === undefined) return undefined;
+  if (typeof value !== "number" || !Number.isInteger(value) || value < 0) {
+    invalidProjectDefinition(path, `${field} must be a non-negative integer.`);
+  }
+  return value;
 }
 
 function invalidProjectDefinition(path: string, message: string): never {

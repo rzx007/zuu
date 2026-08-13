@@ -15,6 +15,7 @@ import {
 } from "./native-definitions";
 import {
   createNativeWorkflowRun,
+  createTaskErrorArtifact,
   createTaskArtifact,
   getTaskDependencyArtifacts,
   runPromptTask,
@@ -113,6 +114,11 @@ export class NativeWorkflowBackend implements WorkflowBackend {
           stagesByStepId,
         })));
 
+        if (this.abortedRunIds.has(run.id) || run.tasks.some((task) => task.status === "aborted")) {
+          this.finishRun(run, "aborted");
+          return;
+        }
+
         if (failed.size > 0) {
           markBlockedTasks(definition.steps, failed, tasksByStepId, stagesByStepId);
           this.finishRun(run, "failed");
@@ -146,75 +152,171 @@ export class NativeWorkflowBackend implements WorkflowBackend {
   ) {
     const task = state.tasksByStepId.get(step.id)!;
     const stage = state.stagesByStepId.get(step.id)!;
-    const startedAt = new Date().toISOString();
+    const maxAttempts = step.retryPolicy?.maxAttempts ?? 1;
+    const backoffMs = step.retryPolicy?.backoffMs ?? 0;
 
     state.running.add(step.id);
-    task.status = "running";
-    task.startedAt = startedAt;
-    task.attempts = (task.attempts ?? 0) + 1;
-    stage.status = "running";
-    stage.startedAt = startedAt;
-    this.store.set(run);
 
     try {
-      const result = await runPromptTask(
-        this.options.runPrompt,
-        definition,
-        step,
-        request,
-        getTaskDependencyArtifacts(step, state.artifactsByStepId),
-        {
-          onRun: (agentRun) => {
-            task.agentRunId = agentRun.id;
-            task.sessionId = agentRun.sessionId;
-            run.linkedRunIds = run.tasks.flatMap((item) => item.agentRunId ? [item.agentRunId] : []);
+      for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+        if (this.abortedRunIds.has(run.id)) {
+          task.status = "aborted";
+          stage.status = "aborted";
+          run.error = "Native workflow run was aborted.";
+          state.failed.add(step.id);
+          return;
+        }
+
+        const startedAt = new Date().toISOString();
+        task.status = "running";
+        task.startedAt ??= startedAt;
+        task.attempts = attempt;
+        task.input = {
+          stepId: step.id,
+          dependsOn: step.dependsOn ?? [],
+          retryPolicy: step.retryPolicy,
+          timeoutMs: step.timeoutMs,
+          attempt,
+          maxAttempts,
+        };
+        stage.status = "running";
+        stage.startedAt ??= startedAt;
+        stage.summary = attempt > 1 ? `Retrying attempt ${attempt} of ${maxAttempts}.` : undefined;
+        this.store.set(run);
+
+        try {
+          const result = await withOptionalTimeout(
+            runPromptTask(
+              this.options.runPrompt,
+              definition,
+              step,
+              request,
+              getTaskDependencyArtifacts(step, state.artifactsByStepId),
+              {
+                onRun: (agentRun) => {
+                  task.agentRunId = agentRun.id;
+                  task.sessionId = agentRun.sessionId;
+                  run.linkedRunIds = run.tasks.flatMap((item) => item.agentRunId ? [item.agentRunId] : []);
+                  this.store.set(run);
+                  if (this.abortedRunIds.has(run.id)) {
+                    void this.abortAgentRun(agentRun.id, run.projectId);
+                  }
+                },
+              },
+            ),
+            step.timeoutMs,
+            step.id,
+          );
+          const finishedAt = new Date().toISOString();
+          const status = this.abortedRunIds.has(run.id) ? "aborted" : normalizeTaskStatus(result.agentRun.status);
+          const artifact = createTaskArtifact(run.id, task, step, result, finishedAt);
+
+          task.agentRunId = result.agentRun.id;
+          task.sessionId = result.agentRun.sessionId;
+          task.output = {
+            agentRunId: result.agentRun.id,
+            sessionId: result.agentRun.sessionId,
+            agentStatus: result.agentRun.status,
+            error: result.agentRun.error,
+            attempt,
+            maxAttempts,
+          };
+          task.artifactIds.push(artifact.id);
+          run.artifacts.push(artifact);
+          run.linkedRunIds = run.tasks.flatMap((item) => item.agentRunId ? [item.agentRunId] : []);
+
+          if (status === "completed") {
+            task.status = "completed";
+            task.finishedAt = finishedAt;
+            stage.status = "completed";
+            stage.finishedAt = finishedAt;
+            stage.summary = `Completed with agent run ${result.agentRun.id}.`;
+            state.artifactsByStepId.set(step.id, artifact);
+            state.completed.add(step.id);
+            return;
+          }
+
+          if (status === "aborted") {
+            task.status = "aborted";
+            task.finishedAt = finishedAt;
+            stage.status = "aborted";
+            stage.finishedAt = finishedAt;
+            stage.summary = result.agentRun.error ?? "Task was aborted.";
+            run.error = "Native workflow run was aborted.";
+            state.failed.add(step.id);
+            return;
+          }
+
+          const message = result.agentRun.error ?? `Native workflow task ended with status ${result.agentRun.status}`;
+          if (attempt < maxAttempts) {
+            stage.summary = `Attempt ${attempt} failed; retrying.`;
+            task.output = {
+              agentRunId: result.agentRun.id,
+              sessionId: result.agentRun.sessionId,
+              agentStatus: result.agentRun.status,
+              error: message,
+              attempt,
+              maxAttempts,
+              retrying: true,
+            };
             this.store.set(run);
-            if (this.abortedRunIds.has(run.id)) {
-              void this.abortAgentRun(agentRun.id, run.projectId);
-            }
-          },
-        },
-      );
-      const finishedAt = new Date().toISOString();
-      const status = this.abortedRunIds.has(run.id) ? "aborted" : normalizeTaskStatus(result.agentRun.status);
-      const artifact = createTaskArtifact(run.id, task, step, result, finishedAt);
+            await sleep(backoffMs);
+            continue;
+          }
 
-      task.status = status;
-      task.finishedAt = finishedAt;
-      task.agentRunId = result.agentRun.id;
-      task.sessionId = result.agentRun.sessionId;
-      task.output = {
-        agentRunId: result.agentRun.id,
-        sessionId: result.agentRun.sessionId,
-        agentStatus: result.agentRun.status,
-        error: result.agentRun.error,
-      };
-      task.artifactIds = [artifact.id];
-      stage.status = status;
-      stage.finishedAt = finishedAt;
-      stage.summary = status === "completed" ? `Completed with agent run ${result.agentRun.id}.` : result.agentRun.error;
-      run.artifacts.push(artifact);
-      state.artifactsByStepId.set(step.id, artifact);
+          task.status = "failed";
+          task.finishedAt = finishedAt;
+          stage.status = "failed";
+          stage.finishedAt = finishedAt;
+          stage.summary = message;
+          run.error = message;
+          state.failed.add(step.id);
+          return;
+        } catch (error) {
+          const finishedAt = new Date().toISOString();
+          const message = error instanceof Error ? error.message : String(error);
+          if (task.agentRunId && message.includes("timed out")) {
+            await this.abortAgentRun(task.agentRunId, run.projectId);
+          }
 
-      if (status === "completed") {
-        state.completed.add(step.id);
-      } else if (status === "aborted") {
-        run.error = "Native workflow run was aborted.";
-      } else {
-        state.failed.add(step.id);
-        run.error = result.agentRun.error ?? `Native workflow task ended with status ${result.agentRun.status}`;
+          const artifact = createTaskErrorArtifact(run.id, task, step, message, finishedAt);
+          task.artifactIds.push(artifact.id);
+          run.artifacts.push(artifact);
+          task.output = {
+            error: message,
+            attempt,
+            maxAttempts,
+            retrying: attempt < maxAttempts,
+          };
+
+          if (this.abortedRunIds.has(run.id)) {
+            task.status = "aborted";
+            task.finishedAt = finishedAt;
+            stage.status = "aborted";
+            stage.finishedAt = finishedAt;
+            stage.summary = "Task was aborted.";
+            run.error = "Native workflow run was aborted.";
+            state.failed.add(step.id);
+            return;
+          }
+
+          if (attempt < maxAttempts) {
+            stage.summary = `Attempt ${attempt} failed; retrying.`;
+            this.store.set(run);
+            await sleep(backoffMs);
+            continue;
+          }
+
+          task.status = "failed";
+          task.finishedAt = finishedAt;
+          stage.status = "failed";
+          stage.finishedAt = finishedAt;
+          stage.summary = message;
+          run.error = message;
+          state.failed.add(step.id);
+          return;
+        }
       }
-    } catch (error) {
-      const finishedAt = new Date().toISOString();
-      const message = error instanceof Error ? error.message : String(error);
-      task.status = "failed";
-      task.finishedAt = finishedAt;
-      task.output = { error: message };
-      stage.status = "failed";
-      stage.finishedAt = finishedAt;
-      stage.summary = message;
-      run.error = message;
-      state.failed.add(step.id);
     } finally {
       state.running.delete(step.id);
       run.linkedRunIds = run.tasks.flatMap((item) => item.agentRunId ? [item.agentRunId] : []);
@@ -287,4 +389,25 @@ function markBlockedTasks(
       stage.summary = "Skipped because an upstream dependency failed.";
     }
   }
+}
+
+async function withOptionalTimeout<T>(promise: Promise<T>, timeoutMs: number | undefined, stepId: string) {
+  if (!timeoutMs) return promise;
+
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_, reject) => {
+        timer = setTimeout(() => reject(new Error(`Native workflow task timed out after ${timeoutMs}ms: ${stepId}`)), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+function sleep(ms: number) {
+  if (ms <= 0) return Promise.resolve();
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }

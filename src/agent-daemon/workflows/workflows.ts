@@ -21,7 +21,8 @@ export function createWorkflowBackend(options: CreateWorkflowBackendOptions): Wo
   const requestedKind =
     options.requestedKind === "pi-package" ? "pi-package" :
     options.requestedKind === "native" ? "native" :
-    "fake";
+    options.requestedKind === "fake" ? "fake" :
+    "native";
 
   if (requestedKind === "native") {
     if (!options.runPrompt) {

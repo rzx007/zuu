@@ -1102,6 +1102,7 @@ async function main() {
   if (!unavailablePiWorkflowFailed) throw new Error("unavailable pi-package workflow should fail");
 
   let nativePromptCount = 0;
+  let customRetryFailures = 0;
   const nativeTaskPrompts: string[] = [];
   const nativeBackend = createWorkflowBackend({
     path: join(mkdtempSync(join(tmpdir(), "zuu-native-workflow-check-")), "workflow-runs.json"),
@@ -1113,6 +1114,27 @@ async function main() {
       nativeTaskPrompts.push(request.prompt);
       const timestamp = new Date().toISOString();
       const runId = `native-agent-run-${nativePromptCount}`;
+      if (request.prompt.includes("Retry custom task") && customRetryFailures === 0) {
+        customRetryFailures += 1;
+        yield {
+          id: `${runId}:event:failed`,
+          createdAt: timestamp,
+          runId,
+          type: "done",
+          run: {
+            id: runId,
+            sessionId: `native-session-${nativePromptCount}`,
+            projectId: request.projectId ?? "default",
+            source: "workflow",
+            status: "failed",
+            prompt: request.prompt,
+            startedAt: timestamp,
+            finishedAt: timestamp,
+            error: "transient custom workflow failure",
+          },
+        };
+        return;
+      }
       yield {
         id: `${runId}:event:1`,
         createdAt: timestamp,
@@ -1153,7 +1175,7 @@ async function main() {
     description: "Project-defined workflow check.",
     kind: "sequence",
     steps: [
-      { id: "first", name: "First", prompt: "First custom task." },
+      { id: "first", name: "First", prompt: "Retry custom task once.", retryPolicy: { maxAttempts: 2, backoffMs: 0 } },
       { id: "second", name: "Second", prompt: "Second custom task.", dependsOn: ["first"] },
     ],
   }));
@@ -1175,8 +1197,14 @@ async function main() {
     prompt: "project workflow check",
   }, workflowProject);
   const customRun = await waitForWorkflowRun(() => nativeBackend.getRun(customStartedRun.id));
-  if (customRun.status !== "completed" || customRun.workflowName !== "Custom Check" || customRun.tasks.length !== 2) {
-    throw new Error("native workflow backend should execute project workflow definitions");
+  if (
+    customRun.status !== "completed" ||
+    customRun.workflowName !== "Custom Check" ||
+    customRun.tasks.length !== 2 ||
+    customRun.tasks[0]?.attempts !== 2 ||
+    customRun.artifacts.length !== 3
+  ) {
+    throw new Error("native workflow backend should execute project workflow definitions with retry policy");
   }
   const nativeStartedRun = await nativeBackend.start("project-review", {
     projectId: defaultProject.id,
@@ -1196,7 +1224,10 @@ async function main() {
   ) {
     throw new Error("native workflow sequence should run tasks and persist agent links");
   }
-  if (!nativeTaskPrompts[1]?.includes("Upstream artifacts") || !nativeTaskPrompts[1]?.includes("native result 1")) {
+  const injectedArtifactPrompt = nativeTaskPrompts.find((prompt) =>
+    prompt.includes("Summarize Review") && prompt.includes("Upstream artifacts"),
+  );
+  if (!injectedArtifactPrompt?.includes("native result")) {
     throw new Error("native workflow sequence should inject upstream artifact context");
   }
   const nativeStartedDagRun = await nativeBackend.start("deep-research", {
@@ -1268,6 +1299,87 @@ async function main() {
     abortedAgentRuns[0] !== "native-abort-agent-run"
   ) {
     throw new Error("native workflow abort should keep the run aborted after background tasks settle");
+  }
+
+  const timeoutProjectCwd = mkdtempSync(join(tmpdir(), "zuu-native-timeout-project-"));
+  mkdirSync(join(timeoutProjectCwd, ".zuu", "workflows"), { recursive: true });
+  writeFileSync(join(timeoutProjectCwd, ".zuu", "workflows", "timeout.json"), JSON.stringify({
+    id: "timeout-check",
+    name: "Timeout Check",
+    description: "Project-defined timeout workflow check.",
+    kind: "single",
+    steps: [
+      { id: "slow", name: "Slow", prompt: "Timeout custom task.", timeoutMs: 5 },
+    ],
+  }));
+  const timeoutProject = {
+    id: "timeout-project",
+    name: "Timeout Project",
+    cwd: timeoutProjectCwd,
+    agentDir: timeoutProjectCwd,
+    status: "ready" as const,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+  const timeoutAbortedAgentRuns: string[] = [];
+  const timeoutBackend = createWorkflowBackend({
+    path: join(mkdtempSync(join(tmpdir(), "zuu-native-timeout-check-")), "workflow-runs.json"),
+    agentDir: mkdtempSync(join(tmpdir(), "zuu-native-timeout-agent-check-")),
+    packages: [],
+    requestedKind: "native",
+    abortAgentRun: async (runId) => {
+      timeoutAbortedAgentRuns.push(runId);
+    },
+    runPrompt: async function* (request) {
+      const timestamp = new Date().toISOString();
+      yield {
+        id: "native-timeout:event:0",
+        createdAt: timestamp,
+        runId: "native-timeout-agent-run",
+        type: "session",
+        run: {
+          id: "native-timeout-agent-run",
+          sessionId: "native-timeout-session",
+          projectId: request.projectId ?? "default",
+          source: "workflow",
+          status: "running",
+          prompt: request.prompt,
+          startedAt: timestamp,
+        },
+      };
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      yield {
+        id: "native-timeout:event:1",
+        createdAt: timestamp,
+        runId: "native-timeout-agent-run",
+        type: "done",
+        run: {
+          id: "native-timeout-agent-run",
+          sessionId: "native-timeout-session",
+          projectId: request.projectId ?? "default",
+          source: "workflow",
+          status: "completed",
+          prompt: request.prompt,
+          startedAt: timestamp,
+          finishedAt: timestamp,
+        },
+      };
+    },
+  });
+  const timeoutStartedRun = await timeoutBackend.start("timeout-check", {
+    projectId: timeoutProject.id,
+    prompt: "timeout workflow check",
+  }, timeoutProject);
+  const timeoutRun = await waitForWorkflowRun(() => timeoutBackend.getRun(timeoutStartedRun.id));
+  if (
+    timeoutRun.status !== "failed" ||
+    timeoutRun.tasks[0]?.status !== "failed" ||
+    timeoutRun.tasks[0]?.attempts !== 1 ||
+    timeoutRun.artifacts[0]?.taskId !== timeoutRun.tasks[0]?.id ||
+    timeoutAbortedAgentRuns[0] !== "native-timeout-agent-run" ||
+    !timeoutRun.error?.includes("timed out")
+  ) {
+    throw new Error("native workflow timeout should fail task and abort linked agent run");
   }
 
   const schedulesBefore = await client.listProjectSchedules(defaultProject.id);

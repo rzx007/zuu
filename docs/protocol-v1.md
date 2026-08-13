@@ -134,7 +134,7 @@ Run 状态为 `queued`、`running`、`waiting_approval`、`completed`、`failed`
 - `GET /v1/artifacts/:artifactId`
 - `POST /v1/workflow-runs/:runId/abort`
 
-当前支持 `fake`、`native` 和 `pi-package` backend。`native` 由 Zuu daemon 自己保存 workflow definition、run、stage、task、artifact 和 board 状态，并通过独立 Pi SDK worker session 执行逻辑 subagent；当前覆盖 `single`、`sequence` 和基础 DAG，并加载 Project cwd 下的 `.zuu/workflows/*.json`。`fake` 仅用于稳定 daemon/client/WebUI 合约；`pi-package` 是可选第三方 adapter，ready 后通过 Pi extension 命令启动真实 workflow，但不作为 Windows 默认路径。
+当前支持 `native`、`fake` 和 `pi-package` backend，默认是 `native`。`native` 由 Zuu daemon 自己保存 workflow definition、run、stage、task、artifact 和 board 状态，并通过独立 Pi SDK worker session 执行逻辑 subagent；当前覆盖 `single`、`sequence` 和基础 DAG，并加载 Project cwd 下的 `.zuu/workflows/*.json`。项目 workflow step 可声明 `retryPolicy.maxAttempts`、`retryPolicy.backoffMs` 和 `timeoutMs`，执行结果会在 Task `attempts/input/output` 与 Artifact 中体现。`fake` 仅用于稳定 daemon/client/WebUI 合约；`pi-package` 是可选第三方 adapter，ready 后通过 Pi extension 命令启动真实 workflow，但不作为 Windows 默认路径。
 
 ## Schedule
 

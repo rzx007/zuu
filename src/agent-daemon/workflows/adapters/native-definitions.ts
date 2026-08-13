@@ -2,11 +2,18 @@ import type { WorkflowDefinition } from "@zuu/client";
 
 export type NativeWorkflowKind = "single" | "sequence" | "dag";
 
+export interface NativeWorkflowRetryPolicy {
+  maxAttempts: number;
+  backoffMs?: number;
+}
+
 export interface NativeWorkflowStep {
   id: string;
   name: string;
   prompt: string;
   dependsOn?: string[];
+  retryPolicy?: NativeWorkflowRetryPolicy;
+  timeoutMs?: number;
 }
 
 export interface NativeWorkflowDefinition extends WorkflowDefinition {

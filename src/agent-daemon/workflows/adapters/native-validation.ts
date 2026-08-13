@@ -20,6 +20,34 @@ export function validateNativeWorkflowDefinition(definition: NativeWorkflowDefin
       });
     }
     ids.add(step.id);
+
+    if (step.retryPolicy) {
+      if (!Number.isInteger(step.retryPolicy.maxAttempts) || step.retryPolicy.maxAttempts < 1) {
+        throw new ApiError(`Invalid native workflow retry maxAttempts for task: ${step.id}`, {
+          status: 400,
+          code: "validation_failed",
+          details: { field: "steps.retryPolicy.maxAttempts" },
+        });
+      }
+      if (
+        step.retryPolicy.backoffMs !== undefined &&
+        (!Number.isInteger(step.retryPolicy.backoffMs) || step.retryPolicy.backoffMs < 0)
+      ) {
+        throw new ApiError(`Invalid native workflow retry backoffMs for task: ${step.id}`, {
+          status: 400,
+          code: "validation_failed",
+          details: { field: "steps.retryPolicy.backoffMs" },
+        });
+      }
+    }
+
+    if (step.timeoutMs !== undefined && (!Number.isInteger(step.timeoutMs) || step.timeoutMs < 1)) {
+      throw new ApiError(`Invalid native workflow timeoutMs for task: ${step.id}`, {
+        status: 400,
+        code: "validation_failed",
+        details: { field: "steps.timeoutMs" },
+      });
+    }
   }
 
   for (const step of definition.steps) {

@@ -84,22 +84,49 @@ export function createTaskArtifact(
   result: NativeTaskResult,
   timestamp = new Date().toISOString(),
 ): WorkflowArtifact {
+  const attempt = task.attempts ?? 1;
   return {
-    id: `${runId}:artifact:${step.id}`,
+    id: `${runId}:artifact:${step.id}:attempt:${attempt}`,
     runId,
     taskId: task.id,
-    name: `${step.id}.md`,
+    name: `${step.id}-attempt-${attempt}.md`,
     kind: "text",
     mimeType: "text/markdown",
     content: [
       `# ${step.name}`,
       "",
+      `Attempt: ${attempt}`,
       `Agent run: ${result.agentRun.id}`,
       `Agent status: ${result.agentRun.status}`,
       result.agentRun.error ? `Error: ${result.agentRun.error}` : undefined,
       "",
       result.text || "No assistant text was captured for this task.",
     ].filter(Boolean).join("\n"),
+    createdAt: timestamp,
+  };
+}
+
+export function createTaskErrorArtifact(
+  runId: string,
+  task: WorkflowTask,
+  step: NativeWorkflowStep,
+  error: string,
+  timestamp = new Date().toISOString(),
+): WorkflowArtifact {
+  const attempt = task.attempts ?? 1;
+  return {
+    id: `${runId}:artifact:${step.id}:attempt:${attempt}:error`,
+    runId,
+    taskId: task.id,
+    name: `${step.id}-attempt-${attempt}-error.md`,
+    kind: "text",
+    mimeType: "text/markdown",
+    content: [
+      `# ${step.name}`,
+      "",
+      `Attempt: ${attempt}`,
+      `Error: ${error}`,
+    ].join("\n"),
     createdAt: timestamp,
   };
 }
@@ -135,6 +162,8 @@ function createNativeTask(runId: string, step: NativeWorkflowStep): WorkflowTask
     input: {
       stepId: step.id,
       dependsOn: step.dependsOn ?? [],
+      retryPolicy: step.retryPolicy,
+      timeoutMs: step.timeoutMs,
     },
     artifactIds: [],
   };

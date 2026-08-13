@@ -756,6 +756,7 @@ interface WorkflowBackend {
 - DAG 循环或死锁必须在执行前或首次发现时失败
 - Workflow 失败必须保留已有 Artifact
 - Run 必须可查询失败节点与错误原因
+- Task 可声明有限 `retryPolicy` 和 `timeoutMs`；超时后必须标记失败并尽力取消底层 Agent Run
 
 ### 11.4 Native Workflow MVP
 
@@ -765,6 +766,7 @@ V1 原生 workflow 至少支持：
 - `sequence`：多个 task 串行执行，上游 Artifact 可注入下游 prompt。
 - 基础 `dag`：task 声明 `dependsOn`，依赖完成后调度，启动前检查未知依赖和环。
 - 逻辑 subagent：每个 task 使用独立 `AgentSessionRuntime` 或等价隔离上下文，产生可追踪 Agent Run。
+- Task 执行策略：step 级 `retryPolicy.maxAttempts`、`retryPolicy.backoffMs` 与 `timeoutMs`，Task 记录 attempts、失败原因和 artifact。
 - Board 数据：Stage、Task、Artifact 全部来自 Zuu store 和 `/v1` DTO。
 
 V1 不要求支持 `foreach`、`reduce`、`loop`、dynamic controller code、分布式 worker 或完整第三方 workflow DSL。
@@ -960,7 +962,7 @@ ZUU_PORT=8787
 ZUU_AGENT_DIR=.zuu/pi-agent
 ZUU_API_TOKEN=...
 ZUU_ALLOWED_CWD=D:\code\personal-project\zuu;D:\other\allowed\workspace
-ZUU_WORKFLOW_BACKEND=fake
+ZUU_WORKFLOW_BACKEND=native
 ```
 
 Provider API Key 继续遵循 Pi `ModelRuntime` 解析顺序。Client 永远不能读取 API Key。

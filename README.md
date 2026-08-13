@@ -198,9 +198,9 @@ pnpm --filter @zuu/client pack:dry
 
 浏览器会话默认启用 `read`、`grep`、`find`、`ls` 和 `zuu_status`。普通只读工具可直接使用；如果只读工具的路径型参数命中 `.env`、SSH、auth token、credential、secret、key 等敏感路径，会先进入 Zuu approval，并让同一个 tool call 等待 WebUI resolve；allow 后继续执行，deny 或过期才阻断本次工具调用。搜索 pattern 中出现 token、secret 等词不会被当作路径误拦。需要更强的 coding agent 能力时，可以在界面里有意识地启用 `bash`、`edit` 或 `write`，这些危险工具默认也需要审批。
 
-当前 workflow API 默认使用内置 `FakeWorkflowBackend`，用于验证 `WorkflowDefinition`、`WorkflowRun`、`Stage`、`Task` 和 `Artifact` 的 daemon/client/WebUI 合约。Workflow Run、Stage 和 Task 使用 `queued/running/completed/failed/aborted` 状态以及 `finishedAt` 完成时间。Fake 后端会立即生成一个完成态 run，不会启动真实 subagent。Zuu `NativeWorkflowBackend` 已可通过 `ZUU_WORKFLOW_BACKEND=native` 启用：由 daemon 自己保存 workflow definition、run、stage、task、artifact 和 board 状态，并用独立 Pi SDK worker session 执行逻辑 subagent；设计见 [docs/native-workflow-design.md](docs/native-workflow-design.md)。
+当前 workflow API 默认使用 Zuu `NativeWorkflowBackend`：由 daemon 自己保存 workflow definition、run、stage、task、artifact 和 board 状态，并用独立 Pi SDK worker session 执行逻辑 subagent；设计见 [docs/native-workflow-design.md](docs/native-workflow-design.md)。`FakeWorkflowBackend` 仍保留给测试和 UI 合约验证，它会立即生成完成态 run，不启动真实 subagent。
 
-可通过 `ZUU_WORKFLOW_BACKEND=fake`、`ZUU_WORKFLOW_BACKEND=native` 或 `ZUU_WORKFLOW_BACKEND=pi-package` 选择 workflow 后端。`native` 当前支持 `single`、`sequence` 和基础 DAG，启动请求会快速返回 running run，后台 task 会关联底层 Agent Run，并把捕获到的 assistant 文本保存为 markdown artifact。`pi-package` 模式会探测 `@agwab/pi-workflow` 是否已配置、是否解析到安装路径，以及当前平台是否受支持；ready 后会通过 Pi 的 `/workflow run ...` 或 `/workflow dynamic ...` 命令发起真实 extension 工作，并把 Zuu 侧 launch 结果包装成 `WorkflowRun`。它还没有读取 `pi-workflow` board/run-state，因此阶段、任务和 artifact 仍只是 Zuu launch 层的记录。`@agwab/pi-workflow` 包页面说明原生 Windows 不支持，Windows 用户应使用 WSL2/Linux；这不再阻塞 Zuu native workflow 主线。
+可通过 `ZUU_WORKFLOW_BACKEND=native`、`ZUU_WORKFLOW_BACKEND=fake` 或 `ZUU_WORKFLOW_BACKEND=pi-package` 选择 workflow 后端。`native` 当前支持 `single`、`sequence` 和基础 DAG，启动请求会快速返回 running run，后台 task 会关联底层 Agent Run，并把捕获到的 assistant 文本保存为 markdown artifact；step 级 `retryPolicy` 可做有限重试，`timeoutMs` 可限制单个 task 的执行时间，超时后会 best-effort abort 底层 Agent Run。`pi-package` 模式会探测 `@agwab/pi-workflow` 是否已配置、是否解析到安装路径，以及当前平台是否受支持；ready 后会通过 Pi 的 `/workflow run ...` 或 `/workflow dynamic ...` 命令发起真实 extension 工作，并把 Zuu 侧 launch 结果包装成 `WorkflowRun`。它还没有读取 `pi-workflow` board/run-state，因此阶段、任务和 artifact 仍只是 Zuu launch 层的记录。`@agwab/pi-workflow` 包页面说明原生 Windows 不支持，Windows 用户应使用 WSL2/Linux；这不再阻塞 Zuu native workflow 主线。
 
 Native workflow 会加载 Project cwd 下的 `.zuu/workflows/*.json`，同 id 的项目定义会覆盖内置定义。最小定义示例：
 
@@ -211,7 +211,7 @@ Native workflow 会加载 Project cwd 下的 `.zuu/workflows/*.json`，同 id �
   "description": "Run two project-specific review tasks.",
   "kind": "sequence",
   "steps": [
-    { "id": "inspect", "name": "Inspect", "prompt": "Inspect the project." },
+    { "id": "inspect", "name": "Inspect", "prompt": "Inspect the project.", "retryPolicy": { "maxAttempts": 2, "backoffMs": 1000 }, "timeoutMs": 120000 },
     { "id": "summarize", "name": "Summarize", "prompt": "Summarize upstream artifacts.", "dependsOn": ["inspect"] }
   ]
 }

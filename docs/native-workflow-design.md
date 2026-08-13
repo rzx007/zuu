@@ -9,7 +9,7 @@
 
 新的定位：
 
-- **原生后端**：`native`，由 Zuu daemon 自己保存 workflow definition、run、stage、task 和 artifact，可通过 `ZUU_WORKFLOW_BACKEND=native` 启用；启动请求返回 running run，runner 在后台推进 stage/task 状态。
+- **原生后端**：`native`，由 Zuu daemon 自己保存 workflow definition、run、stage、task 和 artifact，是默认 workflow backend；启动请求返回 running run，runner 在后台推进 stage/task 状态。
 - **可选后端**：`pi-package`，在 macOS/Linux/WSL2 中桥接第三方 Pi Package。
 - **稳定协议**：WebUI 和 `@zuu/client` 只理解 Zuu DTO，不依赖第三方 package 的内部存储格式。
 
@@ -174,12 +174,13 @@ WebUI board 的下一步目标：
 3. 实现 `single` runner，并用 Pi SDK worker session 产生真实 Agent Run。已完成。
 4. 实现 `sequence` runner，支持上游 artifact 注入。已完成。
 5. 实现基础 DAG 校验和并发调度。已完成。
-6. 将 scheduler workflow action 默认指向 native backend。已具备后端能力，仍由当前 `ZUU_WORKFLOW_BACKEND` 选择。
-7. 后台 runner：启动请求快速返回，任务在后台推进并持久化状态。已完成。
-8. 项目级 `.zuu/workflows/*.json` 定义加载。已完成。
-9. 底层 Agent Run best-effort abort。已完成。
-10. 升级 WebUI Workflow Runs 面板为真正 board。后续增强。
-11. 再决定是否保留 `fake` 作为测试后端或用 native test fixture 取代。后续决策。
+6. 将 scheduler workflow action 默认指向 native backend。已完成；未设置 `ZUU_WORKFLOW_BACKEND` 时使用 `native`。
+7. 支持 step 级有限重试与 timeout。已完成，task 会记录 attempts、策略、失败原因和 artifact。
+8. 后台 runner：启动请求快速返回，任务在后台推进并持久化状态。已完成。
+9. 项目级 `.zuu/workflows/*.json` 定义加载。已完成。
+10. 底层 Agent Run best-effort abort。已完成。
+11. 升级 WebUI Workflow Runs 面板为真正 board。后续增强。
+12. 再决定是否保留 `fake` 作为测试后端或用 native test fixture 取代。后续决策。
 
 ## 7. 与 `pi-package` 的关系
 
