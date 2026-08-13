@@ -10,7 +10,7 @@ import {
   getScheduleLeaseStorePath,
   getScheduleStorePath,
   getWorkflowStorePath,
-} from "./environment";
+} from "./agent-paths";
 import { inspectJsonStore } from "./json-file-store";
 
 export function inspectDiagnosticStores(agentDir: string) {

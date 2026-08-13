@@ -12,7 +12,8 @@ import {
 import type { CreateSessionRequest } from "@zuu/client";
 import { createApprovalExtension } from "./approval-policy";
 import type { ApprovalRegistry } from "./approval-service";
-import { assertAllowedPath, DEFAULT_READ_ONLY_TOOLS, getSessionDir } from "./environment";
+import { getSessionDir } from "./agent-paths";
+import { assertAllowedPath, DEFAULT_READ_ONLY_TOOLS } from "./environment";
 import type { PackageService } from "./packages";
 import { createStatusTool } from "./status-tool";
 

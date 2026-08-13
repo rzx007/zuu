@@ -10,7 +10,7 @@ import { AuditService } from "./agent-daemon/audit-service";
 import type { AuthScope } from "./agent-daemon/auth-service";
 import { AuthService } from "./agent-daemon/auth-service";
 import { ZuuDaemon } from "./agent-daemon";
-import { getAuditEventStorePath, getAuthTokenStorePath, getZuuAgentDir } from "./agent-daemon/environment";
+import { getAuditEventStorePath, getAuthTokenStorePath, getZuuAgentDir } from "./agent-daemon/agent-paths";
 import { jsonError } from "./http";
 import { registerV1Routes } from "./routes";
 

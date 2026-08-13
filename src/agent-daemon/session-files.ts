@@ -1,5 +1,6 @@
 import { SessionManager } from "@earendil-works/pi-coding-agent";
-import { assertAllowedPath, getSessionDir } from "./environment";
+import { getSessionDir } from "./agent-paths";
+import { assertAllowedPath } from "./environment";
 import type { ProjectService } from "./project-service";
 import type { SessionRuntimeRegistry } from "./session-registry";
 import { summarizeStoredSession } from "./session-summary";

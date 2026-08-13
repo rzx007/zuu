@@ -2,11 +2,8 @@ import {
   DefaultResourceLoader,
   type ModelRuntime,
 } from "@earendil-works/pi-coding-agent";
-import {
-  getPackageTrustStorePath,
-  getZuuAgentDir,
-  sdkVersion,
-} from "./environment";
+import { getPackageTrustStorePath, getZuuAgentDir } from "./agent-paths";
+import { sdkVersion } from "./environment";
 import { inspectDiagnosticStores } from "./diagnostic-stores";
 import { createTrustedSettingsView } from "./package-settings";
 import { PackageTrustStore } from "./package-trust";

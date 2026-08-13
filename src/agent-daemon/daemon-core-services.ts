@@ -19,7 +19,7 @@ import {
   getScheduleLeaseStorePath,
   getScheduleStorePath,
   getZuuAgentDir,
-} from "./environment";
+} from "./agent-paths";
 import { ModelService } from "./model-service";
 import { PackageService } from "./packages";
 import { ProjectService } from "./project-service";
