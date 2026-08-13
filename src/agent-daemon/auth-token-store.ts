@@ -4,9 +4,9 @@ import {
   createStoredToken,
   DEFAULT_ACTOR,
   DEFAULT_TOKEN_RECORD,
-  isAuthTokenRecord,
   type AuthTokenRecord,
 } from "./auth-tokens";
+import { isAuthTokenRecord } from "./auth-token-validation";
 
 const TOKEN_USAGE_TOUCH_INTERVAL_MS = 30_000;
 

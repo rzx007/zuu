@@ -4,13 +4,11 @@ import {
   defaultToken,
   generateToken,
   isTokenExpired,
-  normalizeActor,
-  normalizeFutureTimestamp,
-  parseAuthScope,
   type AuthScope,
   type AuthTokenRecord,
   type StoredAuthToken,
 } from "./auth-tokens";
+import { normalizeActor, normalizeFutureTimestamp, parseAuthScope } from "./auth-token-validation";
 
 export interface CreateAuthTokenInput {
   scope: AuthScope;

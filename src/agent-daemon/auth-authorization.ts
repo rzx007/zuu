@@ -1,9 +1,9 @@
 import {
-  bearerToken,
   isTokenExpired,
   type AuthScope,
   type AuthTokenRecord,
 } from "./auth-tokens";
+import { bearerToken } from "./auth-token-validation";
 
 export interface AuthDecision {
   authorized: boolean;
