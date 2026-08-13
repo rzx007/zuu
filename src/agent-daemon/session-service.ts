@@ -1,5 +1,4 @@
 import {
-  SessionManager,
   type AgentSession,
   type EventBusController,
   type ModelRuntime,
@@ -15,7 +14,6 @@ import type {
 } from "@zuu/client";
 import { ApiError, notFound, validationError } from "../http";
 import type { ApprovalRegistry } from "./approval-service";
-import { assertAllowedPath, getSessionDir } from "./environment";
 import type { PackageService } from "./packages";
 import type { ProjectService } from "./project-service";
 import {
@@ -27,6 +25,7 @@ import {
   switchManagedSession,
 } from "./session-actions";
 import { createSessionRuntime } from "./session-factory";
+import { listStoredSessionSummaries } from "./session-files";
 import { SessionRuntimeRegistry } from "./session-registry";
 import {
   type CreateSessionOptions,
@@ -35,7 +34,6 @@ import {
 import {
   summarizeAgentSession,
   summarizeSessionTree,
-  summarizeStoredSession,
 } from "./session-summary";
 
 export interface SessionServiceOptions {
@@ -122,14 +120,13 @@ export class SessionService {
   }
 
   async listStoredSessions(cwd?: string, projectId?: string) {
-    const projectCwd = projectId ? this.options.projects.get(projectId).cwd : undefined;
-    const targetCwd = cwd ?? projectCwd;
-    if (targetCwd) assertAllowedPath(targetCwd, "cwd");
-    const sessionDir = getSessionDir(this.options.agentDir);
-    const sessions = targetCwd ? await SessionManager.list(targetCwd, sessionDir) : await SessionManager.listAll(sessionDir);
-    return sessions
-      .map((session) => this.summarizeStoredSession(session, projectId))
-      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+    return listStoredSessionSummaries({
+      agentDir: this.options.agentDir,
+      projects: this.options.projects,
+      runtimes: this.runtimes,
+      cwd,
+      projectId,
+    });
   }
 
   getProjectId(sessionId: string) {
@@ -202,13 +199,6 @@ export class SessionService {
 
   private deleteManagedRuntime(managed: ManagedRuntime) {
     this.runtimes.delete(managed);
-  }
-
-  private summarizeStoredSession(session: Parameters<typeof summarizeStoredSession>[0], projectId?: string) {
-    return summarizeStoredSession(session, {
-      projectId,
-      isActive: this.runtimes.isSessionFileActive(session.path),
-    });
   }
 
   private sessionSummaryContext(session: AgentSession) {
