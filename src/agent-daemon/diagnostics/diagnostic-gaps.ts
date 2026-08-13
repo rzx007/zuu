@@ -21,8 +21,8 @@ export function collectDiagnosticGaps(input: DiagnosticGapInput) {
   if (input.blockedPackages.length > 0) {
     gaps.push(`${input.blockedPackages.length} package source(s) are configured but blocked until trusted.`);
   }
-  if (!input.packages.some((item) => item.includes("@agwab/pi-workflow"))) {
-    gaps.push("Workflow/subagent orchestration is not installed; add a pinned npm:@agwab/pi-workflow@<reviewed-version> source for reusable workflows.");
+  if (input.workflowBackend.kind === "fake") {
+    gaps.push("Workflow backend is fake; set ZUU_WORKFLOW_BACKEND=native to run Zuu native workflow/subagent tasks.");
   }
   if (input.workflowBackend.kind === "pi-package" && input.workflowBackend.status !== "ready") {
     gaps.push(input.workflowBackend.message ?? "Pi workflow backend is not ready.");

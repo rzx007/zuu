@@ -1,4 +1,4 @@
-import type { PromptRequest, RunSummary, StartWorkflowRequest } from "@zuu/client";
+import type { PromptRequest, PromptStreamEvent, RunSummary, StartWorkflowRequest } from "@zuu/client";
 import { notFound } from "../../server";
 import { getWorkflowStorePath } from "../core/agent-paths";
 import type { PackageService } from "../packages/packages";
@@ -9,10 +9,14 @@ export interface WorkflowServiceOptions {
   agentDir: string;
   packageService: PackageService;
   projects: ProjectRegistry;
+  runPrompt: (request: PromptRequest) => AsyncGenerator<PromptStreamEvent>;
   launchPrompt: (request: PromptRequest) => Promise<RunSummary>;
 }
 
 export class WorkflowService {
+  private backend?: ReturnType<typeof createWorkflowBackend>;
+  private backendSignature?: string;
+
   constructor(private readonly options: WorkflowServiceOptions) {}
 
   getBackendInfo() {
@@ -69,12 +73,20 @@ export class WorkflowService {
   }
 
   private createBackend() {
-    return createWorkflowBackend({
+    const packages = this.options.packageService.listTrustedPackageSources();
+    const requestedKind = process.env.ZUU_WORKFLOW_BACKEND;
+    const signature = JSON.stringify({ requestedKind, packages });
+    if (this.backend && this.backendSignature === signature) return this.backend;
+
+    this.backend = createWorkflowBackend({
       path: getWorkflowStorePath(this.options.agentDir),
-      packages: this.options.packageService.listTrustedPackageSources(),
-      requestedKind: process.env.ZUU_WORKFLOW_BACKEND,
+      packages,
+      requestedKind,
       agentDir: this.options.agentDir,
+      runPrompt: this.options.runPrompt,
       launchPrompt: this.options.launchPrompt,
     });
+    this.backendSignature = signature;
+    return this.backend;
   }
 }

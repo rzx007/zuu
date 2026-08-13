@@ -1,6 +1,6 @@
 # Zuu Native Workflow 设计
 
-> 状态：Draft  
+> 状态：Implemented MVP
 > 目标：把 workflow / subagent / DAG / board 做成 Zuu 原生能力，`@agwab/pi-workflow` 仅作为可选 adapter。
 
 ## 1. 背景
@@ -9,7 +9,7 @@
 
 新的定位：
 
-- **默认后端**：`native`，由 Zuu daemon 自己保存 workflow definition、run、stage、task 和 artifact。
+- **原生后端**：`native`，由 Zuu daemon 自己保存 workflow definition、run、stage、task 和 artifact，可通过 `ZUU_WORKFLOW_BACKEND=native` 启用。
 - **可选后端**：`pi-package`，在 macOS/Linux/WSL2 中桥接第三方 Pi Package。
 - **稳定协议**：WebUI 和 `@zuu/client` 只理解 Zuu DTO，不依赖第三方 package 的内部存储格式。
 
@@ -154,14 +154,14 @@ WebUI board 的下一步目标：
 
 ## 6. 实施顺序
 
-1. 增加 `native` workflow backend 类型和诊断信息。
-2. 建立 native workflow store，保存 definition、run、stage、task、artifact。
-3. 实现 `single` runner，并用 Pi SDK worker session 产生真实 Agent Run。
-4. 实现 `sequence` runner，支持上游 artifact 注入。
-5. 实现基础 DAG 校验和并发调度。
-6. 将 scheduler workflow action 默认指向 native backend。
-7. 升级 WebUI Workflow Runs 面板为真正 board。
-8. 再决定是否保留 `fake` 作为测试后端或用 native test fixture 取代。
+1. 增加 `native` workflow backend 类型和诊断信息。已完成。
+2. 建立 native workflow store，保存 definition、run、stage、task、artifact。已完成。
+3. 实现 `single` runner，并用 Pi SDK worker session 产生真实 Agent Run。已完成。
+4. 实现 `sequence` runner，支持上游 artifact 注入。已完成。
+5. 实现基础 DAG 校验和并发调度。已完成。
+6. 将 scheduler workflow action 默认指向 native backend。已具备后端能力，仍由当前 `ZUU_WORKFLOW_BACKEND` 选择。
+7. 升级 WebUI Workflow Runs 面板为真正 board。后续增强。
+8. 再决定是否保留 `fake` 作为测试后端或用 native test fixture 取代。后续决策。
 
 ## 7. 与 `pi-package` 的关系
 

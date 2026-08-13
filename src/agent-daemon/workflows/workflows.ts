@@ -1,5 +1,6 @@
 import { DefaultPackageManager, SettingsManager } from "@earendil-works/pi-coding-agent";
 import { FakeWorkflowBackend } from "./adapters/fake";
+import { NativeWorkflowBackend } from "./adapters/native";
 import {
   createPiPackageInfo,
   resolvePiWorkflowPackage,
@@ -17,7 +18,35 @@ export type { WorkflowBackend };
 
 export function createWorkflowBackend(options: CreateWorkflowBackendOptions): WorkflowBackend {
   const packageSource = resolvePiWorkflowPackage(options.packages);
-  const requestedKind = options.requestedKind === "pi-package" ? "pi-package" : "fake";
+  const requestedKind =
+    options.requestedKind === "pi-package" ? "pi-package" :
+    options.requestedKind === "native" ? "native" :
+    "fake";
+
+  if (requestedKind === "native") {
+    if (!options.runPrompt) {
+      return new UnavailableWorkflowBackend({
+        kind: "native",
+        status: "unavailable",
+        label: "Native workflow backend",
+        packageInstalled: false,
+        message: "Native workflow backend needs a daemon prompt runner before it can execute worker tasks.",
+      });
+    }
+
+    return new NativeWorkflowBackend({
+      path: options.path,
+      runPrompt: options.runPrompt,
+      info: {
+        kind: "native",
+        status: "ready",
+        label: "Native workflow backend",
+        packageInstalled: false,
+        packageSource,
+        message: "Zuu native workflow backend is ready. It runs logical subagents through isolated Pi SDK worker sessions.",
+      },
+    });
+  }
 
   if (requestedKind === "pi-package") {
     const probe = probePiWorkflowPackage({

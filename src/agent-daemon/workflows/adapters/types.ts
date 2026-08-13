@@ -5,6 +5,7 @@ import type {
   WorkflowBackendInfo,
   WorkflowDefinition,
   WorkflowRun,
+  PromptStreamEvent,
 } from "@zuu/client";
 
 export interface WorkflowBackend {
@@ -21,4 +22,5 @@ export interface WorkflowBackendOptions {
   packages: string[];
   requestedKind?: string;
   launchPrompt?: (request: PromptRequest) => Promise<RunSummary>;
+  runPrompt?: (request: PromptRequest) => AsyncGenerator<PromptStreamEvent>;
 }

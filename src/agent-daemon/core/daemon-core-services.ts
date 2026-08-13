@@ -73,6 +73,7 @@ export function createDaemonCoreServices(callbacks: DaemonCoreCallbacks): Daemon
     agentDir,
     packageService,
     projects: projectService,
+    runPrompt: (request) => callbacks.prompt(request),
     launchPrompt: (request) => launchPromptAsRun((promptRequest) => callbacks.prompt(promptRequest), request),
   });
   const sessionService = new SessionService({

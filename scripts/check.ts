@@ -1088,6 +1088,75 @@ async function main() {
   }
   if (!unavailablePiWorkflowFailed) throw new Error("unavailable pi-package workflow should fail");
 
+  let nativePromptCount = 0;
+  const nativeTaskPrompts: string[] = [];
+  const nativeBackend = createWorkflowBackend({
+    path: join(mkdtempSync(join(tmpdir(), "zuu-native-workflow-check-")), "workflow-runs.json"),
+    agentDir: mkdtempSync(join(tmpdir(), "zuu-native-agent-check-")),
+    packages: [],
+    requestedKind: "native",
+    runPrompt: async function* (request) {
+      nativePromptCount += 1;
+      nativeTaskPrompts.push(request.prompt);
+      const timestamp = new Date().toISOString();
+      const runId = `native-agent-run-${nativePromptCount}`;
+      yield {
+        id: `${runId}:event:1`,
+        createdAt: timestamp,
+        runId,
+        type: "text_delta",
+        delta: `native result ${nativePromptCount}`,
+      };
+      yield {
+        id: `${runId}:event:2`,
+        createdAt: timestamp,
+        runId,
+        type: "done",
+        run: {
+          id: runId,
+          sessionId: `native-session-${nativePromptCount}`,
+          projectId: request.projectId ?? "default",
+          source: "workflow",
+          status: "completed",
+          prompt: request.prompt,
+          startedAt: timestamp,
+          finishedAt: timestamp,
+        },
+      };
+    },
+  });
+  if (nativeBackend.getInfo().kind !== "native" || nativeBackend.getInfo().status !== "ready") {
+    throw new Error("native workflow backend should be ready when a prompt runner is provided");
+  }
+  const nativeDefinitions = await nativeBackend.listDefinitions();
+  if (!nativeDefinitions.some((definition) => definition.id === "project-review") || "steps" in nativeDefinitions[0]) {
+    throw new Error("native workflow definitions should expose stable public DTOs");
+  }
+  const nativeRun = await nativeBackend.start("project-review", {
+    projectId: defaultProject.id,
+    prompt: "native contract check",
+    inputs: { source: "scripts/check.ts" },
+  });
+  if (
+    nativeRun.status !== "completed" ||
+    nativeRun.tasks.length !== 2 ||
+    nativeRun.artifacts.length !== 2 ||
+    nativeRun.linkedRunIds?.length !== 2 ||
+    !nativeRun.tasks.every((task) => task.agentRunId && task.sessionId && task.attempts === 1)
+  ) {
+    throw new Error("native workflow sequence should run tasks and persist agent links");
+  }
+  if (!nativeTaskPrompts[1]?.includes("Upstream artifacts") || !nativeTaskPrompts[1]?.includes("native result 1")) {
+    throw new Error("native workflow sequence should inject upstream artifact context");
+  }
+  const nativeDagRun = await nativeBackend.start("deep-research", {
+    projectId: defaultProject.id,
+    prompt: "native dag check",
+  });
+  if (nativeDagRun.status !== "completed" || nativeDagRun.tasks.length < 3 || nativeDagRun.artifacts.length !== nativeDagRun.tasks.length) {
+    throw new Error("native workflow DAG should complete all tasks");
+  }
+
   const schedulesBefore = await client.listProjectSchedules(defaultProject.id);
   if (!Array.isArray(schedulesBefore.schedules)) throw new Error("schedules response is invalid");
   const schedule = await client.createProjectSchedule(defaultProject.id, {

@@ -380,7 +380,7 @@ export interface WorkflowDefinition {
   tags: string[];
 }
 
-export type WorkflowBackendKind = "fake" | "pi-package";
+export type WorkflowBackendKind = "fake" | "native" | "pi-package";
 export type WorkflowBackendStatus = "ready" | "unavailable";
 
 export interface WorkflowBackendInfo {
@@ -412,6 +412,10 @@ export interface WorkflowTask {
   finishedAt?: string;
   input?: unknown;
   output?: unknown;
+  dependsOn?: string[];
+  agentRunId?: string;
+  sessionId?: string;
+  attempts?: number;
   artifactIds: string[];
 }
 
@@ -440,6 +444,7 @@ export interface WorkflowRun {
   stages: WorkflowStage[];
   tasks: WorkflowTask[];
   artifacts: WorkflowArtifact[];
+  linkedRunIds?: string[];
   error?: string;
 }
 
