@@ -4,11 +4,6 @@ import {
   createZuuClient,
   type Approval,
   type ApprovalDecision,
-  type AuthScope,
-  type AuthStatus,
-  type AuditEvent,
-  type AuditEventAction,
-  type AuditEventOutcome,
   type CreateScheduleRequest,
   type Diagnostics,
   type ModelSmokeResponse,
@@ -40,7 +35,6 @@ import {
   errorMessage,
   flattenSessionTree,
   isAbortError,
-  optionalDatetimeIso,
   packageOperationMessage,
   previewText,
   scheduleActionLabel,
@@ -51,6 +45,7 @@ import { toLiveEventItem, type LiveEventItem } from '@/lib/live-events'
 import { createPromptModel, formatPromptModel, parseModelSelection } from '@/lib/model-selection'
 import { usePackagePanel } from '@/lib/package-panel'
 import { createRecentIdSet } from '@/lib/recent-ids'
+import { useSecurityPanel } from '@/lib/security-panel'
 
 type MessageRole = 'user' | 'agent' | 'event' | 'error'
 type EventStreamStatus = 'connecting' | 'live' | 'stopped' | 'error'
@@ -75,20 +70,6 @@ let eventRefreshTimer: number | undefined
 const pendingEventRefreshes = new Set<EventRefreshTarget>()
 const countedRunEvents = createRecentIdSet()
 
-const apiToken = ref(localStorage.getItem(STORAGE_KEYS.apiToken) || '')
-const authStatus = ref<AuthStatus>()
-const newAuthTokenActor = ref('webui')
-const newAuthTokenScope = ref<AuthScope>('read')
-const newAuthTokenExpiresAt = ref('')
-const auditEvents = ref<AuditEvent[]>([])
-const auditAction = ref<'' | AuditEventAction>('')
-const auditOutcome = ref<'' | AuditEventOutcome>('')
-const auditAuthScope = ref<'' | AuthScope>('')
-const auditAuthActor = ref('')
-const auditAuthTokenId = ref('')
-const auditTarget = ref('')
-const auditSince = ref('')
-const auditUntil = ref('')
 const diagnostics = ref<Diagnostics>()
 const projects = ref<ProjectSummary[]>([])
 const selectedProjectId = ref(localStorage.getItem(STORAGE_KEYS.projectId) || '')
@@ -152,6 +133,34 @@ const lastEventId = ref(localStorage.getItem(STORAGE_KEYS.eventCursor) || '')
 const toolChoices = TOOL_CHOICES
 const selectedTools = reactive(createDefaultToolSelection())
 const {
+  apiToken,
+  authStatus,
+  newAuthTokenActor,
+  newAuthTokenScope,
+  newAuthTokenExpiresAt,
+  auditEvents,
+  auditAction,
+  auditOutcome,
+  auditAuthScope,
+  auditAuthActor,
+  auditAuthTokenId,
+  auditTarget,
+  auditSince,
+  auditUntil,
+  authAdminTokenCount,
+  loadAuthStatus,
+  loadAuditEvents,
+  saveToken,
+  rotateAuthToken,
+  createAuthToken,
+  revokeAuthToken,
+} = useSecurityPanel({
+  getClient: () => client,
+  replaceClientToken,
+  addMessage,
+  refreshAll,
+})
+const {
   packages,
   packageOperations,
   packageSource,
@@ -213,7 +222,6 @@ const workflowUnstagedTasks = computed(() => {
   const stageIds = new Set(workflowRunStages.value.map((stage) => stage.id))
   return workflowRunTasks.value.filter((task) => !stageIds.has(task.stageId))
 })
-const authAdminTokenCount = computed(() => authStatus.value?.tokens.filter((token) => token.scope === 'admin').length ?? 0)
 const eventStatusVariant = computed(() => {
   if (eventStreamStatus.value === 'live') return 'secondary'
   if (eventStreamStatus.value === 'error') return 'destructive'
@@ -374,24 +382,6 @@ async function consumeEventStream(streamGeneration: number, signal: AbortSignal)
 
 async function loadDiagnostics() {
   diagnostics.value = await client.diagnostics()
-}
-
-async function loadAuthStatus() {
-  authStatus.value = (await client.authStatus()).auth
-}
-
-async function loadAuditEvents() {
-  auditEvents.value = (await client.listAuditEvents({
-    limit: 50,
-    action: auditAction.value || undefined,
-    outcome: auditOutcome.value || undefined,
-    authScope: auditAuthScope.value || undefined,
-    authActor: auditAuthActor.value.trim() || undefined,
-    authTokenId: auditAuthTokenId.value.trim() || undefined,
-    target: auditTarget.value.trim() || undefined,
-    since: optionalDatetimeIso(auditSince.value),
-    until: optionalDatetimeIso(auditUntil.value),
-  })).events
 }
 
 async function loadModels() {
@@ -580,45 +570,10 @@ async function refreshAll() {
   }
 }
 
-function saveToken() {
-  const token = apiToken.value.trim()
-  if (token) localStorage.setItem(STORAGE_KEYS.apiToken, token)
-  else localStorage.removeItem(STORAGE_KEYS.apiToken)
+function replaceClientToken(token: string | undefined) {
   stopEventStream()
-  client = createZuuClient({ apiToken: token || undefined })
-  addMessage('event', token ? 'API token saved.' : 'API token cleared.')
+  client = createZuuClient({ apiToken: token })
   startEventStream()
-  refreshAll().catch((error) => addMessage('error', errorMessage(error)))
-}
-
-async function rotateAuthToken() {
-  const result = await client.rotateAuthToken()
-  apiToken.value = result.apiToken
-  localStorage.setItem(STORAGE_KEYS.apiToken, result.apiToken)
-  stopEventStream()
-  client = createZuuClient({ apiToken: result.apiToken })
-  authStatus.value = result.auth
-  addMessage('event', `API token rotated: ${result.auth.tokenPreview}`)
-  startEventStream()
-  await refreshAll()
-}
-
-async function createAuthToken() {
-  const result = await client.createAuthToken({
-    actor: newAuthTokenActor.value.trim() || undefined,
-    scope: newAuthTokenScope.value,
-    expiresAt: optionalDatetimeIso(newAuthTokenExpiresAt.value),
-  })
-  authStatus.value = result.auth
-  await loadAuditEvents()
-  addMessage('event', `API token created for ${result.token.actor}: ${result.apiToken}`)
-}
-
-async function revokeAuthToken(tokenId: string) {
-  const result = await client.revokeAuthToken(tokenId)
-  authStatus.value = result.auth
-  await loadAuditEvents()
-  addMessage('event', `API token revoked: ${result.revoked.actor} / ${result.revoked.scope}`)
 }
 
 function chooseModel() {
