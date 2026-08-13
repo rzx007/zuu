@@ -1408,6 +1408,7 @@ onUnmounted(() => {
                     <span>{{ run.stages.length }} stages</span>
                     <span>{{ run.tasks.length }} tasks</span>
                     <span>{{ run.artifacts.length }} artifacts</span>
+                    <span v-if="run.linkedRunIds?.length">{{ run.linkedRunIds.length }} agent runs</span>
                   </div>
                   <p v-if="run.artifacts[0]?.content">{{ previewText(run.artifacts[0].content) }}</p>
                   <Button v-if="run.status === 'queued' || run.status === 'running'" variant="outline" size="xs" @click.stop="abortWorkflowRun(run.id).catch((error) => addMessage('error', errorMessage(error)))">Abort</Button>
@@ -1428,6 +1429,9 @@ onUnmounted(() => {
                   <span v-if="isLoadingWorkflowRunDetail">Loading...</span>
                   <p v-if="selectedWorkflowRun.prompt">{{ selectedWorkflowRun.prompt }}</p>
                   <p v-if="selectedWorkflowRun.error">{{ selectedWorkflowRun.error }}</p>
+                  <div v-if="selectedWorkflowRun.linkedRunIds?.length" class="workflow-progress">
+                    <span v-for="agentRunId in selectedWorkflowRun.linkedRunIds" :key="agentRunId">agent {{ agentRunId.slice(0, 8) }}</span>
+                  </div>
                 </div>
 
                 <div class="workflow-row">
@@ -1458,6 +1462,10 @@ onUnmounted(() => {
                       <div class="min-w-0">
                         <strong>{{ task.name }}</strong>
                         <span>{{ task.id.slice(0, 12) }}</span>
+                        <span v-if="task.dependsOn?.length">depends {{ task.dependsOn.join(', ') }}</span>
+                        <span v-if="task.agentRunId">agent {{ task.agentRunId.slice(0, 8) }}</span>
+                        <span v-if="task.sessionId">session {{ task.sessionId.slice(0, 8) }}</span>
+                        <span v-if="task.attempts">attempts {{ task.attempts }}</span>
                         <span v-if="task.artifactIds.length">{{ task.artifactIds.length }} artifacts</span>
                         <p v-if="previewText(task.output ?? task.input, 120)">{{ previewText(task.output ?? task.input, 120) }}</p>
                       </div>
@@ -1477,6 +1485,7 @@ onUnmounted(() => {
                     <div v-for="artifact in workflowRunArtifacts" :key="artifact.id" class="compact-row">
                       <div class="min-w-0">
                         <strong>{{ artifact.name }}</strong>
+                        <span v-if="artifact.taskId">task {{ artifact.taskId.slice(0, 12) }}</span>
                         <span>{{ artifact.kind }} 路 {{ artifact.createdAt }}</span>
                         <pre v-if="artifact.content !== undefined" class="mt-2 max-h-44 overflow-auto whitespace-pre-wrap rounded border p-2 text-xs">{{ previewText(artifact.content, 1200) }}</pre>
                       </div>
