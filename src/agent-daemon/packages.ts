@@ -1,13 +1,17 @@
 import type {
   PackageInstallResponse,
   PackageMutationRequest,
-  PackageOperationAction,
   PackageOperationStartResponse,
   PackagesResponse,
 } from "@zuu/client";
-import { ApiError } from "../http";
-import { assertPinnedPackageSource, normalizePackageSource, packageSourceToString } from "./environment";
+import { packageSourceToString } from "./environment";
 import { createPackageManager } from "./package-manager";
+import {
+  packageMutationSource,
+  pinnedPackageSource,
+  startPackageOperation,
+  trustedPinnedPackageSource,
+} from "./package-mutations";
 import { PackageOperationRunner } from "./package-operation-runner";
 import { createSettingsManager, createTrustedSettingsView } from "./package-settings";
 import { PackageOperationStore } from "./package-operations";
@@ -37,8 +41,7 @@ export class PackageService {
   }
 
   async add(request: PackageMutationRequest): Promise<PackagesResponse> {
-    const source = normalizePackageSource(request.source);
-    assertPinnedPackageSource(source);
+    const source = pinnedPackageSource(request);
     const settingsManager = this.createSettingsManager();
     const packages = settingsManager.getPackages().map(packageSourceToString);
     if (!packages.includes(source)) {
@@ -49,39 +52,34 @@ export class PackageService {
   }
 
   install(request: PackageMutationRequest): PackageInstallResponse {
-    const source = normalizePackageSource(request.source);
-    assertPinnedPackageSource(source);
-    this.assertTrusted(source);
-    const operation = this.startOperation(source, "install");
+    const source = trustedPinnedPackageSource(request, this.trust);
+    const operation = startPackageOperation(this.operations, source, "install");
     void this.runner.run(operation.id, source, "install");
     return { operation, ...this.list() };
   }
 
   remove(request: PackageMutationRequest): PackageOperationStartResponse {
-    const source = normalizePackageSource(request.source);
-    const operation = this.startOperation(source, "remove");
+    const source = packageMutationSource(request);
+    const operation = startPackageOperation(this.operations, source, "remove");
     void this.runner.run(operation.id, source, "remove");
     return { operation, ...this.list() };
   }
 
   update(request: PackageMutationRequest): PackageOperationStartResponse {
-    const source = normalizePackageSource(request.source);
-    assertPinnedPackageSource(source);
-    this.assertTrusted(source);
-    const operation = this.startOperation(source, "update");
+    const source = trustedPinnedPackageSource(request, this.trust);
+    const operation = startPackageOperation(this.operations, source, "update");
     void this.runner.run(operation.id, source, "update");
     return { operation, ...this.list() };
   }
 
   trustPackage(request: PackageMutationRequest): PackagesResponse {
-    const source = normalizePackageSource(request.source);
-    assertPinnedPackageSource(source);
+    const source = pinnedPackageSource(request);
     this.trust.trust(source);
     return this.list();
   }
 
   revokeTrust(request: PackageMutationRequest): PackagesResponse {
-    const source = normalizePackageSource(request.source);
+    const source = packageMutationSource(request);
     this.trust.revoke(source);
     return this.list();
   }
@@ -120,24 +118,4 @@ export class PackageService {
     return createPackageManager(this.cwd, this.agentDir, settingsManager);
   }
 
-  private startOperation(source: string, action: PackageOperationAction) {
-    const operation = this.operations.create(source, action);
-    this.operations.addEvent(operation.id, {
-      type: "progress",
-      action,
-      source,
-      message: `${action} queued.`,
-    });
-    return operation;
-  }
-
-  private assertTrusted(source: string) {
-    if (!this.trust.isTrusted(source)) {
-      throw new ApiError("Package source must be trusted before this operation", {
-        status: 403,
-        code: "package_untrusted",
-        details: { source },
-      });
-    }
-  }
 }
