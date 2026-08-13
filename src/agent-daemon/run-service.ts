@@ -2,6 +2,7 @@ import type { EventStreamQuery, PromptRequest, PromptStreamEvent, RunSummary } f
 import { notFound } from "../http";
 import { matchesEventQuery } from "./run-event-query";
 import { loadRunHistory, saveRunHistory } from "./run-history";
+import { abortActiveSessionRuns, createRunSummary } from "./run-mutations";
 import { RunEventStore, type RunEventDraft } from "./run-events";
 
 type EventListener = (event: PromptStreamEvent) => void;
@@ -27,15 +28,7 @@ export class RunService {
   }
 
   startRun(input: { sessionId: string; projectId: string; request: PromptRequest }) {
-    const run: RunSummary = {
-      id: crypto.randomUUID(),
-      sessionId: input.sessionId,
-      projectId: input.projectId,
-      source: input.request.source ?? "user",
-      status: "running",
-      prompt: input.request.prompt,
-      startedAt: new Date().toISOString(),
-    };
+    const run = createRunSummary(input);
     this.saveRun(run);
     return run;
   }
@@ -80,14 +73,7 @@ export class RunService {
   }
 
   abortSessionRuns(sessionId: string, finishedAt = new Date().toISOString()) {
-    let changed = false;
-    for (const run of this.runs.values()) {
-      if (run.sessionId === sessionId && (run.status === "running" || run.status === "waiting_approval")) {
-        run.status = "aborted";
-        run.finishedAt = finishedAt;
-        changed = true;
-      }
-    }
+    const changed = abortActiveSessionRuns(this.runs.values(), sessionId, finishedAt);
     if (changed) this.persistRuns();
   }
 
