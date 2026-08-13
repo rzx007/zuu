@@ -51,6 +51,7 @@ import {
 } from '@/lib/format'
 import { toLiveEventItem, type LiveEventItem } from '@/lib/live-events'
 import { createPromptModel, formatPromptModel, parseModelSelection } from '@/lib/model-selection'
+import { createRecentIdSet } from '@/lib/recent-ids'
 
 type MessageRole = 'user' | 'agent' | 'event' | 'error'
 type EventStreamStatus = 'connecting' | 'live' | 'stopped' | 'error'
@@ -74,8 +75,7 @@ let eventStreamController: AbortController | undefined
 let eventStreamGeneration = 0
 let eventRefreshTimer: number | undefined
 const pendingEventRefreshes = new Set<EventRefreshTarget>()
-const countedEventIds = new Set<string>()
-const countedEventOrder: string[] = []
+const countedRunEvents = createRecentIdSet()
 
 const apiToken = ref(localStorage.getItem(STORAGE_KEYS.apiToken) || '')
 const authStatus = ref<AuthStatus>()
@@ -246,19 +246,8 @@ function upsertApproval(approval: Approval) {
   approvals.value = [approval, ...approvals.value.filter((item) => item.id !== approval.id)].sort((a, b) => b.createdAt.localeCompare(a.createdAt))
 }
 
-function rememberCountedEvent(eventId: string) {
-  if (countedEventIds.has(eventId)) return false
-  countedEventIds.add(eventId)
-  countedEventOrder.push(eventId)
-  if (countedEventOrder.length > 2048) {
-    const expired = countedEventOrder.shift()
-    if (expired) countedEventIds.delete(expired)
-  }
-  return true
-}
-
 function countRunEvent(event: PromptStreamEvent) {
-  if (!rememberCountedEvent(event.id)) return
+  if (!countedRunEvents.remember(event.id)) return
   runEventCounts[event.runId] = (runEventCounts[event.runId] ?? 0) + 1
 }
 
@@ -674,6 +663,7 @@ async function switchProject() {
   }
   runs.value = []
   storedSessions.value = []
+  countedRunEvents.clear()
   for (const key of Object.keys(runEventCounts)) {
     delete runEventCounts[key]
   }
