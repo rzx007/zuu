@@ -1,4 +1,10 @@
 import { ApiError } from "../http";
+import {
+  authorizeContext,
+  contextForAuthorization,
+  type AuthDecision,
+  type AuthContext,
+} from "./auth-authorization";
 import { envAuthStatus, localAuthStatus, type AuthStatus } from "./auth-status";
 import { LocalAuthTokenStore } from "./auth-token-store";
 import {
@@ -8,9 +14,7 @@ import {
   type CreateAuthTokenInput,
 } from "./auth-token-mutations";
 import {
-  bearerToken,
   defaultToken,
-  isTokenExpired,
   toTokenStatus,
   type AuthScope,
   type AuthTokenRecord,
@@ -18,6 +22,7 @@ import {
 } from "./auth-tokens";
 
 export type { AuthScope, AuthTokenStatus } from "./auth-tokens";
+export type { AuthDecision, AuthContext } from "./auth-authorization";
 
 export interface AuthCreateTokenRequest extends CreateAuthTokenInput {}
 
@@ -36,20 +41,6 @@ export interface AuthCreateTokenResult {
 export interface AuthRevokeTokenResult {
   status: AuthStatus;
   revoked: AuthTokenStatus;
-}
-
-export interface AuthDecision {
-  authorized: boolean;
-  scope?: AuthScope;
-  actor?: string;
-  tokenId?: string;
-  reason?: "unauthorized" | "forbidden";
-}
-
-export interface AuthContext {
-  scope: AuthScope;
-  actor: string;
-  tokenId: string;
 }
 
 export class AuthService {
@@ -71,13 +62,8 @@ export class AuthService {
 
   authorize(authorization: string | undefined, requiredScope: AuthScope = "admin"): AuthDecision {
     const context = this.contextForAuthorization(authorization);
-    if (!context) return { authorized: false, reason: "unauthorized" };
-    this.localStore?.touchUsage(context.tokenId);
-    if (context.scope === "admin") return { authorized: true, ...context };
-    if (context.scope === "read") {
-      return requiredScope === "read" ? { authorized: true, ...context } : { authorized: false, ...context, reason: "forbidden" };
-    }
-    return { authorized: false, reason: "unauthorized" };
+    if (context) this.localStore?.touchUsage(context.tokenId);
+    return authorizeContext(context, requiredScope);
   }
 
   scopeForAuthorization(authorization: string | undefined): AuthScope | undefined {
@@ -85,12 +71,10 @@ export class AuthService {
   }
 
   contextForAuthorization(authorization: string | undefined): AuthContext | undefined {
-    const token = bearerToken(authorization);
-    if (!token) return undefined;
-    if (this.envToken) return token === this.envToken ? { scope: "admin", actor: "env", tokenId: "env-admin" } : undefined;
-
-    const stored = this.getLocalRecord().tokens.find((item) => item.token === token && !isTokenExpired(item));
-    return stored ? { scope: stored.scope, actor: stored.actor, tokenId: stored.id } : undefined;
+    return contextForAuthorization(authorization, {
+      envToken: this.envToken,
+      getLocalRecord: () => this.getLocalRecord(),
+    });
   }
 
   status(): AuthStatus {
