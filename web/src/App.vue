@@ -19,7 +19,7 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
-import { createDefaultToolSelection, STORAGE_KEYS, TOOL_CHOICES } from '@/lib/app-state'
+import { createDefaultToolSelection, STORAGE_KEYS, TOOL_CHOICES } from '@/lib/app'
 import {
   errorMessage,
   flattenSessionTree,
@@ -28,14 +28,10 @@ import {
   previewText,
   scheduleActionLabel,
   scheduleTriggerLabel,
-} from '@/lib/format'
-import { toLiveEventItem, type LiveEventItem } from '@/lib/live-events'
-import { createPromptModel, formatPromptModel, parseModelSelection } from '@/lib/model-selection'
-import { usePackagePanel } from '@/lib/package-panel'
-import { createRecentIdSet } from '@/lib/recent-ids'
-import { useSchedulePanel } from '@/lib/schedule-panel'
-import { useSecurityPanel } from '@/lib/security-panel'
-import { useWorkflowPanel } from '@/lib/workflow-panel'
+} from '@/lib/formatting'
+import { createRecentIdSet, toLiveEventItem, type LiveEventItem } from '@/lib/events'
+import { createPromptModel, formatPromptModel, parseModelSelection } from '@/lib/models'
+import { usePackagePanel, useSchedulePanel, useSecurityPanel, useWorkflowPanel } from '@/lib/panels'
 
 type MessageRole = 'user' | 'agent' | 'event' | 'error'
 type EventStreamStatus = 'connecting' | 'live' | 'stopped' | 'error'

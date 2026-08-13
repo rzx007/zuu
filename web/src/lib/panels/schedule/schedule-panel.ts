@@ -9,7 +9,7 @@ import type {
   ThinkingLevel,
   ZuuClient,
 } from '@zuu/client'
-import { toDatetimeLocal } from '@/lib/format'
+import { toDatetimeLocal } from '@/lib/formatting'
 
 interface SchedulePromptContext {
   sessionId?: string

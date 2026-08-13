@@ -5,7 +5,7 @@ import type {
   PackageSummary,
   ZuuClient,
 } from '@zuu/client'
-import { errorMessage } from '@/lib/format'
+import { errorMessage } from '@/lib/formatting'
 
 interface PackagePanelOptions {
   getClient: () => ZuuClient

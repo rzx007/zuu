@@ -7,8 +7,8 @@ import type {
   AuthStatus,
   ZuuClient,
 } from '@zuu/client'
-import { STORAGE_KEYS } from '@/lib/app-state'
-import { errorMessage, optionalDatetimeIso } from '@/lib/format'
+import { STORAGE_KEYS } from '@/lib/app'
+import { errorMessage, optionalDatetimeIso } from '@/lib/formatting'
 
 interface SecurityPanelOptions {
   getClient: () => ZuuClient
