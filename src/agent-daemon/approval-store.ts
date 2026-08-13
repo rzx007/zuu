@@ -4,7 +4,7 @@ import type {
   CreateApprovalRequest,
   ResolveApprovalRequest,
 } from "@zuu/client";
-import { notFound, validationError } from "../http";
+import { notFound } from "../http";
 import { expireApprovals } from "./approval-expiration";
 import {
   consumeApprovalGrant,
@@ -12,44 +12,7 @@ import {
   findConsumableApprovalGrant,
   resolveApprovalRecord,
 } from "./approval-mutations";
-import { JsonFileStore } from "./json-file-store";
-
-const APPROVAL_HISTORY_LIMIT = 500;
-const APPROVAL_STATUSES = new Set<ApprovalStatus>(["pending", "allowed", "denied", "expired"]);
-
-function isApproval(value: unknown): value is Approval {
-  return Boolean(
-    value &&
-      typeof value === "object" &&
-      "id" in value &&
-      "sessionId" in value &&
-      "runId" in value &&
-      "status" in value,
-  );
-}
-
-function loadApprovals(path: string): Approval[] {
-  return createApprovalsStore(path).load(Array.isArray).filter(isApproval);
-}
-
-function saveApprovals(path: string, approvals: Approval[]) {
-  createApprovalsStore(path).save(approvals.slice(0, APPROVAL_HISTORY_LIMIT));
-}
-
-function createApprovalsStore(path: string) {
-  return new JsonFileStore<unknown[]>({
-    name: "approvals",
-    path,
-    defaultValue: [],
-    countRecords: (value) => value.length,
-  });
-}
-
-export function assertApprovalStatus(status: unknown): asserts status is ApprovalStatus {
-  if (status !== undefined && !APPROVAL_STATUSES.has(status as ApprovalStatus)) {
-    validationError("status must be pending, allowed, denied, or expired", { field: "status" });
-  }
-}
+import { loadApprovals, saveApprovals } from "./approval-record-store";
 
 export class ApprovalStore {
   private readonly approvals: Map<string, Approval>;

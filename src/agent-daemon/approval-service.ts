@@ -4,7 +4,8 @@ import type {
   CreateApprovalRequest,
   ResolveApprovalRequest,
 } from "@zuu/client";
-import { ApprovalStore, assertApprovalStatus } from "./approval-store";
+import { assertApprovalStatus } from "./approval-record-store";
+import { ApprovalStore } from "./approval-store";
 
 export interface ApprovalRegistry {
   create(request: CreateApprovalRequest): Approval;
