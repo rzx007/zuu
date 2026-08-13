@@ -12,13 +12,12 @@ import type {
   SwitchSessionRequest,
   UpdateSessionRequest,
 } from "@zuu/client";
-import { ApiError, notFound, validationError } from "../http";
+import { notFound, validationError } from "../http";
 import type { ApprovalRegistry } from "./approval-service";
 import type { PackageService } from "./packages";
 import type { ProjectService } from "./project-service";
 import {
   applySessionUpdate,
-  assertSessionIdle,
   forkManagedSession,
   importManagedSession,
   newManagedSession,
@@ -26,6 +25,11 @@ import {
 } from "./session-actions";
 import { createSessionRuntime } from "./session-factory";
 import { listStoredSessionSummaries } from "./session-files";
+import {
+  abortManagedSession,
+  compactManagedSession,
+  deleteManagedSession,
+} from "./session-lifecycle";
 import { SessionRuntimeRegistry } from "./session-registry";
 import {
   type CreateSessionOptions,
@@ -111,12 +115,12 @@ export class SessionService {
   async deleteSession(sessionId: string, projectId?: string) {
     const managed = this.getManagedRuntime(sessionId);
     if (projectId) this.assertSessionProject(managed, sessionId, projectId);
-    assertSessionIdle(managed, sessionId, "delete");
-
-    const session = this.summarizeSession(managed.runtime.session);
-    await managed.runtime.dispose();
-    this.deleteManagedRuntime(managed);
-    return session;
+    return deleteManagedSession(
+      managed,
+      sessionId,
+      (item) => this.summarizeSession(item.runtime.session),
+      (item) => this.deleteManagedRuntime(item),
+    );
   }
 
   async listStoredSessions(cwd?: string, projectId?: string) {
@@ -148,18 +152,12 @@ export class SessionService {
 
   async abort(sessionId: string) {
     const managed = this.getManagedRuntime(sessionId);
-    await managed.runtime.session.abort();
-    managed.updatedAt = new Date().toISOString();
-    return this.summarizeSession(managed.runtime.session);
+    return abortManagedSession(managed, (item) => this.summarizeSession(item.runtime.session));
   }
 
   async compact(sessionId: string, instructions?: string) {
     const managed = this.getManagedRuntime(sessionId);
-    assertSessionIdle(managed, sessionId, "compact");
-
-    await managed.runtime.session.compact(instructions);
-    managed.updatedAt = new Date().toISOString();
-    return this.summarizeSession(managed.runtime.session);
+    return compactManagedSession(managed, sessionId, instructions, (item) => this.summarizeSession(item.runtime.session));
   }
 
   async newSession(sessionId: string, options: NewSessionRequest = {}) {
