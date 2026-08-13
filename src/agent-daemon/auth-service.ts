@@ -1,16 +1,11 @@
 import { randomUUID } from "node:crypto";
-import { chmodSync } from "node:fs";
 import { ApiError } from "../http";
 import { envAuthStatus, localAuthStatus, type AuthStatus } from "./auth-status";
-import { JsonFileStore } from "./json-file-store";
+import { LocalAuthTokenStore } from "./auth-token-store";
 import {
   bearerToken,
-  createStoredToken,
-  DEFAULT_ACTOR,
-  DEFAULT_TOKEN_RECORD,
   defaultToken,
   generateToken,
-  isAuthTokenRecord,
   isTokenExpired,
   normalizeActor,
   normalizeFutureTimestamp,
@@ -61,24 +56,14 @@ export interface AuthContext {
   tokenId: string;
 }
 
-const TOKEN_USAGE_TOUCH_INTERVAL_MS = 30_000;
-
 export class AuthService {
-  private readonly store: JsonFileStore<AuthTokenRecord>;
   private readonly envToken: string | undefined;
-  private localRecord: AuthTokenRecord | undefined;
+  private readonly localStore: LocalAuthTokenStore | undefined;
 
   constructor(private readonly tokenPath: string, envToken = process.env.ZUU_API_TOKEN?.trim()) {
     this.envToken = envToken || undefined;
-    this.store = new JsonFileStore<AuthTokenRecord>({
-      name: "auth-token",
-      path: tokenPath,
-      defaultValue: DEFAULT_TOKEN_RECORD,
-      countRecords: (value) => value.tokens.length,
-    });
-
     if (!this.envToken) {
-      this.localRecord = this.loadOrCreateLocalToken();
+      this.localStore = new LocalAuthTokenStore(tokenPath);
     }
   }
 
@@ -91,7 +76,7 @@ export class AuthService {
   authorize(authorization: string | undefined, requiredScope: AuthScope = "admin"): AuthDecision {
     const context = this.contextForAuthorization(authorization);
     if (!context) return { authorized: false, reason: "unauthorized" };
-    this.touchTokenUsage(context.tokenId);
+    this.localStore?.touchUsage(context.tokenId);
     if (context.scope === "admin") return { authorized: true, ...context };
     if (context.scope === "read") {
       return requiredScope === "read" ? { authorized: true, ...context } : { authorized: false, ...context, reason: "forbidden" };
@@ -196,35 +181,17 @@ export class AuthService {
   }
 
   private getLocalRecord() {
-    const record = this.localRecord ?? this.loadOrCreateLocalToken();
-    this.localRecord = record;
-    return record;
-  }
-
-  private loadOrCreateLocalToken() {
-    const loaded = this.store.load(isAuthTokenRecord);
-    if (loaded.tokens.some((token) => token.scope === "admin") && loaded.tokens.some((token) => token.scope === "read")) return loaded;
-
-    const now = new Date().toISOString();
-    const record: AuthTokenRecord = {
-      createdAt: now,
-      tokens: [
-        createStoredToken("local-admin", DEFAULT_ACTOR, "admin", now),
-        createStoredToken("local-read", DEFAULT_ACTOR, "read", now),
-      ],
-    };
-    this.saveLocalToken(record);
-    return record;
+    if (!this.localStore) {
+      throw new ApiError("Local auth token store is unavailable while ZUU_API_TOKEN is active", {
+        status: 409,
+        code: "auth_token_env_controlled",
+      });
+    }
+    return this.localStore.get();
   }
 
   private saveLocalToken(record: AuthTokenRecord) {
-    this.store.save(record);
-    this.localRecord = record;
-    try {
-      chmodSync(this.tokenPath, 0o600);
-    } catch {
-      // Best effort on Windows and filesystems that do not support POSIX modes.
-    }
+    this.localStore?.save(record);
   }
 
   private assertLocalAuthMutable(action: "created" | "revoked" | "rotated") {
@@ -236,17 +203,4 @@ export class AuthService {
     }
   }
 
-  private touchTokenUsage(tokenId: string) {
-    if (this.envToken) return;
-    const record = this.getLocalRecord();
-    const token = record.tokens.find((item) => item.id === tokenId);
-    if (!token) return;
-    const nowMs = Date.now();
-    if (token.lastUsedAt && Date.parse(token.lastUsedAt) > nowMs - TOKEN_USAGE_TOUCH_INTERVAL_MS) return;
-    const lastUsedAt = new Date(nowMs).toISOString();
-    this.saveLocalToken({
-      ...record,
-      tokens: record.tokens.map((item) => (item.id === tokenId ? { ...item, lastUsedAt } : item)),
-    });
-  }
 }
