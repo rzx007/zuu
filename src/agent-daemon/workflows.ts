@@ -2,9 +2,9 @@ import { DefaultPackageManager, SettingsManager } from "@earendil-works/pi-codin
 import { FakeWorkflowBackend } from "./workflow-adapters/fake";
 import {
   createPiPackageInfo,
-  PiPackageWorkflowBackend,
   resolvePiWorkflowPackage,
-} from "./workflow-adapters/pi-package";
+} from "./workflow-adapters/pi-package-info";
+import { PiPackageWorkflowBackend } from "./workflow-adapters/pi-package";
 import { UnavailableWorkflowBackend } from "./workflow-adapters/unavailable";
 import type { WorkflowBackend, WorkflowBackendOptions } from "./workflow-adapters/types";
 
