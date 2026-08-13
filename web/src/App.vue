@@ -13,8 +13,6 @@ import {
   type Diagnostics,
   type ModelSmokeResponse,
   type ModelSummary,
-  type PackageOperation,
-  type PackageSummary,
   type PromptRequest,
   type PromptStreamEvent,
   type ProjectSummary,
@@ -51,6 +49,7 @@ import {
 } from '@/lib/format'
 import { toLiveEventItem, type LiveEventItem } from '@/lib/live-events'
 import { createPromptModel, formatPromptModel, parseModelSelection } from '@/lib/model-selection'
+import { usePackagePanel } from '@/lib/package-panel'
 import { createRecentIdSet } from '@/lib/recent-ids'
 
 type MessageRole = 'user' | 'agent' | 'event' | 'error'
@@ -70,7 +69,6 @@ interface WorkflowStageRow {
 
 let client = createZuuClient({ apiToken: localStorage.getItem(STORAGE_KEYS.apiToken) || undefined })
 let messageSeq = 0
-let packageOperationPollId: number | undefined
 let eventStreamController: AbortController | undefined
 let eventStreamGeneration = 0
 let eventRefreshTimer: number | undefined
@@ -98,9 +96,6 @@ const projectName = ref('')
 const projectCwd = ref('')
 const newProjectName = ref('')
 const newProjectCwd = ref('')
-const packages = ref<PackageSummary[]>([])
-const packageOperations = ref<PackageOperation[]>([])
-const packageSource = ref('')
 const models = ref<ModelSummary[]>([])
 const modelSmoke = ref<ModelSmokeResponse>()
 const selectedModel = ref('')
@@ -156,6 +151,29 @@ const lastEventId = ref(localStorage.getItem(STORAGE_KEYS.eventCursor) || '')
 
 const toolChoices = TOOL_CHOICES
 const selectedTools = reactive(createDefaultToolSelection())
+const {
+  packages,
+  packageOperations,
+  packageSource,
+  runningPackageOperations,
+  loadPackages,
+  loadPackageOperations,
+  addPackage,
+  installPackage,
+  removePackage,
+  updatePackage,
+  trustPackage,
+  revokePackageTrust,
+  latestPackageOperation,
+  isPackageOperating,
+  clearPackageOperationPoll,
+} = usePackagePanel({
+  getClient: () => client,
+  addMessage,
+  loadAuditEvents,
+  loadDiagnostics,
+  loadWorkflows,
+})
 
 const activeTools = computed(() => toolChoices.filter((tool) => selectedTools[tool]))
 const pendingApprovals = computed(() => approvals.value.filter((approval) => approval.status === 'pending'))
@@ -195,7 +213,6 @@ const workflowUnstagedTasks = computed(() => {
   const stageIds = new Set(workflowRunStages.value.map((stage) => stage.id))
   return workflowRunTasks.value.filter((task) => !stageIds.has(task.stageId))
 })
-const runningPackageOperations = computed(() => packageOperations.value.filter((operation) => operation.status === 'running'))
 const authAdminTokenCount = computed(() => authStatus.value?.tokens.filter((token) => token.scope === 'admin').length ?? 0)
 const eventStatusVariant = computed(() => {
   if (eventStreamStatus.value === 'live') return 'secondary'
@@ -375,19 +392,6 @@ async function loadAuditEvents() {
     since: optionalDatetimeIso(auditSince.value),
     until: optionalDatetimeIso(auditUntil.value),
   })).events
-}
-
-async function loadPackages() {
-  const response = await client.listPackages()
-  packages.value = response.packages
-}
-
-async function loadPackageOperations() {
-  const response = await client.listPackageOperations()
-  packageOperations.value = response.operations
-  if (response.operations.some((operation) => operation.status === 'running')) {
-    schedulePackageOperationPoll()
-  }
 }
 
 async function loadModels() {
@@ -737,70 +741,6 @@ async function deleteProject() {
   await switchProject()
 }
 
-async function addPackage() {
-  const source = packageSource.value.trim()
-  if (!source) return
-  await client.addPackage({ source })
-  packageSource.value = ''
-  await Promise.all([loadPackages(), loadDiagnostics()])
-  await loadAuditEvents()
-}
-
-async function installPackage(source: string) {
-  const response = await client.installPackage({ source })
-  packages.value = response.packages
-  packageOperations.value = [
-    response.operation,
-    ...packageOperations.value.filter((operation) => operation.id !== response.operation.id),
-  ]
-  addMessage('event', `package install started: ${source}`)
-  schedulePackageOperationPoll()
-  await Promise.all([loadPackageOperations(), loadDiagnostics(), loadWorkflows()])
-  await loadAuditEvents()
-}
-
-async function removePackage(source: string) {
-  const response = await client.removePackage({ source })
-  packages.value = response.packages
-  packageOperations.value = [
-    response.operation,
-    ...packageOperations.value.filter((operation) => operation.id !== response.operation.id),
-  ]
-  addMessage('event', `package remove started: ${source}`)
-  schedulePackageOperationPoll()
-  await Promise.all([loadPackageOperations(), loadDiagnostics(), loadWorkflows()])
-  await loadAuditEvents()
-}
-
-async function updatePackage(source: string) {
-  const response = await client.updatePackage({ source })
-  packages.value = response.packages
-  packageOperations.value = [
-    response.operation,
-    ...packageOperations.value.filter((operation) => operation.id !== response.operation.id),
-  ]
-  addMessage('event', `package update started: ${source}`)
-  schedulePackageOperationPoll()
-  await Promise.all([loadPackageOperations(), loadDiagnostics(), loadWorkflows()])
-  await loadAuditEvents()
-}
-
-async function trustPackage(source: string) {
-  const response = await client.trustPackage({ source })
-  packages.value = response.packages
-  addMessage('event', `package trusted: ${source}`)
-  await loadDiagnostics()
-  await loadAuditEvents()
-}
-
-async function revokePackageTrust(source: string) {
-  const response = await client.revokePackageTrust({ source })
-  packages.value = response.packages
-  addMessage('event', `package trust revoked: ${source}`)
-  await loadDiagnostics()
-  await loadAuditEvents()
-}
-
 async function openStoredSession(sessionFile: string) {
   const { session } = await client.openProjectSession(currentProjectId(), { sessionFile })
   setActiveSession(session)
@@ -1023,33 +963,6 @@ async function abortRun(runId: string) {
   upsertRun(result.run)
   addMessage('event', `run aborted: ${runId.slice(0, 8)}`)
   await Promise.all([loadRuns(), loadStoredSessions(), loadSessionTree()])
-}
-
-function latestPackageOperation(source: string) {
-  return packageOperations.value.find((operation) => operation.source === source)
-}
-
-function isPackageOperating(source: string) {
-  return packageOperations.value.some((operation) => operation.source === source && operation.status === 'running')
-}
-
-function clearPackageOperationPoll() {
-  if (packageOperationPollId !== undefined) {
-    window.clearTimeout(packageOperationPollId)
-    packageOperationPollId = undefined
-  }
-}
-
-function schedulePackageOperationPoll() {
-  if (packageOperationPollId !== undefined) return
-  packageOperationPollId = window.setTimeout(async () => {
-    packageOperationPollId = undefined
-    try {
-      await Promise.all([loadPackageOperations(), loadPackages(), loadDiagnostics(), loadWorkflows()])
-    } catch (error) {
-      addMessage('error', errorMessage(error))
-    }
-  }, 1500)
 }
 
 function createPromptRequest(text: string): PromptRequest {
