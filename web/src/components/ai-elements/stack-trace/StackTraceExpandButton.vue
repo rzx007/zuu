@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { HTMLAttributes } from 'vue'
-import { ArrowDown01Icon } from '@hugeicons/vue'
+import { ArrowDown01Icon } from '@/components/icons'
 import { cn } from '@/lib/utils'
 import { useStackTraceContext } from './context'
 

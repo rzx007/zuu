@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { HTMLAttributes } from 'vue'
 
-import { Loading03Icon } from '@hugeicons/vue'
+import { Loading03Icon } from '@/components/icons'
 import { cn } from '@/lib/utils'
 
 const props = defineProps<{

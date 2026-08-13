@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { HTMLAttributes } from 'vue'
-import { CheckCircle2, CircleIcon, XCircle } from '@hugeicons/vue'
+import { CheckCircle2, CircleIcon, XCircle } from '@/components/icons'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
 import { useTestResultsContext } from './context'

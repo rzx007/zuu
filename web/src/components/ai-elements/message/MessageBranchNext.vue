@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ArrowRight01Icon } from '@hugeicons/vue'
+import { ArrowRight01Icon } from '@/components/icons'
 import { Button } from '@/components/ui/button'
 import { useMessageBranchContext } from './context'
 

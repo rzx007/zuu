@@ -2,7 +2,7 @@
 import type { SelectScrollDownButtonProps } from 'reka-ui'
 
 import type { HTMLAttributes } from 'vue'
-import { ArrowDown01Icon } from '@hugeicons/vue'
+import { ArrowDown01Icon } from '@/components/icons'
 import { reactiveOmit } from '@vueuse/core'
 import { SelectScrollDownButton, useForwardProps } from 'reka-ui'
 import { cn } from '@/lib/utils'

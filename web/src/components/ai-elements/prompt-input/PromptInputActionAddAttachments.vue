@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Image01Icon } from '@hugeicons/vue'
+import { Image01Icon } from '@/components/icons'
 import { DropdownMenuItem } from '@/components/ui/dropdown-menu'
 import { usePromptInput } from './context'
 

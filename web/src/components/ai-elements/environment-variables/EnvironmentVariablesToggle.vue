@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { HTMLAttributes } from 'vue'
-import { EyeIcon, EyeOffIcon } from '@hugeicons/vue'
+import { EyeIcon, EyeOffIcon } from '@/components/icons'
 import { Switch } from '@/components/ui/switch'
 import { cn } from '@/lib/utils'
 import { useEnvironmentVariablesContext } from './context'

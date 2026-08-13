@@ -1,6 +1,6 @@
 <script lang="ts" setup>
 import type { HTMLAttributes } from 'vue'
-import { BookmarkIcon } from '@hugeicons/vue'
+import { BookmarkIcon } from '@/components/icons'
 import { cn } from '@/lib/utils'
 
 const props = defineProps<{

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { HTMLAttributes } from 'vue'
-import { ArrowRight01Icon } from '@hugeicons/vue'
+import { ArrowRight01Icon } from '@/components/icons'
 import { cn } from '@/lib/utils'
 import { usePackageInfoContext } from './context'
 

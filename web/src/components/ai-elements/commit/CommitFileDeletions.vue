@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { HTMLAttributes } from 'vue'
-import { MinusSignIcon } from '@hugeicons/vue'
+import { MinusSignIcon } from '@/components/icons'
 import { cn } from '@/lib/utils'
 
 interface Props extends /* @vue-ignore */ HTMLAttributes {

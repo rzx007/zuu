@@ -7,7 +7,7 @@ import {
   CircleIcon,
   ClockIcon,
   XCircleIcon,
-} from '@hugeicons/vue'
+} from '@/components/icons'
 import { Badge } from '@/components/ui/badge'
 import { computed } from 'vue'
 

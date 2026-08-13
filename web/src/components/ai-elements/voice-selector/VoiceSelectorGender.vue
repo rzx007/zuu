@@ -8,7 +8,7 @@ import {
   TransgenderIcon,
   VenusAndMarsIcon,
   VenusIcon,
-} from '@lucide/vue'
+} from '@/components/icons'
 import { cn } from '@/lib/utils'
 
 interface Props extends /* @vue-ignore */ HTMLAttributes {

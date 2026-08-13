@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Delete02Icon } from '@hugeicons/vue'
+import { Delete02Icon } from '@/components/icons'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { useTerminalContext } from './context'

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ArrowDown01Icon } from '@hugeicons/vue'
+import { ArrowDown01Icon } from '@/components/icons'
 import { Button } from '@/components/ui/button'
 import { DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 </script>

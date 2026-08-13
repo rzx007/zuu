@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { HTMLAttributes } from 'vue'
-import { AlertCircleIcon } from '@hugeicons/vue'
+import { AlertCircleIcon } from '@/components/icons'
 import { cn } from '@/lib/utils'
 
 interface Props extends /* @vue-ignore */ HTMLAttributes {

@@ -2,7 +2,7 @@
 // import type { InputGroupButtonVariants } from '@/components/ui/input-group'
 import type { ChatStatus } from 'ai'
 import type { HTMLAttributes } from 'vue'
-import { CornerDownLeftIcon, Loading03Icon, SquareIcon, Cancel01Icon } from '@hugeicons/vue'
+import { CornerDownLeftIcon, Loading03Icon, SquareIcon, Cancel01Icon } from '@/components/icons'
 import { InputGroupButton } from '@/components/ui/input-group'
 import { cn } from '@/lib/utils'
 import { computed } from 'vue'
@@ -23,13 +23,13 @@ const props = withDefaults(defineProps<Props>(), {
 
 const icon = computed(() => {
   if (props.status === 'submitted') {
-    return Loader2Icon
+    return Loading03Icon
   }
   else if (props.status === 'streaming') {
     return SquareIcon
   }
   else if (props.status === 'error') {
-    return XIcon
+    return Cancel01Icon
   }
   return CornerDownLeftIcon
 })

@@ -2,7 +2,7 @@
 import type { DialogContentEmits, DialogContentProps } from 'reka-ui'
 
 import type { HTMLAttributes } from 'vue'
-import { Cancel01Icon } from '@hugeicons/vue'
+import { Cancel01Icon } from '@/components/icons'
 import { reactiveOmit } from '@vueuse/core'
 import {
   DialogClose,

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { HTMLAttributes } from 'vue'
-import { PackageIcon } from '@lucide/vue'
+import { PackageIcon } from '@/components/icons'
 import { cn } from '@/lib/utils'
 import { usePackageInfoContext } from './context'
 

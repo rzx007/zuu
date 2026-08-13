@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { HTMLAttributes } from 'vue'
-import { Tick02Icon, Copy01Icon } from '@hugeicons/vue'
+import { Tick02Icon, Copy01Icon } from '@/components/icons'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { computed, ref } from 'vue'
@@ -45,7 +45,7 @@ async function copyToClipboard() {
   }
 }
 
-const icon = computed(() => (isCopied.value ? CheckIcon : CopyIcon))
+const icon = computed(() => (isCopied.value ? Tick02Icon : Copy01Icon))
 </script>
 
 <template>

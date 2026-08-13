@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { HTMLAttributes } from 'vue'
-import { Tick02Icon, Copy01Icon } from '@hugeicons/vue'
+import { Tick02Icon, Copy01Icon } from '@/components/icons'
 import { InputGroupButton } from '@/components/ui/input-group'
 import { computed, onBeforeUnmount, ref } from 'vue'
 import { useSnippetContext } from './context'
@@ -25,7 +25,7 @@ const { code } = useSnippetContext('SnippetCopyButton')
 const isCopied = ref(false)
 const timeoutRef = ref<number>(0)
 
-const Icon = computed(() => (isCopied.value ? CheckIcon : CopyIcon))
+const Icon = computed(() => (isCopied.value ? Tick02Icon : Copy01Icon))
 
 async function copyToClipboard() {
   if (typeof window === 'undefined' || !navigator?.clipboard?.writeText) {

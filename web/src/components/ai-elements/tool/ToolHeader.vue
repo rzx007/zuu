@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { DynamicToolUIPart, ToolUIPart } from 'ai'
 import type { HTMLAttributes } from 'vue'
-import { ArrowDown01Icon, WrenchIcon } from '@hugeicons/vue'
+import { ArrowDown01Icon, WrenchIcon } from '@/components/icons'
 import { CollapsibleTrigger } from '@/components/ui/collapsible'
 import { cn } from '@/lib/utils'
 import { computed } from 'vue'

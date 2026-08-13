@@ -7,7 +7,7 @@ import {
   CircleIcon,
   CircleDot,
   XCircle,
-} from '@hugeicons/vue'
+} from '@/components/icons'
 import { CollapsibleTrigger } from '@/components/ui/collapsible'
 import { cn } from '@/lib/utils'
 import { useTestSuiteContext } from './context'

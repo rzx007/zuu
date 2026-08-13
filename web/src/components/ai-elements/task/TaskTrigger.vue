@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { HTMLAttributes } from 'vue'
-import { ArrowDown01Icon, SearchIcon } from '@hugeicons/vue'
+import { ArrowDown01Icon, SearchIcon } from '@/components/icons'
 import {
   CollapsibleTrigger,
 } from '@/components/ui/collapsible'

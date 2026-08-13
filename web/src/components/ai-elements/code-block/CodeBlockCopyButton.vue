@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { HTMLAttributes } from 'vue'
-import { Tick02Icon, Copy01Icon } from '@hugeicons/vue'
+import { Tick02Icon, Copy01Icon } from '@/components/icons'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { reactiveOmit } from '@vueuse/core'
@@ -33,7 +33,7 @@ const { code } = useCodeBlockContext()
 const isCopied = ref(false)
 let resetTimer: ReturnType<typeof setTimeout> | undefined
 
-const icon = computed(() => (isCopied.value ? CheckIcon : CopyIcon))
+const icon = computed(() => (isCopied.value ? Tick02Icon : Copy01Icon))
 
 async function copyToClipboard() {
   if (typeof window === 'undefined' || !navigator?.clipboard?.writeText) {

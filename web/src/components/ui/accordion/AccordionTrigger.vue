@@ -2,7 +2,7 @@
 import type { AccordionTriggerProps } from 'reka-ui'
 
 import type { HTMLAttributes } from 'vue'
-import { ArrowDown01Icon, ArrowUp01Icon } from '@hugeicons/vue'
+import { ArrowDown01Icon, ArrowUp01Icon } from '@/components/icons'
 import { reactiveOmit } from '@vueuse/core'
 import {
   AccordionHeader,

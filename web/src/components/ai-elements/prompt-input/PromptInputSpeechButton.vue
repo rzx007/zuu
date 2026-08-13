@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { HTMLAttributes } from 'vue'
-import { MicIcon } from '@lucide/vue'
+import { MicIcon } from '@/components/icons'
 import { cn } from '@/lib/utils'
 import { onMounted, onUnmounted, ref } from 'vue'
 import { usePromptInput } from './context'

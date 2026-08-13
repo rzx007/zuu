@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { HTMLAttributes } from 'vue'
-import { PlusSignIcon } from '@hugeicons/vue'
+import { PlusSignIcon } from '@/components/icons'
 import { DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import PromptInputButton from './PromptInputButton.vue'
 

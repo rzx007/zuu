@@ -2,7 +2,7 @@
 import type { DropdownMenuSubTriggerProps } from 'reka-ui'
 
 import type { HTMLAttributes } from 'vue'
-import { ArrowRight01Icon } from '@hugeicons/vue'
+import { ArrowRight01Icon } from '@/components/icons'
 import { reactiveOmit } from '@vueuse/core'
 import {
   DropdownMenuSubTrigger,

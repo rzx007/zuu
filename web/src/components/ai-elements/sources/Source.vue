@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { HTMLAttributes } from 'vue'
-import { BookIcon } from '@hugeicons/vue'
+import { BookIcon } from '@/components/icons'
 import { cn } from '@/lib/utils'
 
 const props = defineProps<{

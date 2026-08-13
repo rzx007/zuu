@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { HTMLAttributes, VNode } from 'vue'
+import type { Component, HTMLAttributes, VNode } from 'vue'
 import type { AttachmentMediaCategory } from './types'
 import {
   File02Icon,
@@ -8,7 +8,7 @@ import {
   Music2Icon,
   AttachmentIcon,
   Video01Icon,
-} from '@hugeicons/vue'
+} from '@/components/icons'
 import { cn } from '@/lib/utils'
 import { computed } from 'vue'
 import { useAttachmentContext } from './context'
@@ -32,13 +32,13 @@ const showVideo = computed(
   () => mediaCategory.value === 'video' && data.value.type === 'file' && !!fileUrl.value,
 )
 
-const iconMap: Record<AttachmentMediaCategory, typeof ImageIcon> = {
-  image: ImageIcon,
-  video: VideoIcon,
+const iconMap: Record<AttachmentMediaCategory, Component> = {
+  image: Image01Icon,
+  video: Video01Icon,
   audio: Music2Icon,
-  source: GlobeIcon,
-  document: FileTextIcon,
-  unknown: PaperclipIcon,
+  source: GlobalIcon,
+  document: File02Icon,
+  unknown: AttachmentIcon,
 }
 
 const iconComponent = computed(() => iconMap[mediaCategory.value])

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Tick02Icon, Copy01Icon } from '@hugeicons/vue'
+import { Copy01Icon, Tick02Icon } from '@/components/icons'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { computed, ref } from 'vue'
@@ -23,7 +23,7 @@ const emit = defineEmits<{
 const { output } = useTerminalContext('TerminalCopyButton')
 const isCopied = ref(false)
 
-const Icon = computed(() => (isCopied.value ? CheckIcon : CopyIcon))
+const icon = computed(() => (isCopied.value ? Tick02Icon : Copy01Icon))
 
 async function copyToClipboard() {
   if (typeof window === 'undefined' || !navigator?.clipboard?.writeText) {
@@ -57,7 +57,7 @@ async function copyToClipboard() {
     @click="copyToClipboard"
   >
     <slot>
-      <component :is="Icon" :size="14" />
+      <component :is="icon" :size="14" />
     </slot>
   </Button>
 </template>

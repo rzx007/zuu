@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { HtmlHTMLAttributes } from 'vue'
-import { BrainIcon, ArrowDown01Icon } from '@hugeicons/vue'
+import { BrainIcon, ArrowDown01Icon } from '@/components/icons'
 import {
   Collapsible,
   CollapsibleTrigger,

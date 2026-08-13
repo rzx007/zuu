@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { ToolUIPart } from 'ai'
 import type { HTMLAttributes } from 'vue'
-import { ArrowDown01Icon, Code } from '@hugeicons/vue'
+import { ArrowDown01Icon, Code } from '@/components/icons'
 import {
   CollapsibleTrigger,
 } from '@/components/ui/collapsible'

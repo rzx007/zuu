@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { Component, HTMLAttributes } from 'vue'
 import type { ChangeType } from './context'
-import { ArrowRight01Icon, MinusSignIcon, PlusSignIcon } from '@hugeicons/vue'
+import { ArrowRight01Icon, MinusSignIcon, PlusSignIcon } from '@/components/icons'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
 import { usePackageInfoContext } from './context'

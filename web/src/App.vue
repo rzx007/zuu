@@ -28,6 +28,20 @@ import PromptInput from '@/components/ai-elements/prompt-input/PromptInput.vue'
 import PromptInputFooter from '@/components/ai-elements/prompt-input/PromptInputFooter.vue'
 import PromptInputTextarea from '@/components/ai-elements/prompt-input/PromptInputTextarea.vue'
 import type { PromptInputMessage } from '@/components/ai-elements/prompt-input/types'
+import Terminal from '@/components/ai-elements/terminal/Terminal.vue'
+import WebPreview from '@/components/ai-elements/web-preview/WebPreview.vue'
+import WebPreviewBody from '@/components/ai-elements/web-preview/WebPreviewBody.vue'
+import WebPreviewNavigation from '@/components/ai-elements/web-preview/WebPreviewNavigation.vue'
+import WebPreviewUrl from '@/components/ai-elements/web-preview/WebPreviewUrl.vue'
+import {
+  AiBrowserIcon,
+  AiChat01Icon,
+  ArrowLeft01Icon,
+  ArrowRight01Icon,
+  Calendar03Icon,
+  Settings01Icon,
+  WorkflowSquare01Icon,
+} from '@/components/icons'
 import { createDefaultToolSelection, STORAGE_KEYS, TOOL_CHOICES } from '@/lib/app'
 import {
   errorMessage,
@@ -797,12 +811,20 @@ onUnmounted(() => {
       <div class="workbench-rail">
         <div class="rail-brand">Z</div>
         <Button variant="ghost" size="icon-sm" aria-label="Toggle left sidebar" @click="toggleLeftSidebar">
-          {{ leftSidebarCollapsed ? '>' : '<' }}
+          <component :is="leftSidebarCollapsed ? ArrowRight01Icon : ArrowLeft01Icon" :size="16" />
         </Button>
-        <Button variant="ghost" size="icon-sm" :aria-pressed="activeWorkspace === 'chat'" aria-label="Chat workspace" @click="activeWorkspace = 'chat'">C</Button>
-        <Button variant="ghost" size="icon-sm" :aria-pressed="activeWorkspace === 'workflow'" aria-label="Workflow workspace" @click="activeWorkspace = 'workflow'; activeInspectorTab = 'tasks'">W</Button>
-        <Button variant="ghost" size="icon-sm" :aria-pressed="activeWorkspace === 'schedule'" aria-label="Schedule workspace" @click="activeWorkspace = 'schedule'; activeInspectorTab = 'tasks'">S</Button>
-        <Button variant="ghost" size="icon-sm" aria-label="Settings" @click="activeInspectorTab = 'settings'; rightPanelCollapsed = false">G</Button>
+        <Button variant="ghost" size="icon-sm" :aria-pressed="activeWorkspace === 'chat'" aria-label="Chat workspace" @click="activeWorkspace = 'chat'">
+          <AiChat01Icon :size="16" />
+        </Button>
+        <Button variant="ghost" size="icon-sm" :aria-pressed="activeWorkspace === 'workflow'" aria-label="Workflow workspace" @click="activeWorkspace = 'workflow'; activeInspectorTab = 'tasks'">
+          <WorkflowSquare01Icon :size="16" />
+        </Button>
+        <Button variant="ghost" size="icon-sm" :aria-pressed="activeWorkspace === 'schedule'" aria-label="Schedule workspace" @click="activeWorkspace = 'schedule'; activeInspectorTab = 'tasks'">
+          <Calendar03Icon :size="16" />
+        </Button>
+        <Button variant="ghost" size="icon-sm" aria-label="Settings" @click="activeInspectorTab = 'settings'; rightPanelCollapsed = false">
+          <Settings01Icon :size="16" />
+        </Button>
       </div>
 
       <div v-if="!leftSidebarCollapsed" class="sidebar-content">
@@ -1287,13 +1309,12 @@ onUnmounted(() => {
         </TabsContent>
 
         <TabsContent value="terminal" class="inspector-content">
-          <section class="terminal-panel">
-            <div class="terminal-title">
-              <span>daemon events</span>
-              <Badge :variant="eventStatusVariant">{{ eventStreamStatus }}</Badge>
-            </div>
-            <pre>{{ terminalOutput }}</pre>
-          </section>
+          <Terminal
+            class="min-h-80"
+            :output="terminalOutput"
+            :is-streaming="eventStreamStatus === 'live'"
+            @clear="liveEvents = []"
+          />
           <section class="side-panel">
             <div class="section-title">
               <h2>Approvals</h2>
@@ -1318,12 +1339,17 @@ onUnmounted(() => {
         </TabsContent>
 
         <TabsContent value="browser" class="inspector-content">
-          <section class="browser-panel">
-            <div class="browser-bar">
-              <input v-model="browserUrl" class="field-input" aria-label="Browser URL">
-            </div>
-            <iframe :src="browserUrl" title="Browser preview" />
-          </section>
+          <WebPreview
+            class="min-h-[520px] overflow-hidden"
+            :default-url="browserUrl"
+            @update:url="browserUrl = $event"
+          >
+            <WebPreviewNavigation>
+              <AiBrowserIcon :size="16" class="mx-2 shrink-0 text-muted-foreground" />
+              <WebPreviewUrl aria-label="Browser URL" />
+            </WebPreviewNavigation>
+            <WebPreviewBody />
+          </WebPreview>
         </TabsContent>
 
         <TabsContent value="settings" class="inspector-content">

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { HTMLAttributes, VNode } from 'vue'
-import { File01Icon } from '@hugeicons/vue'
+import { File01Icon } from '@/components/icons'
 import { cn } from '@/lib/utils'
 import { computed, provide } from 'vue'
 import { FileTreeFileKey, useFileTreeContext } from './context'

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { UnfoldMoreIcon } from '@hugeicons/vue'
+import { UnfoldMoreIcon } from '@/components/icons'
 import { Button } from '@/components/ui/button'
 import { PopoverTrigger } from '@/components/ui/popover'
 import { useResizeObserver } from '@vueuse/core'

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { HTMLAttributes } from 'vue'
-import { ArrowDown01Icon } from '@hugeicons/vue'
+import { ArrowDown01Icon } from '@/components/icons'
 import { Button } from '@/components/ui/button'
 import {
   Collapsible,
@@ -55,7 +55,7 @@ function levelClass(level: LogLevel) {
         variant="ghost"
       >
         Console
-        <ArrowDown01Icon :class="cn(
+        <ArrowDown01Icon :size="16" :class="cn(
   'h-4 w-4 transition-transform duration-200',
   isConsoleOpen ? 'rotate-180' : 'rotate-0',
 )" />

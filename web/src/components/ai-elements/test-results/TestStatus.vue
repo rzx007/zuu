@@ -6,7 +6,7 @@ import {
   CircleIcon,
   CircleDot,
   XCircle,
-} from '@hugeicons/vue'
+} from '@/components/icons'
 import { cn } from '@/lib/utils'
 import { useTestContext } from './context'
 

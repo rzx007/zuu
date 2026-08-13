@@ -4,7 +4,7 @@ import {
   ArrowRight01Icon,
   FolderIcon,
   FolderOpenIcon,
-} from '@hugeicons/vue'
+} from '@/components/icons'
 import {
   Collapsible,
   CollapsibleContent,
