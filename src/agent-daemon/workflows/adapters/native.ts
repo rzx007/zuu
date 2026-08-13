@@ -1,5 +1,6 @@
 import type {
   StartWorkflowRequest,
+  ProjectSummary,
   WorkflowBackendInfo,
   WorkflowRun,
   WorkflowRunStatus,
@@ -19,6 +20,7 @@ import {
   runPromptTask,
   type PromptEventRunner,
 } from "./native-run";
+import { loadProjectNativeWorkflowDefinitions } from "./native-project-definitions";
 import { validateNativeWorkflowDefinition } from "./native-validation";
 import { WorkflowRunStore } from "./run-store";
 import { abortWorkflowRunRecord } from "./workflow-run-abort";
@@ -27,6 +29,7 @@ interface NativeWorkflowBackendOptions {
   path: string;
   info: WorkflowBackendInfo;
   runPrompt: PromptEventRunner;
+  abortAgentRun?: (runId: string, projectId?: string) => Promise<unknown>;
   maxConcurrency?: number;
 }
 
@@ -42,12 +45,12 @@ export class NativeWorkflowBackend implements WorkflowBackend {
     return this.options.info;
   }
 
-  async listDefinitions() {
-    return NATIVE_WORKFLOWS.map(toPublicWorkflowDefinition);
+  async listDefinitions(project?: ProjectSummary) {
+    return this.listNativeDefinitions(project).map(toPublicWorkflowDefinition);
   }
 
-  async start(workflowId: string, request: StartWorkflowRequest = {}) {
-    const definition = NATIVE_WORKFLOWS.find((workflow) => workflow.id === workflowId);
+  async start(workflowId: string, request: StartWorkflowRequest = {}, project?: ProjectSummary) {
+    const definition = this.listNativeDefinitions(project).find((workflow) => workflow.id === workflowId);
     if (!definition) notFound(`Unknown workflow: ${workflowId}`, { workflowId });
     validateNativeWorkflowDefinition(definition);
 
@@ -69,6 +72,7 @@ export class NativeWorkflowBackend implements WorkflowBackend {
   async abort(runId: string) {
     const run = this.store.get(runId);
     this.abortedRunIds.add(runId);
+    await Promise.all(run.linkedRunIds?.map((agentRunId) => this.abortAgentRun(agentRunId, run.projectId)) ?? []);
     if (abortWorkflowRunRecord(run)) {
       this.store.persist();
     }
@@ -159,6 +163,17 @@ export class NativeWorkflowBackend implements WorkflowBackend {
         step,
         request,
         getTaskDependencyArtifacts(step, state.artifactsByStepId),
+        {
+          onRun: (agentRun) => {
+            task.agentRunId = agentRun.id;
+            task.sessionId = agentRun.sessionId;
+            run.linkedRunIds = run.tasks.flatMap((item) => item.agentRunId ? [item.agentRunId] : []);
+            this.store.set(run);
+            if (this.abortedRunIds.has(run.id)) {
+              void this.abortAgentRun(agentRun.id, run.projectId);
+            }
+          },
+        },
       );
       const finishedAt = new Date().toISOString();
       const status = this.abortedRunIds.has(run.id) ? "aborted" : normalizeTaskStatus(result.agentRun.status);
@@ -223,6 +238,23 @@ export class NativeWorkflowBackend implements WorkflowBackend {
         task.status = status === "completed" ? "completed" : status;
         task.finishedAt = finishedAt;
       }
+    }
+  }
+
+  private listNativeDefinitions(project?: ProjectSummary) {
+    const projectDefinitions = project ? loadProjectNativeWorkflowDefinitions(project.cwd) : [];
+    const projectIds = new Set(projectDefinitions.map((definition) => definition.id));
+    return [
+      ...projectDefinitions,
+      ...NATIVE_WORKFLOWS.filter((definition) => !projectIds.has(definition.id)),
+    ];
+  }
+
+  private async abortAgentRun(agentRunId: string, projectId?: string) {
+    try {
+      await this.options.abortAgentRun?.(agentRunId, projectId);
+    } catch {
+      // Workflow abort is best-effort for underlying agent runs; the workflow run remains aborted.
     }
   }
 }

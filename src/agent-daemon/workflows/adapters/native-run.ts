@@ -17,6 +17,10 @@ export interface NativeTaskResult {
 
 export type PromptEventRunner = (request: PromptRequest) => AsyncGenerator<PromptStreamEvent>;
 
+export interface RunPromptTaskOptions {
+  onRun?: (run: RunSummary) => void;
+}
+
 export function createNativeWorkflowRun(
   definition: NativeWorkflowDefinition,
   request: StartWorkflowRequest = {},
@@ -48,6 +52,7 @@ export async function runPromptTask(
   step: NativeWorkflowStep,
   request: StartWorkflowRequest,
   upstreamArtifacts: WorkflowArtifact[],
+  options: RunPromptTaskOptions = {},
 ) {
   let finalRun: RunSummary | undefined;
   const textParts: string[] = [];
@@ -59,7 +64,10 @@ export async function runPromptTask(
     name: `Workflow: ${definition.name} / ${step.name}`,
   })) {
     if (event.delta) textParts.push(event.delta);
-    finalRun = event.run ?? finalRun;
+    if (event.run) {
+      finalRun = event.run;
+      options.onRun?.(event.run);
+    }
   }
 
   if (!finalRun) throw new Error(`Native workflow task did not produce an agent run: ${step.id}`);

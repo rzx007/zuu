@@ -3,6 +3,7 @@ export * from "./fake-definitions";
 export * from "./fake-run";
 export * from "./native";
 export * from "./native-definitions";
+export * from "./native-project-definitions";
 export * from "./native-run";
 export * from "./native-validation";
 export * from "./pi-package";

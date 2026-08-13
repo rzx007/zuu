@@ -32,6 +32,7 @@ import { WorkflowService } from "../workflows/workflow-service";
 
 export interface DaemonCoreCallbacks {
   prompt(request: PromptRequest): AsyncGenerator<PromptStreamEvent>;
+  abortRun(runId: string, projectId?: string): Promise<unknown>;
   startWorkflow(workflowId: string, request: StartWorkflowRequest): Promise<WorkflowRun>;
 }
 
@@ -74,6 +75,7 @@ export function createDaemonCoreServices(callbacks: DaemonCoreCallbacks): Daemon
     packageService,
     projects: projectService,
     runPrompt: (request) => callbacks.prompt(request),
+    abortAgentRun: (runId, projectId) => callbacks.abortRun(runId, projectId),
     launchPrompt: (request) => launchPromptAsRun((promptRequest) => callbacks.prompt(promptRequest), request),
   });
   const sessionService = new SessionService({

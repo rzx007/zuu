@@ -6,12 +6,13 @@ import type {
   WorkflowDefinition,
   WorkflowRun,
   PromptStreamEvent,
+  ProjectSummary,
 } from "@zuu/client";
 
 export interface WorkflowBackend {
   getInfo(): WorkflowBackendInfo;
-  listDefinitions(): Promise<WorkflowDefinition[]>;
-  start(workflowId: string, request: StartWorkflowRequest): Promise<WorkflowRun>;
+  listDefinitions(project?: ProjectSummary): Promise<WorkflowDefinition[]>;
+  start(workflowId: string, request: StartWorkflowRequest, project?: ProjectSummary): Promise<WorkflowRun>;
   listRuns(): Promise<WorkflowRun[]>;
   getRun(runId: string): Promise<WorkflowRun>;
   abort(runId: string): Promise<WorkflowRun>;
@@ -23,4 +24,5 @@ export interface WorkflowBackendOptions {
   requestedKind?: string;
   launchPrompt?: (request: PromptRequest) => Promise<RunSummary>;
   runPrompt?: (request: PromptRequest) => AsyncGenerator<PromptStreamEvent>;
+  abortAgentRun?: (runId: string, projectId?: string) => Promise<unknown>;
 }

@@ -11,6 +11,7 @@ export interface WorkflowServiceOptions {
   projects: ProjectRegistry;
   runPrompt: (request: PromptRequest) => AsyncGenerator<PromptStreamEvent>;
   launchPrompt: (request: PromptRequest) => Promise<RunSummary>;
+  abortAgentRun?: (runId: string, projectId?: string) => Promise<unknown>;
 }
 
 export class WorkflowService {
@@ -24,16 +25,17 @@ export class WorkflowService {
   }
 
   listWorkflows(projectId?: string) {
-    if (projectId) this.options.projects.get(projectId);
+    const project = this.options.projects.get(projectId);
     const backend = this.createBackend();
-    return backend.listDefinitions().then((workflows) => ({ workflows, backend: backend.getInfo() }));
+    return backend.listDefinitions(project).then((workflows) => ({ workflows, backend: backend.getInfo() }));
   }
 
   startWorkflow(workflowId: string, request: StartWorkflowRequest = {}, projectId?: string) {
+    const project = this.options.projects.get(projectId ?? request.projectId);
     return this.createBackend().start(workflowId, {
       ...request,
-      projectId: this.options.projects.get(projectId ?? request.projectId).id,
-    });
+      projectId: project.id,
+    }, project);
   }
 
   async listWorkflowRuns(projectId?: string) {
@@ -85,6 +87,7 @@ export class WorkflowService {
       agentDir: this.options.agentDir,
       runPrompt: this.options.runPrompt,
       launchPrompt: this.options.launchPrompt,
+      abortAgentRun: this.options.abortAgentRun,
     });
     this.backendSignature = signature;
     return this.backend;

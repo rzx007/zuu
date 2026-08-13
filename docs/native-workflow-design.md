@@ -16,7 +16,7 @@
 ## 2. 设计原则
 
 1. **先可用，后完整**：先做真实可运行的 `single`、`sequence` 和基础 DAG，不复刻完整第三方 workflow DSL。
-2. **Zuu 是真相源**：run、stage、task、artifact、abort 和 retry 状态由 Zuu JSON store 持久化。
+2. **Zuu 是真相源**：definition、run、stage、task、artifact、abort 和 retry 状态由 Zuu JSON store 和项目定义文件持久化。
 3. **Subagent 先做逻辑隔离**：第一版不强制外部子进程；每个 task 可以创建独立 `AgentSessionRuntime` 作为 worker。
 4. **Board 来自协议数据**：WebUI board 只读取 `/v1/workflow-runs/*`、stage、task 和 artifact API。
 5. **Adapter 可替换**：`native` 和 `pi-package` 共用 `WorkflowBackend` 接口，但不互相兼容内部数据。
@@ -26,7 +26,7 @@
 
 ### 3.1 Workflow Definition
 
-MVP 支持三种定义形态：
+MVP 支持内置定义和项目级定义。项目级定义放在 Project cwd 的 `.zuu/workflows/*.json`，同 id 的项目定义覆盖内置定义。当前支持三种定义形态：
 
 ```ts
 type NativeWorkflowDefinition =
@@ -47,6 +47,21 @@ type NativeWorkflowDefinition =
 - dynamic controller code
 - 跨机器 worker
 - 自动从第三方 `.pi/workflows` 格式导入
+
+项目定义示例：
+
+```json
+{
+  "id": "custom-review",
+  "name": "Custom Review",
+  "description": "Run two project-specific review tasks.",
+  "kind": "sequence",
+  "steps": [
+    { "id": "inspect", "name": "Inspect", "prompt": "Inspect the project." },
+    { "id": "summarize", "name": "Summarize", "prompt": "Summarize upstream artifacts.", "dependsOn": ["inspect"] }
+  ]
+}
+```
 
 ### 3.2 Workflow Run
 
@@ -161,8 +176,10 @@ WebUI board 的下一步目标：
 5. 实现基础 DAG 校验和并发调度。已完成。
 6. 将 scheduler workflow action 默认指向 native backend。已具备后端能力，仍由当前 `ZUU_WORKFLOW_BACKEND` 选择。
 7. 后台 runner：启动请求快速返回，任务在后台推进并持久化状态。已完成。
-8. 升级 WebUI Workflow Runs 面板为真正 board。后续增强。
-9. 再决定是否保留 `fake` 作为测试后端或用 native test fixture 取代。后续决策。
+8. 项目级 `.zuu/workflows/*.json` 定义加载。已完成。
+9. 底层 Agent Run best-effort abort。已完成。
+10. 升级 WebUI Workflow Runs 面板为真正 board。后续增强。
+11. 再决定是否保留 `fake` 作为测试后端或用 native test fixture 取代。后续决策。
 
 ## 7. 与 `pi-package` 的关系
 

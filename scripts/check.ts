@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, readdirSync, readFileSync, utimesSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import app, { auth, resolveServerAddress } from "../src/index";
@@ -1145,6 +1145,39 @@ async function main() {
   if (!nativeDefinitions.some((definition) => definition.id === "project-review") || "steps" in nativeDefinitions[0]) {
     throw new Error("native workflow definitions should expose stable public DTOs");
   }
+  const workflowProjectCwd = mkdtempSync(join(tmpdir(), "zuu-native-project-workflows-"));
+  mkdirSync(join(workflowProjectCwd, ".zuu", "workflows"), { recursive: true });
+  writeFileSync(join(workflowProjectCwd, ".zuu", "workflows", "custom.json"), JSON.stringify({
+    id: "custom-check",
+    name: "Custom Check",
+    description: "Project-defined workflow check.",
+    kind: "sequence",
+    steps: [
+      { id: "first", name: "First", prompt: "First custom task." },
+      { id: "second", name: "Second", prompt: "Second custom task.", dependsOn: ["first"] },
+    ],
+  }));
+  const workflowProject = {
+    id: "workflow-project",
+    name: "Workflow Project",
+    cwd: workflowProjectCwd,
+    agentDir: workflowProjectCwd,
+    status: "ready" as const,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+  const projectNativeDefinitions = await nativeBackend.listDefinitions(workflowProject);
+  if (!projectNativeDefinitions.some((definition) => definition.id === "custom-check")) {
+    throw new Error("native workflow backend should load project workflow definitions");
+  }
+  const customStartedRun = await nativeBackend.start("custom-check", {
+    projectId: workflowProject.id,
+    prompt: "project workflow check",
+  }, workflowProject);
+  const customRun = await waitForWorkflowRun(() => nativeBackend.getRun(customStartedRun.id));
+  if (customRun.status !== "completed" || customRun.workflowName !== "Custom Check" || customRun.tasks.length !== 2) {
+    throw new Error("native workflow backend should execute project workflow definitions");
+  }
   const nativeStartedRun = await nativeBackend.start("project-review", {
     projectId: defaultProject.id,
     prompt: "native contract check",
@@ -1174,14 +1207,33 @@ async function main() {
   if (nativeDagRun.status !== "completed" || nativeDagRun.tasks.length < 3 || nativeDagRun.artifacts.length !== nativeDagRun.tasks.length) {
     throw new Error("native workflow DAG should complete all tasks");
   }
+  const abortedAgentRuns: string[] = [];
   const slowNativeBackend = createWorkflowBackend({
     path: join(mkdtempSync(join(tmpdir(), "zuu-native-abort-check-")), "workflow-runs.json"),
     agentDir: mkdtempSync(join(tmpdir(), "zuu-native-abort-agent-check-")),
     packages: [],
     requestedKind: "native",
+    abortAgentRun: async (runId) => {
+      abortedAgentRuns.push(runId);
+    },
     runPrompt: async function* (request) {
-      await new Promise((resolve) => setTimeout(resolve, 25));
       const timestamp = new Date().toISOString();
+      yield {
+        id: "native-abort:event:0",
+        createdAt: timestamp,
+        runId: "native-abort-agent-run",
+        type: "session",
+        run: {
+          id: "native-abort-agent-run",
+          sessionId: "native-abort-session",
+          projectId: request.projectId ?? "default",
+          source: "workflow",
+          status: "running",
+          prompt: request.prompt,
+          startedAt: timestamp,
+        },
+      };
+      await new Promise((resolve) => setTimeout(resolve, 25));
       yield {
         id: "native-abort:event:1",
         createdAt: timestamp,
@@ -1210,7 +1262,11 @@ async function main() {
   await slowNativeBackend.abort(slowNativeRun.id);
   await new Promise((resolve) => setTimeout(resolve, 50));
   const abortedNativeRun = await slowNativeBackend.getRun(slowNativeRun.id);
-  if (abortedNativeRun.status !== "aborted" || abortedNativeRun.tasks.some((task) => task.status !== "aborted")) {
+  if (
+    abortedNativeRun.status !== "aborted" ||
+    abortedNativeRun.tasks.some((task) => task.status !== "aborted") ||
+    abortedAgentRuns[0] !== "native-abort-agent-run"
+  ) {
     throw new Error("native workflow abort should keep the run aborted after background tasks settle");
   }
 
@@ -2450,6 +2506,7 @@ async function main() {
         type: "done",
       };
     },
+    abortRun: async () => undefined,
     abortSession: async () => undefined,
     deleteSession: async () => undefined,
     startWorkflow: async (workflowId, request) => ({

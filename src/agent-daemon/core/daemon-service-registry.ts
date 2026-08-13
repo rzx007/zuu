@@ -16,6 +16,7 @@ import {
 
 interface DaemonServiceRegistryCallbacks {
   prompt(request: PromptRequest): AsyncGenerator<PromptStreamEvent>;
+  abortRun(runId: string, projectId?: string): Promise<unknown>;
   abortSession(sessionId: string): Promise<unknown>;
   deleteSession(sessionId: string): Promise<unknown>;
   startWorkflow(workflowId: string, request: StartWorkflowRequest): Promise<WorkflowRun>;
@@ -29,6 +30,7 @@ export function createDaemonServiceRegistry(options: DaemonServiceRegistryOption
   let registry!: DaemonServiceRegistry;
   registry = new DaemonServiceRegistry({
     prompt: (request) => registry.core.promptService.prompt(request),
+    abortRun: (runId, projectId) => registry.api.runApiService.abortRun(runId, projectId),
     abortSession: (sessionId) => registry.api.sessionApiService.abortSession(sessionId),
     deleteSession: (sessionId) => registry.api.sessionApiService.deleteSession(sessionId),
     startWorkflow: (workflowId, request) => registry.api.workflowApiService.startWorkflow(workflowId, request),

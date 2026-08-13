@@ -37,6 +37,7 @@ export function createWorkflowBackend(options: CreateWorkflowBackendOptions): Wo
     return new NativeWorkflowBackend({
       path: options.path,
       runPrompt: options.runPrompt,
+      abortAgentRun: options.abortAgentRun,
       info: {
         kind: "native",
         status: "ready",
