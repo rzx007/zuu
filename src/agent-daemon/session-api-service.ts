@@ -7,8 +7,8 @@ import type {
   SwitchSessionRequest,
   UpdateSessionRequest,
 } from "@zuu/client";
-import { ApiError } from "../http";
 import type { RunService } from "./run-service";
+import { compactSessionWithRun } from "./session-compact-run";
 import type { SessionService } from "./session-service";
 
 export class SessionApiService {
@@ -60,40 +60,7 @@ export class SessionApiService {
   }
 
   async compactSession(sessionId: string, instructions?: string) {
-    const initialSession = this.sessions.getSession(sessionId);
-    if (initialSession.isStreaming) {
-      throw new ApiError("Session is running; abort it before compacting", {
-        status: 409,
-        code: "session_busy",
-        details: { sessionId },
-      });
-    }
-
-    const run = this.runs.startRun({
-      sessionId,
-      projectId: initialSession.projectId,
-      request: { prompt: "Compact session", source: "api" },
-    });
-    const record = this.runs.createEventRecorder(run.id);
-    record({ runId: run.id, type: "session", session: initialSession, run });
-    record({ runId: run.id, type: "agent_event", eventType: "compaction_start", run });
-
-    try {
-      const session = await this.sessions.compact(sessionId, instructions);
-      run.status = "completed";
-      run.finishedAt = new Date().toISOString();
-      this.runs.saveRun(run);
-      record({ runId: run.id, type: "agent_event", eventType: "compaction_end", session, run });
-      record({ runId: run.id, type: "done", session, run });
-      return session;
-    } catch (error) {
-      run.status = "failed";
-      run.finishedAt = new Date().toISOString();
-      run.error = error instanceof Error ? error.message : String(error);
-      this.runs.saveRun(run);
-      record({ runId: run.id, type: "error", message: run.error, run });
-      throw error;
-    }
+    return compactSessionWithRun(this.sessions, this.runs, sessionId, instructions);
   }
 
   newSession(sessionId: string, options: NewSessionRequest = {}) {
