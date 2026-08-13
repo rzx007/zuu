@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { chmodSync } from "node:fs";
 import { ApiError } from "../http";
+import { envAuthStatus, localAuthStatus, type AuthStatus } from "./auth-status";
 import { JsonFileStore } from "./json-file-store";
 import {
   bearerToken,
@@ -14,7 +15,6 @@ import {
   normalizeActor,
   normalizeFutureTimestamp,
   parseAuthScope,
-  tokenPreview,
   toTokenStatus,
   type AuthScope,
   type AuthTokenRecord,
@@ -28,17 +28,6 @@ export interface AuthCreateTokenRequest {
   scope: AuthScope;
   actor?: string;
   expiresAt?: string;
-}
-
-export interface AuthStatus {
-  enabled: boolean;
-  source: "env" | "local";
-  canRotate: boolean;
-  tokenPreview: string;
-  tokenFile?: string;
-  createdAt?: string;
-  rotatedAt?: string;
-  tokens: AuthTokenStatus[];
 }
 
 export interface AuthRotateResult {
@@ -124,36 +113,9 @@ export class AuthService {
   }
 
   status(): AuthStatus {
-    if (this.envToken) {
-      return {
-        enabled: true,
-        source: "env",
-        canRotate: false,
-        tokenPreview: tokenPreview(this.envToken),
-        tokens: [
-          {
-            id: "env-admin",
-            actor: "env",
-            scope: "admin",
-            tokenPreview: tokenPreview(this.envToken),
-            createdAt: new Date(0).toISOString(),
-            expired: false,
-          },
-        ],
-      };
-    }
-
+    if (this.envToken) return envAuthStatus(this.envToken);
     const record = this.getLocalRecord();
-    return {
-      enabled: true,
-      source: "local",
-      canRotate: true,
-      tokenPreview: tokenPreview(defaultToken(record, "admin").token),
-      tokenFile: this.tokenPath,
-      createdAt: record.createdAt,
-      rotatedAt: record.rotatedAt,
-      tokens: record.tokens.map(toTokenStatus),
-    };
+    return localAuthStatus(record, this.tokenPath);
   }
 
   rotate(): AuthRotateResult {
