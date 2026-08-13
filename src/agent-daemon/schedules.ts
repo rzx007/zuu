@@ -5,12 +5,10 @@ import type {
 } from "@zuu/client";
 import { notFound } from "../http";
 import { loadSchedules, prependScheduleRun, saveSchedules } from "./schedule-records";
-import {
-  createMisfireSkippedRun,
-  createRunningScheduleRun,
-} from "./schedule-run-factory";
+import { createRunningScheduleRun } from "./schedule-run-factory";
 import { handleScheduleOverlap } from "./schedule-overlap";
 import { drainQueuedSchedule } from "./schedule-queue";
+import { rescheduleSchedules } from "./schedule-rescheduler";
 import type { ScheduleLease } from "./schedule-lease";
 import {
   applyScheduleUpdate,
@@ -26,7 +24,6 @@ import {
   updateNextRun,
 } from "./schedule-state";
 import { ScheduleTimerRegistry } from "./schedule-timers";
-import { computeNextRunAt } from "./schedule-timing";
 
 export type { ScheduleExecutor } from "./schedule-runner";
 
@@ -177,14 +174,6 @@ export class ScheduleStore {
     });
   }
 
-  private skipMisfire(schedule: Schedule) {
-    const run = createMisfireSkippedRun(schedule);
-    if (!run) return;
-    prependScheduleRun(schedule, run);
-    schedule.updatedAt = run.finishedAt;
-    updateNextRun(schedule);
-  }
-
   private arm(schedule: Schedule) {
     this.timers.arm(schedule, () => {
       void this.trigger(schedule.id, { automatic: true });
@@ -196,25 +185,10 @@ export class ScheduleStore {
   }
 
   private rescheduleAll() {
-    let changed = false;
-    for (const schedule of this.schedules.values()) {
-      if (schedule.status === "active" && !schedule.nextRunAt) {
-        schedule.nextRunAt = computeNextRunAt(schedule.trigger);
-        changed = true;
-      }
-      if (schedule.status === "active" && schedule.nextRunAt && Date.parse(schedule.nextRunAt) <= Date.now()) {
-        if (schedule.misfirePolicy === "run_once") {
-          this.arm(schedule);
-        } else {
-          this.skipMisfire(schedule);
-          changed = true;
-          this.arm(schedule);
-        }
-        continue;
-      }
-      this.arm(schedule);
-    }
-    if (changed) this.persist();
+    rescheduleSchedules(this.schedules.values(), {
+      arm: (schedule) => this.arm(schedule),
+      persist: () => this.persist(),
+    });
   }
 
   private sortedSchedules() {
