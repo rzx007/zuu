@@ -3,7 +3,7 @@ import type { PromptRequest, PromptStreamEvent } from "@zuu/client";
 import { ApiError } from "../http";
 import { subscribeApprovalEvents } from "./approval-policy";
 import { compactAgentEvent } from "./events";
-import type { RunEventDraft } from "./run-events";
+import { PromptEventQueue } from "./prompt-event-queue";
 import type { RunService } from "./run-service";
 import type { SessionService } from "./session-service";
 
@@ -50,17 +50,9 @@ export class PromptService {
       run,
     });
 
-    const queue: RunEventDraft[] = [];
-    let notify: (() => void) | undefined;
-    let finished = false;
-    let promptError: unknown;
+    const queue = new PromptEventQueue();
     let sawError = false;
     let streamErrorMessage: string | undefined;
-
-    const wake = () => {
-      notify?.();
-      notify = undefined;
-    };
 
     const unsubscribe = session.subscribe((event) => {
       const compact = compactAgentEvent(event, runId);
@@ -70,7 +62,6 @@ export class PromptService {
           streamErrorMessage ??= compact.message;
         }
         queue.push(compact);
-        wake();
       }
     });
     const unsubscribeApprovalEvents = subscribeApprovalEvents(this.options.eventBus, runId, (event) => {
@@ -82,34 +73,22 @@ export class PromptService {
         this.options.runs.saveRun(run);
       }
       queue.push(event);
-      wake();
     });
 
     session
       .prompt(request.prompt, { streamingBehavior: request.streamingBehavior })
-      .catch((error) => {
-        promptError = error;
-      })
-      .finally(() => {
-        finished = true;
-        wake();
-      });
+      .then(() => queue.finish())
+      .catch((error) => queue.finish(error));
 
     try {
-      while (!finished || queue.length > 0) {
-        const next = queue.shift();
-        if (next) {
-          yield recordAndPublish(next);
-          continue;
-        }
-
-        await new Promise<void>((resolve) => {
-          notify = resolve;
-        });
+      for (;;) {
+        const next = await queue.next();
+        if (!next) break;
+        yield recordAndPublish(next);
       }
 
-      if (promptError) {
-        const message = promptError instanceof Error ? promptError.message : String(promptError);
+      if (queue.error) {
+        const message = queue.error instanceof Error ? queue.error.message : String(queue.error);
         run.status = run.status === "aborted" ? "aborted" : "failed";
         run.finishedAt = new Date().toISOString();
         run.error = message;
