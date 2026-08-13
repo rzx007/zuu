@@ -6,8 +6,7 @@ import type {
   SwitchSessionRequest,
   UpdateSessionRequest,
 } from "@zuu/client";
-import { ApiError, validationError } from "../http";
-import { assertAllowedPath } from "./environment";
+import { assertOptionalCwdOverride, requireEntryId, requireSessionPath } from "./session-action-validation";
 import type { ManagedRuntime } from "./session-runtime";
 import { summarizeSessionAction } from "./session-summary";
 
@@ -22,16 +21,6 @@ export function applySessionUpdate(managed: ManagedRuntime, request: UpdateSessi
     managed.runtime.session.setActiveToolsByName(request.tools);
   }
   managed.updatedAt = new Date().toISOString();
-}
-
-export function assertSessionIdle(managed: ManagedRuntime, sessionId: string, action: "compact" | "delete") {
-  if (!managed.runtime.session.isStreaming) return;
-  const verb = action === "delete" ? "deleting" : "compacting";
-  throw new ApiError(`Session is running; abort it before ${verb}`, {
-    status: 409,
-    code: "session_busy",
-    details: { sessionId },
-  });
 }
 
 export async function newManagedSession(
@@ -51,13 +40,9 @@ export async function switchManagedSession(
   options: SwitchSessionRequest,
   summarize: SummarizeManagedSession,
 ) {
-  if (!options.sessionFile || typeof options.sessionFile !== "string") {
-    validationError("sessionFile is required", { field: "sessionFile" });
-  }
-
-  if (options.cwdOverride) assertAllowedPath(options.cwdOverride, "cwdOverride");
-  assertAllowedPath(options.sessionFile, "sessionFile");
-  const result = await managed.runtime.switchSession(options.sessionFile, { cwdOverride: options.cwdOverride });
+  const sessionFile = requireSessionPath(options.sessionFile, "sessionFile");
+  assertOptionalCwdOverride(options.cwdOverride);
+  const result = await managed.runtime.switchSession(sessionFile, { cwdOverride: options.cwdOverride });
   return summarizeRuntimeAction(managed, result, summarize);
 }
 
@@ -66,11 +51,8 @@ export async function forkManagedSession(
   options: ForkSessionRequest,
   summarize: SummarizeManagedSession,
 ) {
-  if (!options.entryId || typeof options.entryId !== "string") {
-    validationError("entryId is required", { field: "entryId" });
-  }
-
-  const result = await managed.runtime.fork(options.entryId, { position: options.position });
+  const entryId = requireEntryId(options.entryId);
+  const result = await managed.runtime.fork(entryId, { position: options.position });
   return summarizeRuntimeAction(managed, result, summarize);
 }
 
@@ -79,13 +61,9 @@ export async function importManagedSession(
   options: ImportSessionRequest,
   summarize: SummarizeManagedSession,
 ) {
-  if (!options.path || typeof options.path !== "string") {
-    validationError("path is required", { field: "path" });
-  }
-
-  assertAllowedPath(options.path, "path");
-  if (options.cwdOverride) assertAllowedPath(options.cwdOverride, "cwdOverride");
-  const result = await managed.runtime.importFromJsonl(options.path, options.cwdOverride);
+  const path = requireSessionPath(options.path, "path");
+  assertOptionalCwdOverride(options.cwdOverride);
+  const result = await managed.runtime.importFromJsonl(path, options.cwdOverride);
   return summarizeRuntimeAction(managed, result, summarize);
 }
 

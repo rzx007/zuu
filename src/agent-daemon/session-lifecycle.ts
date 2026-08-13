@@ -1,5 +1,5 @@
 import type { SessionSummary } from "@zuu/client";
-import { assertSessionIdle } from "./session-actions";
+import { assertSessionIdle } from "./session-action-validation";
 import type { ManagedRuntime } from "./session-runtime";
 
 type SummarizeManagedSession = (managed: ManagedRuntime) => SessionSummary;
