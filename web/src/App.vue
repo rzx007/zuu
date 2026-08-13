@@ -50,6 +50,7 @@ import {
   toDatetimeLocal,
 } from '@/lib/format'
 import { toLiveEventItem, type LiveEventItem } from '@/lib/live-events'
+import { createPromptModel, formatPromptModel, parseModelSelection } from '@/lib/model-selection'
 
 type MessageRole = 'user' | 'agent' | 'event' | 'error'
 type EventStreamStatus = 'connecting' | 'live' | 'stopped' | 'error'
@@ -628,18 +629,17 @@ async function revokeAuthToken(tokenId: string) {
 }
 
 function chooseModel() {
-  const [nextProvider, nextModel] = selectedModel.value.split('/', 2)
-  provider.value = nextProvider || ''
-  modelName.value = nextModel || ''
+  const nextModel = parseModelSelection(selectedModel.value)
+  provider.value = nextModel.provider
+  modelName.value = nextModel.id
 }
 
 function selectedModelRequest() {
-  return provider.value && modelName.value ? { provider: provider.value, id: modelName.value } : undefined
+  return createPromptModel(provider.value, modelName.value)
 }
 
 function selectedModelLabel() {
-  const model = selectedModelRequest()
-  return model ? `${model.provider}/${model.id}` : undefined
+  return formatPromptModel(selectedModelRequest())
 }
 
 async function smokeModel() {
