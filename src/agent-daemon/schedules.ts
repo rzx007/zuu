@@ -4,9 +4,7 @@ import type {
   UpdateScheduleRequest,
 } from "@zuu/client";
 import { notFound } from "../http";
-import { loadSchedules, prependScheduleRun, saveSchedules } from "./schedule-records";
-import { createRunningScheduleRun } from "./schedule-run-factory";
-import { handleScheduleOverlap } from "./schedule-overlap";
+import { loadSchedules, saveSchedules } from "./schedule-records";
 import { drainQueuedSchedule } from "./schedule-queue";
 import { findScheduleForRun, listScheduleRuns, sortSchedules } from "./schedule-query";
 import { rescheduleSchedules } from "./schedule-rescheduler";
@@ -18,12 +16,8 @@ import {
   resumeScheduleRecord,
 } from "./schedule-mutations";
 import type { ScheduleExecutor } from "./schedule-runner";
-import {
-  executeScheduleRun,
-  restoreNextRun,
-  updateNextRun,
-} from "./schedule-state";
 import { ScheduleTimerRegistry } from "./schedule-timers";
+import { triggerSchedule } from "./schedule-trigger";
 
 export type { ScheduleExecutor } from "./schedule-runner";
 
@@ -122,36 +116,12 @@ export class ScheduleStore {
 
   async trigger(scheduleId: string, options: { automatic?: boolean } = {}) {
     const schedule = this.get(scheduleId);
-    const overlapResult = handleScheduleOverlap(schedule, options, {
+    return triggerSchedule(schedule, this.executor, options, {
       clearTimer: (id) => this.clearTimer(id),
       persist: () => this.persist(),
       arm: (item) => this.arm(item),
+      drainQueued: (item) => this.drainQueued(item),
     });
-    if (overlapResult) return overlapResult;
-
-    const previousNextRunAt = schedule.nextRunAt;
-    if (!options.automatic) this.clearTimer(schedule.id);
-    const runningRun = createRunningScheduleRun(schedule, previousNextRunAt, options);
-    prependScheduleRun(schedule, runningRun);
-    schedule.updatedAt = runningRun.startedAt;
-    if (options.automatic) {
-      updateNextRun(schedule);
-    }
-    this.persist();
-    if (options.automatic) this.arm(schedule);
-
-    try {
-      await executeScheduleRun(schedule, runningRun, this.executor);
-    } finally {
-      if (!options.automatic) {
-        restoreNextRun(schedule, previousNextRunAt);
-      }
-      this.persist();
-      if (!options.automatic) this.arm(schedule);
-      this.drainQueued(schedule);
-    }
-
-    return schedule;
   }
 
   delete(scheduleId: string) {
