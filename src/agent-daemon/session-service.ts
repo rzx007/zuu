@@ -18,6 +18,14 @@ import type { ApprovalRegistry } from "./approval-service";
 import { assertAllowedPath, getSessionDir } from "./environment";
 import type { PackageService } from "./packages";
 import type { ProjectService } from "./project-service";
+import {
+  applySessionUpdate,
+  assertSessionIdle,
+  forkManagedSession,
+  importManagedSession,
+  newManagedSession,
+  switchManagedSession,
+} from "./session-actions";
 import { SessionRuntimeRegistry } from "./session-registry";
 import {
   createManagedRuntime,
@@ -26,7 +34,6 @@ import {
 } from "./session-runtime";
 import {
   summarizeAgentSession,
-  summarizeSessionAction,
   summarizeSessionTree,
   summarizeStoredSession,
 } from "./session-summary";
@@ -129,27 +136,14 @@ export class SessionService {
   updateSession(sessionId: string, request: UpdateSessionRequest, projectId?: string) {
     const managed = this.getManagedRuntime(sessionId);
     if (projectId) this.assertSessionProject(managed, sessionId, projectId);
-    if (request.name !== undefined) {
-      const name = request.name.trim();
-      if (name) managed.runtime.session.setSessionName(name);
-    }
-    if (request.tools !== undefined) {
-      managed.runtime.session.setActiveToolsByName(request.tools);
-    }
-    managed.updatedAt = new Date().toISOString();
+    applySessionUpdate(managed, request);
     return this.summarizeSession(managed.runtime.session);
   }
 
   async deleteSession(sessionId: string, projectId?: string) {
     const managed = this.getManagedRuntime(sessionId);
     if (projectId) this.assertSessionProject(managed, sessionId, projectId);
-    if (managed.runtime.session.isStreaming) {
-      throw new ApiError("Session is running; abort it before deleting", {
-        status: 409,
-        code: "session_busy",
-        details: { sessionId },
-      });
-    }
+    assertSessionIdle(managed, sessionId, "delete");
 
     const session = this.summarizeSession(managed.runtime.session);
     await managed.runtime.dispose();
@@ -194,13 +188,7 @@ export class SessionService {
 
   async compact(sessionId: string, instructions?: string) {
     const managed = this.getManagedRuntime(sessionId);
-    if (managed.runtime.session.isStreaming) {
-      throw new ApiError("Session is running; abort it before compacting", {
-        status: 409,
-        code: "session_busy",
-        details: { sessionId },
-      });
-    }
+    assertSessionIdle(managed, sessionId, "compact");
 
     await managed.runtime.session.compact(instructions);
     managed.updatedAt = new Date().toISOString();
@@ -209,45 +197,22 @@ export class SessionService {
 
   async newSession(sessionId: string, options: NewSessionRequest = {}) {
     const managed = this.getManagedRuntime(sessionId);
-    const result = await managed.runtime.newSession({ parentSession: options.parentSession });
-    if (!result.cancelled && options.name) {
-      managed.runtime.session.setSessionName(options.name);
-    }
-    return this.summarizeRuntimeAction(managed, result);
+    return newManagedSession(managed, options, (item) => this.summarizeSession(item.runtime.session));
   }
 
   async switchSession(sessionId: string, options: SwitchSessionRequest) {
-    if (!options.sessionFile || typeof options.sessionFile !== "string") {
-      validationError("sessionFile is required", { field: "sessionFile" });
-    }
-
     const managed = this.getManagedRuntime(sessionId);
-    if (options.cwdOverride) assertAllowedPath(options.cwdOverride, "cwdOverride");
-    assertAllowedPath(options.sessionFile, "sessionFile");
-    const result = await managed.runtime.switchSession(options.sessionFile, { cwdOverride: options.cwdOverride });
-    return this.summarizeRuntimeAction(managed, result);
+    return switchManagedSession(managed, options, (item) => this.summarizeSession(item.runtime.session));
   }
 
   async forkSession(sessionId: string, options: ForkSessionRequest) {
-    if (!options.entryId || typeof options.entryId !== "string") {
-      validationError("entryId is required", { field: "entryId" });
-    }
-
     const managed = this.getManagedRuntime(sessionId);
-    const result = await managed.runtime.fork(options.entryId, { position: options.position });
-    return this.summarizeRuntimeAction(managed, result);
+    return forkManagedSession(managed, options, (item) => this.summarizeSession(item.runtime.session));
   }
 
   async importSession(sessionId: string, options: ImportSessionRequest) {
-    if (!options.path || typeof options.path !== "string") {
-      validationError("path is required", { field: "path" });
-    }
-
     const managed = this.getManagedRuntime(sessionId);
-    assertAllowedPath(options.path, "path");
-    if (options.cwdOverride) assertAllowedPath(options.cwdOverride, "cwdOverride");
-    const result = await managed.runtime.importFromJsonl(options.path, options.cwdOverride);
-    return this.summarizeRuntimeAction(managed, result);
+    return importManagedSession(managed, options, (item) => this.summarizeSession(item.runtime.session));
   }
 
   async dispose() {
@@ -278,12 +243,6 @@ export class SessionService {
       projectId,
       isActive: this.runtimes.isSessionFileActive(session.path),
     });
-  }
-
-  private summarizeRuntimeAction(managed: ManagedRuntime, result: { cancelled: boolean; selectedText?: string }) {
-    managed.cwd = managed.runtime.cwd;
-    managed.updatedAt = new Date().toISOString();
-    return summarizeSessionAction(this.summarizeSession(managed.runtime.session), result);
   }
 
   private sessionSummaryContext(session: AgentSession) {
