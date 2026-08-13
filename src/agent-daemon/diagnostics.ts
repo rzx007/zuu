@@ -3,6 +3,7 @@ import {
   type ModelRuntime,
 } from "@earendil-works/pi-coding-agent";
 import { getPackageTrustStorePath, getZuuAgentDir } from "./agent-paths";
+import { collectDiagnosticGaps } from "./diagnostic-gaps";
 import { sdkVersion } from "./environment";
 import { inspectDiagnosticStores } from "./diagnostic-stores";
 import { createTrustedSettingsView } from "./package-settings";
@@ -43,28 +44,6 @@ export async function buildDiagnostics(
   const packages = packageView.trustedPackages;
   const blockedPackages = packageView.blockedPackages;
   const stores = inspectDiagnosticStores(agentDir);
-  const gaps: string[] = [];
-  if (stores.some((store) => store.recovered)) {
-    gaps.push("One or more JSON stores were recovered from corrupt data; inspect resource store diagnostics and backups.");
-  }
-  if (stores.some((store) => !store.ok)) {
-    gaps.push("One or more JSON stores are not healthy; inspect store diagnostics before relying on persisted state.");
-  }
-  if (blockedPackages.length > 0) {
-    gaps.push(`${blockedPackages.length} package source(s) are configured but blocked until trusted.`);
-  }
-  if (!packages.some((item) => item.includes("@agwab/pi-workflow"))) {
-    gaps.push("Workflow/subagent orchestration is not installed; add a pinned npm:@agwab/pi-workflow@<reviewed-version> source for reusable workflows.");
-  }
-  if (workflowBackend.kind === "pi-package" && workflowBackend.status !== "ready") {
-    gaps.push(workflowBackend.message ?? "Pi workflow backend is not ready.");
-  }
-  if (!packages.some((item) => item.includes("pi-crew"))) {
-    gaps.push("Scheduler MVP supports local once/interval/basic cron with IANA timezones and a best-effort local lease; a production HA scheduler backend is still needed for distributed execution.");
-  }
-  if (available.length === 0) {
-    gaps.push(`No authenticated model is available; configure provider auth in ${agentDir}/auth.json or environment variables.`);
-  }
   const resourceDiagnostics: ResourceDiagnostic[] = [
     ...extensionResult.errors.map((error): ResourceDiagnostic => ({
       type: "error",
@@ -75,9 +54,15 @@ export async function buildDiagnostics(
     ...prompts.diagnostics,
     ...themes.diagnostics,
   ];
-  if (resourceDiagnostics.some((diagnostic) => diagnostic.type === "collision")) {
-    gaps.push("One or more package resources have name collisions; inspect resource diagnostics before relying on the loaded tools or skills.");
-  }
+  const gaps = collectDiagnosticGaps({
+    agentDir,
+    availableModelCount: available.length,
+    packages,
+    blockedPackages,
+    stores,
+    workflowBackend,
+    resourceDiagnostics,
+  });
 
   return {
     ok:
