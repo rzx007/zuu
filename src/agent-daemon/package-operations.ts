@@ -7,40 +7,9 @@ import type {
   PackageProgressEventType,
 } from "@zuu/client";
 import { notFound } from "../http";
-import { JsonFileStore } from "./json-file-store";
+import { loadPackageOperations, savePackageOperations } from "./package-operation-records";
 
-const PACKAGE_OPERATION_HISTORY_LIMIT = 100;
 const PACKAGE_OPERATION_EVENT_LIMIT = 200;
-
-function isPackageOperation(value: unknown): value is PackageOperation {
-  return Boolean(
-    value &&
-      typeof value === "object" &&
-      "id" in value &&
-      "source" in value &&
-      "action" in value &&
-      "status" in value &&
-      "startedAt" in value &&
-      "events" in value,
-  );
-}
-
-function loadPackageOperations(path: string): PackageOperation[] {
-  return createPackageOperationStore(path).load(Array.isArray).filter(isPackageOperation);
-}
-
-function savePackageOperations(path: string, operations: PackageOperation[]) {
-  createPackageOperationStore(path).save(operations.slice(0, PACKAGE_OPERATION_HISTORY_LIMIT));
-}
-
-function createPackageOperationStore(path: string) {
-  return new JsonFileStore<unknown[]>({
-    name: "package-operations",
-    path,
-    defaultValue: [],
-    countRecords: (value) => value.length,
-  });
-}
 
 export class PackageOperationStore {
   private readonly operations: Map<string, PackageOperation>;
