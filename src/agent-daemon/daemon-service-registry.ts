@@ -1,7 +1,3 @@
-import {
-  createEventBus,
-  type EventBusController,
-} from "@earendil-works/pi-coding-agent";
 import type {
   ModelSmokeRequest,
   ModelSmokeResponse,
@@ -11,31 +7,14 @@ import type {
   WorkflowRun,
 } from "@zuu/client";
 import type { AuditService } from "./audit-service";
-import { ApprovalService } from "./approval-service";
 import {
   createDaemonApiServices,
   type DaemonApiServices,
 } from "./daemon-api-services";
 import {
-  getApprovalStorePath,
-  getPackageOperationStorePath,
-  getPackageTrustStorePath,
-  getProjectStorePath,
-  getRunEventStorePath,
-  getRunStorePath,
-  getScheduleLeaseStorePath,
-  getScheduleStorePath,
-  getZuuAgentDir,
-} from "./environment";
-import { ModelService } from "./model-service";
-import { PackageService } from "./packages";
-import { ProjectService } from "./project-service";
-import { PromptService } from "./prompt-service";
-import { RunService } from "./run-service";
-import { createDaemonScheduleExecutor, launchPromptAsRun } from "./schedule-executor";
-import { ScheduleService } from "./schedule-service";
-import { SessionService } from "./session-service";
-import { WorkflowService } from "./workflow-service";
+  createDaemonCoreServices,
+  type DaemonCoreServices,
+} from "./daemon-core-services";
 
 interface DaemonServiceRegistryCallbacks {
   prompt(request: PromptRequest): AsyncGenerator<PromptStreamEvent>;
@@ -49,26 +28,21 @@ interface DaemonServiceRegistryOptions {
 }
 
 export class DaemonServiceRegistry {
-  readonly agentDir = getZuuAgentDir();
-  readonly activeRunBySessionId = new Map<string, string>();
-  readonly approvalWaitBySessionId = new Map<string, boolean>();
-  readonly eventBus: EventBusController = createEventBus();
-  readonly startedAt = new Date().toISOString();
+  readonly agentDir: DaemonCoreServices["agentDir"];
+  readonly activeRunBySessionId: DaemonCoreServices["activeRunBySessionId"];
+  readonly approvalWaitBySessionId: DaemonCoreServices["approvalWaitBySessionId"];
+  readonly eventBus: DaemonCoreServices["eventBus"];
+  readonly startedAt: DaemonCoreServices["startedAt"];
 
-  readonly approvalService = new ApprovalService(getApprovalStorePath(this.agentDir));
-  readonly modelService = new ModelService();
-  readonly projectService = new ProjectService(getProjectStorePath(this.agentDir), this.agentDir);
-  readonly runService = new RunService(getRunStorePath(this.agentDir), getRunEventStorePath(this.agentDir));
-  readonly packageService = new PackageService(
-    process.cwd(),
-    this.agentDir,
-    getPackageOperationStorePath(this.agentDir),
-    getPackageTrustStorePath(this.agentDir),
-  );
-  readonly workflowService: WorkflowService;
-  readonly sessionService: SessionService;
-  readonly promptService: PromptService;
-  readonly scheduleService: ScheduleService;
+  readonly approvalService: DaemonCoreServices["approvalService"];
+  readonly modelService: DaemonCoreServices["modelService"];
+  readonly projectService: DaemonCoreServices["projectService"];
+  readonly runService: DaemonCoreServices["runService"];
+  readonly packageService: DaemonCoreServices["packageService"];
+  readonly workflowService: DaemonCoreServices["workflowService"];
+  readonly sessionService: DaemonCoreServices["sessionService"];
+  readonly promptService: DaemonCoreServices["promptService"];
+  readonly scheduleService: DaemonCoreServices["scheduleService"];
 
   readonly approvalApiService: DaemonApiServices["approvalApiService"];
   readonly modelApiService: DaemonApiServices["modelApiService"];
@@ -83,39 +57,21 @@ export class DaemonServiceRegistry {
     private readonly callbacks: DaemonServiceRegistryCallbacks,
     options: DaemonServiceRegistryOptions = {},
   ) {
-    this.workflowService = new WorkflowService({
-      agentDir: this.agentDir,
-      packageService: this.packageService,
-      projects: this.projectService,
-      launchPrompt: (request) => launchPromptAsRun((promptRequest) => this.callbacks.prompt(promptRequest), request),
-    });
-    this.sessionService = new SessionService({
-      agentDir: this.agentDir,
-      projects: this.projectService,
-      packageService: this.packageService,
-      modelRuntimePromise: this.modelService.getRuntimePromise(),
-      approvals: this.approvalService,
-      activeRunBySessionId: this.activeRunBySessionId,
-      approvalWaitBySessionId: this.approvalWaitBySessionId,
-      eventBus: this.eventBus,
-      startedAt: this.startedAt,
-    });
-    this.promptService = new PromptService({
-      sessions: this.sessionService,
-      runs: this.runService,
-      eventBus: this.eventBus,
-      activeRunBySessionId: this.activeRunBySessionId,
-      approvalWaitBySessionId: this.approvalWaitBySessionId,
-    });
-    this.scheduleService = new ScheduleService({
-      path: getScheduleStorePath(this.agentDir),
-      leasePath: getScheduleLeaseStorePath(this.agentDir),
-      projects: this.projectService,
-      executor: createDaemonScheduleExecutor({
-        prompt: (request) => this.callbacks.prompt(request),
-        startWorkflow: (workflowId, request) => this.callbacks.startWorkflow(workflowId, request),
-      }),
-    });
+    const coreServices = createDaemonCoreServices(this.callbacks);
+    this.agentDir = coreServices.agentDir;
+    this.activeRunBySessionId = coreServices.activeRunBySessionId;
+    this.approvalWaitBySessionId = coreServices.approvalWaitBySessionId;
+    this.eventBus = coreServices.eventBus;
+    this.startedAt = coreServices.startedAt;
+    this.approvalService = coreServices.approvalService;
+    this.modelService = coreServices.modelService;
+    this.projectService = coreServices.projectService;
+    this.runService = coreServices.runService;
+    this.packageService = coreServices.packageService;
+    this.workflowService = coreServices.workflowService;
+    this.sessionService = coreServices.sessionService;
+    this.promptService = coreServices.promptService;
+    this.scheduleService = coreServices.scheduleService;
 
     const apiServices = createDaemonApiServices({
       audit: options.audit,
