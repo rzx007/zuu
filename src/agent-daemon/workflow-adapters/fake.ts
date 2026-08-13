@@ -7,6 +7,7 @@ import type { WorkflowBackend } from "./types";
 import { FAKE_WORKFLOWS } from "./fake-definitions";
 import { createFakeWorkflowRun } from "./fake-run";
 import { WorkflowRunStore } from "./run-store";
+import { abortWorkflowRunRecord } from "./workflow-run-abort";
 
 export class FakeWorkflowBackend implements WorkflowBackend {
   private readonly store: WorkflowRunStore;
@@ -45,22 +46,7 @@ export class FakeWorkflowBackend implements WorkflowBackend {
 
   async abort(runId: string) {
     const run = await this.getRun(runId);
-    if (run.status === "queued" || run.status === "running") {
-      const now = new Date().toISOString();
-      run.status = "aborted";
-      run.finishedAt = now;
-      for (const stageItem of run.stages) {
-        if (stageItem.status === "queued" || stageItem.status === "running") {
-          stageItem.status = "aborted";
-          stageItem.finishedAt = now;
-        }
-      }
-      for (const taskItem of run.tasks) {
-        if (taskItem.status === "queued" || taskItem.status === "running") {
-          taskItem.status = "aborted";
-          taskItem.finishedAt = now;
-        }
-      }
+    if (abortWorkflowRunRecord(run)) {
       this.store.persist();
     }
     return run;
