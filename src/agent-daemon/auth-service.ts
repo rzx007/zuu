@@ -1,29 +1,25 @@
-import { randomUUID } from "node:crypto";
 import { ApiError } from "../http";
 import { envAuthStatus, localAuthStatus, type AuthStatus } from "./auth-status";
 import { LocalAuthTokenStore } from "./auth-token-store";
 import {
+  createAuthToken,
+  revokeAuthToken,
+  rotateAuthTokens,
+  type CreateAuthTokenInput,
+} from "./auth-token-mutations";
+import {
   bearerToken,
   defaultToken,
-  generateToken,
   isTokenExpired,
-  normalizeActor,
-  normalizeFutureTimestamp,
-  parseAuthScope,
   toTokenStatus,
   type AuthScope,
   type AuthTokenRecord,
   type AuthTokenStatus,
-  type StoredAuthToken,
 } from "./auth-tokens";
 
 export type { AuthScope, AuthTokenStatus } from "./auth-tokens";
 
-export interface AuthCreateTokenRequest {
-  scope: AuthScope;
-  actor?: string;
-  expiresAt?: string;
-}
+export interface AuthCreateTokenRequest extends CreateAuthTokenInput {}
 
 export interface AuthRotateResult {
   status: AuthStatus;
@@ -107,19 +103,8 @@ export class AuthService {
     this.assertLocalAuthMutable("rotated");
 
     const previous = this.getLocalRecord();
-    const rotatedAt = new Date().toISOString();
-    const next: AuthTokenRecord = {
-      ...previous,
-      rotatedAt,
-      tokens: previous.tokens.map((token) => ({
-        ...token,
-        token: generateToken(token.scope),
-        rotatedAt,
-      })),
-    };
-    this.saveLocalToken(next);
-    const admin = defaultToken(next, "admin");
-    const read = defaultToken(next, "read");
+    const { record, admin, read } = rotateAuthTokens(previous);
+    this.saveLocalToken(record);
     return {
       status: this.status(),
       apiToken: admin.token,
@@ -129,48 +114,24 @@ export class AuthService {
 
   createToken(request: AuthCreateTokenRequest): AuthCreateTokenResult {
     this.assertLocalAuthMutable("created");
-    const scope = parseAuthScope(request.scope);
-    const actor = normalizeActor(request.actor);
-    const expiresAt = normalizeFutureTimestamp(request.expiresAt, "expiresAt");
     const record = this.getLocalRecord();
-    const token: StoredAuthToken = {
-      id: randomUUID(),
-      actor,
-      scope,
-      token: generateToken(scope),
-      createdAt: new Date().toISOString(),
-      expiresAt,
-    };
-    this.saveLocalToken({ ...record, tokens: [...record.tokens, token] });
+    const created = createAuthToken(record, request);
+    this.saveLocalToken(created.record);
     return {
       status: this.status(),
-      token: toTokenStatus(token),
-      apiToken: token.token,
+      token: toTokenStatus(created.token),
+      apiToken: created.token.token,
     };
   }
 
   revokeToken(tokenId: string): AuthRevokeTokenResult {
     this.assertLocalAuthMutable("revoked");
     const record = this.getLocalRecord();
-    const revoked = record.tokens.find((token) => token.id === tokenId);
-    if (!revoked) {
-      throw new ApiError("Auth token not found", { status: 404, code: "not_found", details: { tokenId } });
-    }
-    const remainingActiveAdminCount = record.tokens.filter((token) => {
-      return token.id !== tokenId && token.scope === "admin" && !isTokenExpired(token);
-    }).length;
-    if (revoked.scope === "admin" && remainingActiveAdminCount < 1) {
-      throw new ApiError("Cannot revoke the last admin token", {
-        status: 409,
-        code: "auth_last_admin_token",
-        details: { tokenId },
-      });
-    }
-
-    this.saveLocalToken({ ...record, tokens: record.tokens.filter((token) => token.id !== tokenId) });
+    const revoked = revokeAuthToken(record, tokenId);
+    this.saveLocalToken(revoked.record);
     return {
       status: this.status(),
-      revoked: toTokenStatus(revoked),
+      revoked: toTokenStatus(revoked.revoked),
     };
   }
 
