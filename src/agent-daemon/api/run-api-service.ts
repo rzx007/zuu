@@ -1,5 +1,5 @@
 import type { EventStreamQuery, PromptStreamEvent } from "@zuu/client";
-import { ApiError } from "../../http";
+import { ApiError } from "../../server";
 import type { RunService } from "../runs/run-service";
 import type { SessionService } from "../sessions/session-service";
 

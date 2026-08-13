@@ -1,4 +1,4 @@
-import { ApiError } from "../../http";
+import { ApiError } from "../../server";
 import type { AuthScope, AuthTokenRecord, StoredAuthToken } from "./auth-tokens";
 
 export function parseAuthScope(scope: string): AuthScope {

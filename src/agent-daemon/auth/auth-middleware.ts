@@ -1,5 +1,5 @@
 import type { MiddlewareHandler } from "hono";
-import { jsonError } from "../../http";
+import { jsonError } from "../../server";
 import type { AuthScope } from "./auth-service";
 import type { AuthService } from "./auth-service";
 

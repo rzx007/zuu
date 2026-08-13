@@ -1,11 +1,11 @@
-import { jsonError, readJson, toStatus } from "../http";
+import { jsonError, readJson, toStatus } from "../server";
 import {
   parseCompact,
   parseForkSession,
   parseImportSession,
   parseNewSession,
   parseSwitchSession,
-} from "../session-request-validation";
+} from "../validation";
 import type { RouteDeps } from "./types";
 
 export function registerSessionActionRoutes({ app, daemon }: RouteDeps) {

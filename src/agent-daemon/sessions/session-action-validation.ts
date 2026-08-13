@@ -1,4 +1,4 @@
-import { ApiError, validationError } from "../../http";
+import { ApiError, validationError } from "../../server";
 import { assertAllowedPath } from "../core/environment";
 import type { ManagedRuntime } from "./session-runtime";
 

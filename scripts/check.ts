@@ -35,7 +35,7 @@ import { WorkflowApiService } from "../src/agent-daemon/api/workflow-api-service
 import { WorkflowService } from "../src/agent-daemon/workflows/workflow-service";
 import { createZuuClient, ZuuClientError } from "@zuu/client";
 import { createEventBus } from "@earendil-works/pi-coding-agent";
-import { ApiError } from "../src/http";
+import { ApiError } from "../src/server";
 
 const fetchFromApp: typeof fetch = async (input, init) => {
   const request = input instanceof Request ? input : new Request(input, init);

@@ -4,7 +4,7 @@ import type {
   ProjectSummary,
   UpdateProjectRequest,
 } from "@zuu/client";
-import { ApiError, notFound, validationError } from "../../http";
+import { ApiError, notFound, validationError } from "../../server";
 import { JsonFileStore } from "../storage/json-file-store";
 import {
   createDefaultProject,

@@ -1,5 +1,5 @@
-import { jsonError, readJson, toStatus } from "../http";
-import { parseCreateSchedule, parseUpdateSchedule } from "../schedule-request-validation";
+import { jsonError, readJson, toStatus } from "../server";
+import { parseCreateSchedule, parseUpdateSchedule } from "../validation";
 import type { RouteDeps } from "./types";
 
 export function registerProjectScheduleRoutes({ app, daemon }: RouteDeps) {

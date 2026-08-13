@@ -4,7 +4,7 @@ import type {
   StartWorkflowRequest,
   WorkflowBackendInfo,
 } from "@zuu/client";
-import { notFound } from "../../../http";
+import { notFound } from "../../../server";
 import type { WorkflowBackend } from "./types";
 import { PI_WORKFLOW_DEFINITIONS } from "./pi-package-info";
 import { createPiWorkflowLaunch, createPiWorkflowLaunchArtifact } from "./pi-package-launch";

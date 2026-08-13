@@ -1,5 +1,5 @@
 import type { PromptRequest, RunSummary, StartWorkflowRequest } from "@zuu/client";
-import { notFound } from "../../http";
+import { notFound } from "../../server";
 import { getWorkflowStorePath } from "../core/agent-paths";
 import type { PackageService } from "../packages/packages";
 import type { ProjectRegistry } from "../projects/project-service";

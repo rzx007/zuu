@@ -1,5 +1,5 @@
 import type { PackageMutationRequest, PackageOperationAction } from "@zuu/client";
-import { ApiError } from "../../http";
+import { ApiError } from "../../server";
 import { assertPinnedPackageSource, normalizePackageSource } from "../core/environment";
 import type { PackageOperationStore } from "./package-operations";
 import type { PackageTrustStore } from "./package-trust";

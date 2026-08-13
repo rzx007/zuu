@@ -10,12 +10,12 @@ import { createAuthMiddleware } from "./agent-daemon/auth/auth-middleware";
 import { AuthService } from "./agent-daemon/auth/auth-service";
 import { createDaemonServiceRegistry } from "./agent-daemon/core/daemon-service-registry";
 import { getAuditEventStorePath, getAuthTokenStorePath, getZuuAgentDir } from "./agent-daemon/core/agent-paths";
-import { jsonError } from "./http";
+import { jsonError } from "./server";
 import { registerV1Routes } from "./routes";
-import { resolveServerAddress, type ServerAddressOptions } from "./server-address";
-import { installShutdownHandlers } from "./server-lifecycle";
+import { resolveServerAddress, type ServerAddressOptions } from "./server";
+import { installShutdownHandlers } from "./server";
 
-export { resolveServerAddress } from "./server-address";
+export { resolveServerAddress } from "./server";
 
 const app = new Hono();
 const agentDir = getZuuAgentDir();

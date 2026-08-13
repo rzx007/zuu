@@ -1,5 +1,5 @@
 import type { AgentSession } from "@earendil-works/pi-coding-agent";
-import { notFound } from "../../http";
+import { notFound } from "../../server";
 import { bindManagedRuntime, type ManagedRuntime } from "./session-runtime";
 import type { SessionSummaryContext } from "./session-summary";
 

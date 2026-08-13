@@ -1,5 +1,5 @@
 import type { AuditEventAction, AuditEventOutcome, AuthScope } from "@zuu/client";
-import { ApiError, jsonError, toStatus } from "../http";
+import { ApiError, jsonError, toStatus } from "../server";
 import type { RouteDeps } from "./types";
 
 const AUDIT_ACTIONS = new Set([

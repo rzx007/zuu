@@ -1,5 +1,5 @@
 import type { Schedule } from "@zuu/client";
-import { notFound } from "../../http";
+import { notFound } from "../../server";
 import { compareScheduleRuns } from "./schedule-state";
 
 export function sortSchedules(schedules: Iterable<Schedule>) {

@@ -1,5 +1,5 @@
 import type { EventStreamQuery, PromptRequest, PromptStreamEvent, RunSummary } from "@zuu/client";
-import { notFound } from "../../http";
+import { notFound } from "../../server";
 import { RunEventBroadcaster } from "./run-event-broadcaster";
 import { loadRunHistory, saveRunHistory } from "./run-history";
 import { abortActiveSessionRuns, createRunSummary } from "./run-mutations";

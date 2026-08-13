@@ -2,7 +2,7 @@ import type {
   StartWorkflowRequest,
   WorkflowBackendInfo,
 } from "@zuu/client";
-import { notFound } from "../../../http";
+import { notFound } from "../../../server";
 import type { WorkflowBackend } from "./types";
 import { FAKE_WORKFLOWS } from "./fake-definitions";
 import { createFakeWorkflowRun } from "./fake-run";

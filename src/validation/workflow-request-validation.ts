@@ -1,5 +1,5 @@
 import type { ResolveApprovalRequest, StartWorkflowRequest } from "@zuu/client";
-import { assertObject, optionalRecord, optionalString, validationError } from "./http";
+import { assertObject, optionalRecord, optionalString, validationError } from "../server";
 
 const APPROVAL_DECISIONS = new Set(["allow_once", "allow_session", "deny"]);
 

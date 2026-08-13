@@ -1,5 +1,5 @@
 import type { WorkflowRun, WorkflowBackendInfo } from "@zuu/client";
-import { ApiError, notFound } from "../../../http";
+import { ApiError, notFound } from "../../../server";
 import type { WorkflowBackend } from "./types";
 
 export class UnavailableWorkflowBackend implements WorkflowBackend {

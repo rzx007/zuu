@@ -1,5 +1,5 @@
 import type { ScheduleAction } from "@zuu/client";
-import { assertObject, optionalBoolean, optionalRecord, optionalString, optionalStringArray, requireString, validationError } from "./http";
+import { assertObject, optionalBoolean, optionalRecord, optionalString, optionalStringArray, requireString, validationError } from "../server";
 import { parseModel, parseThinkingLevel } from "./request-validation-common";
 
 export function parseScheduleAction(value: unknown): ScheduleAction {

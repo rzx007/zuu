@@ -1,6 +1,6 @@
 import type { PromptRequest } from "@zuu/client";
-import { jsonError, readJson, toStatus } from "../http";
-import { parsePrompt } from "../prompt-request-validation";
+import { jsonError, readJson, toStatus } from "../server";
+import { parsePrompt } from "../validation";
 import { streamPromptResponse } from "./prompt-stream";
 import type { RouteDeps } from "./types";
 

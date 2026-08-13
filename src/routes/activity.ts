@@ -1,6 +1,6 @@
 import type { EventStreamQuery, PromptStreamEvent } from "@zuu/client";
 import { streamSSE } from "hono/streaming";
-import { jsonError, toStatus } from "../http";
+import { jsonError, toStatus } from "../server";
 import { writePromptStreamEvent } from "./sse";
 import type { RouteDeps } from "./types";
 

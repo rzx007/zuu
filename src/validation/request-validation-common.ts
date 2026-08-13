@@ -1,5 +1,5 @@
 import type { PromptRequest, ThinkingLevel } from "@zuu/client";
-import { assertObject, requireString, validationError } from "./http";
+import { assertObject, requireString, validationError } from "../server";
 
 const THINKING_LEVELS = new Set(["off", "minimal", "low", "medium", "high", "xhigh", "max"]);
 

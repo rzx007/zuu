@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join, resolve, sep } from "node:path";
 import { ModelRuntime } from "@earendil-works/pi-coding-agent";
-import { ApiError } from "../../http";
+import { ApiError } from "../../server";
 import { getZuuAgentDir } from "./agent-paths";
 
 export const DEFAULT_READ_ONLY_TOOLS = ["read", "grep", "find", "ls", "zuu_status"];

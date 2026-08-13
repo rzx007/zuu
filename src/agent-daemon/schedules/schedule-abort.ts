@@ -1,5 +1,5 @@
 import type { Schedule } from "@zuu/client";
-import { notFound } from "../../http";
+import { notFound } from "../../server";
 
 export interface ScheduleAbortEffects {
   persist(): void;

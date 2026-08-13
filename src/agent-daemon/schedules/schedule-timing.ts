@@ -1,5 +1,5 @@
 import type { ScheduleTrigger } from "@zuu/client";
-import { validationError } from "../../http";
+import { validationError } from "../../server";
 import { nextCronDate, validateCronExpression, validateTimeZone } from "./schedule-cron";
 
 const MIN_INTERVAL_MS = 1_000;

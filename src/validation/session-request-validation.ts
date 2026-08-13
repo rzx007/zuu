@@ -7,7 +7,7 @@ import type {
   SwitchSessionRequest,
   UpdateSessionRequest,
 } from "@zuu/client";
-import { assertObject, optionalBoolean, optionalString, optionalStringArray, requireString, validationError } from "./http";
+import { assertObject, optionalBoolean, optionalString, optionalStringArray, requireString, validationError } from "../server";
 import { parseModel, parseThinkingLevel } from "./request-validation-common";
 
 const FORK_POSITIONS = new Set(["before", "at"]);

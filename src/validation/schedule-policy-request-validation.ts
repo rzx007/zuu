@@ -1,5 +1,5 @@
 import type { CreateScheduleRequest, ScheduleRetryPolicy } from "@zuu/client";
-import { assertObject, optionalString, optionalStringArray, validationError } from "./http";
+import { assertObject, optionalString, optionalStringArray, validationError } from "../server";
 
 const SCHEDULE_OVERLAP_POLICIES = new Set(["skip", "queue", "parallel"]);
 const SCHEDULE_MISFIRE_POLICIES = new Set(["skip", "run_once"]);

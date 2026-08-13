@@ -1,5 +1,5 @@
 import type { CreateProjectRequest, UpdateProjectRequest } from "@zuu/client";
-import { assertObject, optionalString, requireString } from "./http";
+import { assertObject, optionalString, requireString } from "../server";
 
 export function parseCreateProject(value: unknown): CreateProjectRequest {
   assertObject(value);

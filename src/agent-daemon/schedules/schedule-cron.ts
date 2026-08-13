@@ -1,4 +1,4 @@
-import { validationError } from "../../http";
+import { validationError } from "../../server";
 import { matchesCronParts, parseCronExpression, type CronDateParts } from "./schedule-cron-expression";
 
 const CRON_SEARCH_LIMIT_MINUTES = 366 * 24 * 60;

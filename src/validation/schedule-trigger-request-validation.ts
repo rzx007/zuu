@@ -1,5 +1,5 @@
 import type { ScheduleTrigger } from "@zuu/client";
-import { assertObject, requireString, validationError } from "./http";
+import { assertObject, requireString, validationError } from "../server";
 
 const MIN_SCHEDULE_INTERVAL_MS = 1_000;
 

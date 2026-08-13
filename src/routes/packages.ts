@@ -1,5 +1,5 @@
-import { jsonError, readJson, toStatus } from "../http";
-import { parsePackageMutation } from "../package-request-validation";
+import { jsonError, readJson, toStatus } from "../server";
+import { parsePackageMutation } from "../validation";
 import type { RouteDeps } from "./types";
 
 export function registerPackageRoutes({ app, daemon }: RouteDeps) {

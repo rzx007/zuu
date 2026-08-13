@@ -2,7 +2,7 @@ import type {
   EventBusController,
   ModelRuntime,
 } from "@earendil-works/pi-coding-agent";
-import { ApiError } from "../../http";
+import { ApiError } from "../../server";
 import type { ApprovalRegistry } from "../approvals/approval-service";
 import { assertAllowedPath } from "../core/environment";
 import type { PackageService } from "../packages/packages";

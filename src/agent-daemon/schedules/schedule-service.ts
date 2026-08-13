@@ -1,5 +1,5 @@
 import type { CreateScheduleRequest, UpdateScheduleRequest } from "@zuu/client";
-import { notFound } from "../../http";
+import { notFound } from "../../server";
 import type { ProjectRegistry } from "../projects/project-service";
 import { ScheduleLease } from "./schedule-lease";
 import { listScheduleRuns } from "./schedule-query";

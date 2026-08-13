@@ -6,7 +6,7 @@ import type {
   PackageProgressAction,
   PackageProgressEventType,
 } from "@zuu/client";
-import { notFound } from "../../http";
+import { notFound } from "../../server";
 import { loadPackageOperations, savePackageOperations } from "./package-operation-records";
 
 const PACKAGE_OPERATION_EVENT_LIMIT = 200;

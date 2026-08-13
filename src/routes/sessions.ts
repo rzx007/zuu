@@ -1,5 +1,5 @@
-import { jsonError, readJson, toStatus } from "../http";
-import { parseCreateSession, parseOpenSession, parseUpdateSession } from "../session-request-validation";
+import { jsonError, readJson, toStatus } from "../server";
+import { parseCreateSession, parseOpenSession, parseUpdateSession } from "../validation";
 import { registerSessionActionRoutes } from "./session-action-routes";
 import { registerSessionPromptRoutes } from "./session-prompt-routes";
 import type { RouteDeps } from "./types";

@@ -4,7 +4,7 @@ import type {
   CreateApprovalRequest,
   ResolveApprovalRequest,
 } from "@zuu/client";
-import { ApiError, validationError } from "../../http";
+import { ApiError, validationError } from "../../server";
 
 const APPROVAL_DECISIONS = new Set<ApprovalDecision>(["allow_once", "allow_session", "deny"]);
 

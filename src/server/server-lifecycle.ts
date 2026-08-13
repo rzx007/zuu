@@ -1,5 +1,5 @@
 import type { ServerType } from "@hono/node-server";
-import type { DaemonServiceRegistry } from "./agent-daemon/core/daemon-service-registry";
+import type { DaemonServiceRegistry } from "../agent-daemon/core/daemon-service-registry";
 
 export function installShutdownHandlers(server: ServerType, daemon: Pick<DaemonServiceRegistry, "dispose">) {
   let shuttingDown = false;

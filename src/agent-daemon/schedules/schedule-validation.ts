@@ -1,5 +1,5 @@
 import type { CreateScheduleRequest, ScheduleAction, UpdateScheduleRequest } from "@zuu/client";
-import { validationError } from "../../http";
+import { validationError } from "../../server";
 import { isScheduleRetryPolicy, SCHEDULE_MISFIRE_POLICIES, SCHEDULE_OVERLAP_POLICIES } from "./schedule-records";
 import { validateScheduleTrigger } from "./schedule-timing";
 

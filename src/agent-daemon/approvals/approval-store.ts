@@ -4,7 +4,7 @@ import type {
   CreateApprovalRequest,
   ResolveApprovalRequest,
 } from "@zuu/client";
-import { notFound } from "../../http";
+import { notFound } from "../../server";
 import { expireApprovals } from "./approval-expiration";
 import {
   consumeApprovalGrant,

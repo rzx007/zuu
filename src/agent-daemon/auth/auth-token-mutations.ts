@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { ApiError } from "../../http";
+import { ApiError } from "../../server";
 import {
   defaultToken,
   generateToken,

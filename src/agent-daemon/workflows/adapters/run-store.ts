@@ -1,5 +1,5 @@
 import type { WorkflowRun } from "@zuu/client";
-import { notFound } from "../../../http";
+import { notFound } from "../../../server";
 import { JsonFileStore } from "../../storage/json-file-store";
 
 const WORKFLOW_HISTORY_LIMIT = 200;

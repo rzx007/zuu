@@ -1,5 +1,5 @@
 import type { CreateScheduleRequest, UpdateScheduleRequest } from "@zuu/client";
-import { assertObject, optionalString } from "./http";
+import { assertObject, optionalString } from "../server";
 import { parseScheduleAction } from "./schedule-action-request-validation";
 import { parseSchedulePolicies, parseScheduleRetryPolicy } from "./schedule-policy-request-validation";
 import { parseScheduleTrigger } from "./schedule-trigger-request-validation";

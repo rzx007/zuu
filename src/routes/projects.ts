@@ -1,5 +1,5 @@
-import { jsonError, readJson, toStatus } from "../http";
-import { parseCreateProject, parseUpdateProject } from "../project-request-validation";
+import { jsonError, readJson, toStatus } from "../server";
+import { parseCreateProject, parseUpdateProject } from "../validation";
 import { registerProjectRunRoutes } from "./project-run-routes";
 import { registerProjectSessionRoutes } from "./project-session-routes";
 import type { RouteDeps } from "./types";

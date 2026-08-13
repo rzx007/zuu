@@ -1,4 +1,4 @@
-import { notFound } from "../../http";
+import { notFound } from "../../server";
 import type { ProjectService } from "../projects/project-service";
 import type { SessionRuntimeRegistry } from "./session-registry";
 import type { ManagedRuntime } from "./session-runtime";

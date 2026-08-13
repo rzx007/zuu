@@ -2,7 +2,7 @@ import type { PromptRequest, PromptStreamEvent } from "@zuu/client";
 import type { Context } from "hono";
 import { streamSSE } from "hono/streaming";
 import type { DaemonServiceRegistry } from "../agent-daemon/core/daemon-service-registry";
-import { jsonError, toStatus } from "../http";
+import { jsonError, toStatus } from "../server";
 import { writePromptStreamEvent } from "./sse";
 
 export async function streamPromptResponse(c: Context, daemon: DaemonServiceRegistry, request: PromptRequest) {

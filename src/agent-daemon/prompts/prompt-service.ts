@@ -1,6 +1,6 @@
 import type { EventBus } from "@earendil-works/pi-coding-agent";
 import type { PromptRequest, PromptStreamEvent } from "@zuu/client";
-import { ApiError } from "../../http";
+import { ApiError } from "../../server";
 import { subscribeApprovalEvents } from "../approvals/approval-events";
 import { compactAgentEvent } from "../core/events";
 import { PromptEventQueue } from "./prompt-event-queue";

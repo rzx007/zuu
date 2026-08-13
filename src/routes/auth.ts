@@ -1,5 +1,5 @@
 import type { AuthCreateTokenRequest } from "@zuu/client";
-import { ApiError, jsonError, readJson, toStatus } from "../http";
+import { ApiError, jsonError, readJson, toStatus } from "../server";
 import type { RouteDeps } from "./types";
 
 export function registerAuthRoutes({ app, audit, auth }: RouteDeps) {

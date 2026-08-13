@@ -1,4 +1,4 @@
-import { jsonError, toStatus } from "../http";
+import { jsonError, toStatus } from "../server";
 import type { RouteDeps } from "./types";
 
 export function registerProjectRunRoutes({ app, daemon }: RouteDeps) {

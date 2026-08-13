@@ -3,7 +3,7 @@ import type {
   Schedule,
   UpdateScheduleRequest,
 } from "@zuu/client";
-import { notFound } from "../../http";
+import { notFound } from "../../server";
 import { loadSchedules, saveSchedules } from "./schedule-records";
 import { drainQueuedSchedule } from "./schedule-queue";
 import { findScheduleForRun, listScheduleRuns, sortSchedules } from "./schedule-query";

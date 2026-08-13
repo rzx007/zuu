@@ -1,4 +1,4 @@
-import { validationError } from "../../http";
+import { validationError } from "../../server";
 
 export interface CronDateParts {
   minute: number;

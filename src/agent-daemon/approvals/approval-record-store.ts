@@ -1,5 +1,5 @@
 import type { Approval, ApprovalStatus } from "@zuu/client";
-import { validationError } from "../../http";
+import { validationError } from "../../server";
 import { JsonFileStore } from "../storage/json-file-store";
 
 const APPROVAL_HISTORY_LIMIT = 500;

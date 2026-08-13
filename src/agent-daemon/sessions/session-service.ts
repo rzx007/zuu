@@ -12,7 +12,7 @@ import type {
   SwitchSessionRequest,
   UpdateSessionRequest,
 } from "@zuu/client";
-import { notFound, validationError } from "../../http";
+import { notFound, validationError } from "../../server";
 import type { ApprovalRegistry } from "../approvals/approval-service";
 import type { PackageService } from "../packages/packages";
 import type { ProjectService } from "../projects/project-service";

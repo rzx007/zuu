@@ -1,5 +1,5 @@
-import { jsonError, readJson, toStatus } from "../http";
-import { parseModelSmoke } from "../prompt-request-validation";
+import { jsonError, readJson, toStatus } from "../server";
+import { parseModelSmoke } from "../validation";
 import type { RouteDeps } from "./types";
 
 export function registerModelRoutes({ app, daemon }: RouteDeps) {
