@@ -35,6 +35,12 @@ pnpm check:pi-workflow
 ZUU_PI_WORKFLOW_RUN=1 pnpm check:pi-workflow
 ```
 
+模型连通性可以单独跑 smoke 脚本；未显式设置 `ZUU_API_TOKEN` 时会复用本地 admin token，不会打印任何密钥：
+```sh
+pnpm check:model
+ZUU_MODEL_PROVIDER=deepseek ZUU_MODEL_ID=deepseek-v4-flash pnpm check:model
+```
+
 ## API
 
 完整协议说明见 [docs/protocol-v1.md](docs/protocol-v1.md)。
