@@ -40,6 +40,7 @@ ZUU_PI_WORKFLOW_RUN=1 pnpm check:pi-workflow
 pnpm check:model
 ZUU_MODEL_PROVIDER=deepseek ZUU_MODEL_ID=deepseek-v4-flash pnpm check:model
 ```
+如果只配置了 `DEEPSEEK_API_KEY` 且没有显式设置 `ZUU_MODEL_PROVIDER` / `ZUU_MODEL_ID`，`pnpm check:model` 会默认使用 `deepseek/deepseek-v4-flash` 做 smoke test；显式模型配置优先级更高。
 
 ## API
 

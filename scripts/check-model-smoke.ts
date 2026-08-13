@@ -11,6 +11,7 @@ const THINKING_LEVELS = [
   "xhigh",
   "max",
 ] as const satisfies readonly NonNullable<ModelSmokeRequest["thinkingLevel"]>[];
+const DEFAULT_DEEPSEEK_MODEL_ID = "deepseek-v4-flash";
 
 function fail(message: string): never {
   throw new Error(message);
@@ -19,7 +20,9 @@ function fail(message: string): never {
 function optionalModel(): ModelSmokeRequest["model"] {
   const provider = envString("ZUU_MODEL_PROVIDER");
   const id = envString("ZUU_MODEL_ID");
-  if (!provider && !id) return undefined;
+  if (!provider && !id) {
+    return envString("DEEPSEEK_API_KEY") ? { provider: "deepseek", id: DEFAULT_DEEPSEEK_MODEL_ID } : undefined;
+  }
   if (!provider || !id) fail("ZUU_MODEL_PROVIDER and ZUU_MODEL_ID must be set together.");
   return { provider, id };
 }
