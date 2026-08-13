@@ -1,8 +1,7 @@
-import { copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
-import { dirname, resolve } from "node:path";
-import { inspectStoreLock, withStoreLock } from "./json-store-lock";
-
-const STORE_VERSION = 1;
+import { existsSync, readFileSync } from "node:fs";
+import { resolve } from "node:path";
+import { backupJsonStoreFile, unwrapStoreData, writeJsonStoreValue } from "./json-store-file-io";
+import { inspectStoreLock } from "./json-store-lock";
 
 export interface JsonStoreStatus {
   name: string;
@@ -24,11 +23,6 @@ export interface JsonFileStoreOptions<T> {
   path: string;
   defaultValue: T;
   countRecords?: (value: T) => number;
-}
-
-interface StoreEnvelope<T> {
-  version: number;
-  data: T;
 }
 
 const statuses = new Map<string, JsonStoreStatus>();
@@ -61,7 +55,7 @@ export class JsonFileStore<T> {
       return value;
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      const backupPath = this.backupCorruptFile();
+      const backupPath = backupJsonStoreFile(this.path);
       this.writeValue(this.defaultValue);
       this.updateStatus(this.defaultValue, {
         exists: true,
@@ -79,31 +73,12 @@ export class JsonFileStore<T> {
   }
 
   private writeValue(value: T) {
-    mkdirSync(dirname(this.path), { recursive: true });
-    withStoreLock(this.path, () => {
-      const payload: StoreEnvelope<T> = {
-        version: STORE_VERSION,
-        data: value,
-      };
-      const tmpPath = `${this.path}.${process.pid}.${crypto.randomUUID()}.tmp`;
-      writeFileSync(tmpPath, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
-      renameSync(tmpPath, this.path);
-    });
+    writeJsonStoreValue(this.path, value);
   }
 
   inspect(): JsonStoreStatus {
     const status = statuses.get(this.path) ?? this.createStatus(this.defaultValue, { exists: existsSync(this.path) });
     return withCurrentLockStatus(status);
-  }
-
-  private backupCorruptFile() {
-    const backupPath = `${this.path}.corrupt-${new Date().toISOString().replace(/[:.]/g, "-")}.bak`;
-    try {
-      copyFileSync(this.path, backupPath);
-      return backupPath;
-    } catch {
-      return undefined;
-    }
   }
 
   private updateStatus(value: T, patch: Partial<JsonStoreStatus> = {}) {
@@ -127,13 +102,6 @@ export class JsonFileStore<T> {
 
 export function inspectJsonStore(options: JsonFileStoreOptions<unknown>): JsonStoreStatus {
   return new JsonFileStore(options).inspect();
-}
-
-function unwrapStoreData<T>(value: unknown): T {
-  if (value && typeof value === "object" && "version" in value && "data" in value) {
-    return (value as StoreEnvelope<T>).data;
-  }
-  return value as T;
 }
 
 function defaultCountRecords(value: unknown) {
