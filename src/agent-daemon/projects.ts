@@ -1,62 +1,18 @@
-import { basename, resolve } from "node:path";
+import { basename } from "node:path";
 import type {
   CreateProjectRequest,
   ProjectSummary,
   UpdateProjectRequest,
 } from "@zuu/client";
 import { ApiError, notFound, validationError } from "../http";
-import { assertAllowedPath } from "./environment";
 import { JsonFileStore } from "./json-file-store";
-
-const DEFAULT_PROJECT_ID = "default";
-
-interface ProjectStoreData {
-  projects: ProjectSummary[];
-}
-
-function isProject(value: unknown): value is ProjectSummary {
-  return Boolean(
-    value &&
-      typeof value === "object" &&
-      "id" in value &&
-      "name" in value &&
-      "cwd" in value &&
-      "agentDir" in value &&
-      "status" in value &&
-      "createdAt" in value &&
-      "updatedAt" in value,
-  );
-}
-
-function isProjectStoreData(value: unknown): value is ProjectStoreData {
-  return Boolean(
-    value &&
-      typeof value === "object" &&
-      "projects" in value &&
-      Array.isArray(value.projects) &&
-      value.projects.every(isProject),
-  );
-}
-
-function normalizeCwd(cwd: string) {
-  const normalized = resolve(cwd);
-  assertAllowedPath(normalized, "cwd");
-  return normalized;
-}
-
-function defaultProject(agentDir: string): ProjectSummary {
-  const cwd = normalizeCwd(process.cwd());
-  const now = new Date().toISOString();
-  return {
-    id: DEFAULT_PROJECT_ID,
-    name: basename(cwd) || "default",
-    cwd,
-    agentDir,
-    status: "ready",
-    createdAt: now,
-    updatedAt: now,
-  };
-}
+import {
+  createDefaultProject,
+  DEFAULT_PROJECT_ID,
+  isProjectStoreData,
+  normalizeProjectCwd,
+  type ProjectStoreData,
+} from "./project-records";
 
 export class ProjectStore {
   private readonly store: JsonFileStore<ProjectStoreData>;
@@ -69,14 +25,14 @@ export class ProjectStore {
     this.store = new JsonFileStore<ProjectStoreData>({
       name: "projects",
       path,
-      defaultValue: { projects: [defaultProject(agentDir)] },
+      defaultValue: { projects: [createDefaultProject(agentDir)] },
       countRecords: (value) => value.projects.length,
     });
     const data = this.store.load(isProjectStoreData);
-    const projects = data.projects.length > 0 ? data.projects : [defaultProject(agentDir)];
+    const projects = data.projects.length > 0 ? data.projects : [createDefaultProject(agentDir)];
     this.projects = new Map(projects.map((project) => [project.id, project]));
     if (!this.projects.has(DEFAULT_PROJECT_ID)) {
-      const project = defaultProject(agentDir);
+      const project = createDefaultProject(agentDir);
       this.projects.set(project.id, project);
       this.persist();
     }
@@ -97,13 +53,13 @@ export class ProjectStore {
   }
 
   findByCwd(cwd: string) {
-    const normalized = normalizeCwd(cwd);
+    const normalized = normalizeProjectCwd(cwd);
     return [...this.projects.values()].find((project) => project.cwd === normalized);
   }
 
   create(request: CreateProjectRequest) {
     const now = new Date().toISOString();
-    const cwd = normalizeCwd(request.cwd);
+    const cwd = normalizeProjectCwd(request.cwd);
     const project: ProjectSummary = {
       id: crypto.randomUUID(),
       name: request.name?.trim() || basename(cwd) || "project",
@@ -126,7 +82,7 @@ export class ProjectStore {
       project.name = name;
     }
     if (request.cwd !== undefined) {
-      project.cwd = normalizeCwd(request.cwd);
+      project.cwd = normalizeProjectCwd(request.cwd);
     }
     project.updatedAt = new Date().toISOString();
     this.persist();
