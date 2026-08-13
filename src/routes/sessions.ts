@@ -1,6 +1,4 @@
-import type { PromptRequest, PromptStreamEvent } from "@zuu/client";
-import type { Context } from "hono";
-import { streamSSE } from "hono/streaming";
+import type { PromptRequest } from "@zuu/client";
 import { jsonError, readJson, toStatus } from "../http";
 import {
   parseCompact,
@@ -13,41 +11,10 @@ import {
   parseSwitchSession,
   parseUpdateSession,
 } from "../request-validation";
-import { writePromptStreamEvent } from "./sse";
+import { streamPromptResponse } from "./prompt-stream";
 import type { RouteDeps } from "./types";
 
 export function registerSessionRoutes({ app, daemon }: RouteDeps) {
-  async function streamPromptResponse(c: Context, request: PromptRequest) {
-    const events = daemon.prompt(request);
-    let first: IteratorResult<PromptStreamEvent>;
-    try {
-      first = await events.next();
-    } catch (error) {
-      return c.json(jsonError(error, 400), toStatus(error, 400));
-    }
-
-    return streamSSE(c, async (stream) => {
-      try {
-        if (!first.done && !stream.aborted) {
-          await writePromptStreamEvent(stream, first.value);
-        }
-        for await (const event of events) {
-          if (stream.aborted) break;
-          await writePromptStreamEvent(stream, event);
-        }
-      } catch (error) {
-        const event: PromptStreamEvent = {
-          id: `unknown:${crypto.randomUUID()}`,
-          createdAt: new Date().toISOString(),
-          runId: "unknown",
-          type: "error",
-          message: error instanceof Error ? error.message : String(error),
-        };
-        await writePromptStreamEvent(stream, event);
-      }
-    });
-  }
-
   app.get("/v1/sessions", (c) => {
     try {
       return c.json({ sessions: daemon.listSessions(c.req.query("projectId")) });
@@ -125,7 +92,7 @@ export function registerSessionRoutes({ app, daemon }: RouteDeps) {
       return c.json(jsonError(error, 400), toStatus(error, 400));
     }
 
-    return streamPromptResponse(c, request);
+    return streamPromptResponse(c, daemon, request);
   });
 
   app.post("/v1/sessions/:sessionId/prompts", async (c) => {
@@ -136,7 +103,7 @@ export function registerSessionRoutes({ app, daemon }: RouteDeps) {
       return c.json(jsonError(error, 400), toStatus(error, 400));
     }
 
-    return streamPromptResponse(c, request);
+    return streamPromptResponse(c, daemon, request);
   });
 
   app.post("/v1/sessions/:sessionId/steer", async (c) => {
@@ -151,7 +118,7 @@ export function registerSessionRoutes({ app, daemon }: RouteDeps) {
       return c.json(jsonError(error, 400), toStatus(error, 400));
     }
 
-    return streamPromptResponse(c, request);
+    return streamPromptResponse(c, daemon, request);
   });
 
   app.post("/v1/sessions/:sessionId/follow-ups", async (c) => {
@@ -166,7 +133,7 @@ export function registerSessionRoutes({ app, daemon }: RouteDeps) {
       return c.json(jsonError(error, 400), toStatus(error, 400));
     }
 
-    return streamPromptResponse(c, request);
+    return streamPromptResponse(c, daemon, request);
   });
 
   app.post("/v1/sessions/:sessionId/abort", async (c) => {
