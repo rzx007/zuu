@@ -48,6 +48,7 @@ import {
   scheduleTriggerLabel,
   toDatetimeLocal,
 } from '@/lib/format'
+import { toLiveEventItem, type LiveEventItem } from '@/lib/live-events'
 
 type MessageRole = 'user' | 'agent' | 'event' | 'error'
 type EventStreamStatus = 'connecting' | 'live' | 'stopped' | 'error'
@@ -56,14 +57,6 @@ type EventRefreshTarget = 'runs' | 'storedSessions' | 'sessionTree' | 'approvals
 interface MessageItem {
   id: string
   role: MessageRole
-  text: string
-}
-
-interface LiveEventItem {
-  id: string
-  type: PromptStreamEvent['type']
-  runId: string
-  createdAt: string
   text: string
 }
 
@@ -279,28 +272,10 @@ function countRunEvent(event: PromptStreamEvent) {
   runEventCounts[event.runId] = (runEventCounts[event.runId] ?? 0) + 1
 }
 
-function liveEventText(event: PromptStreamEvent) {
-  if (event.type === 'session') return event.session?.name || event.session?.id || 'session started'
-  if (event.type === 'tool_start') return event.tool ? `tool start: ${event.tool.name}` : 'tool start'
-  if (event.type === 'tool_end') return event.tool ? `tool end: ${event.tool.name}${event.tool.isError ? ' (error)' : ''}` : 'tool end'
-  if (event.type === 'approval_requested') return event.approval?.title || 'approval requested'
-  if (event.type === 'approval_resolved') return event.approval?.title || 'approval resolved'
-  if (event.type === 'error') return event.message || 'agent error'
-  if (event.type === 'done') return event.run?.status || 'done'
-  if (event.type === 'agent_event') return event.eventType || 'agent event'
-  return event.delta ? `text ${event.delta.length} chars` : event.type
-}
-
 function rememberLiveEvent(event: PromptStreamEvent) {
   if (event.type === 'text_delta') return
   liveEvents.value = [
-    {
-      id: event.id,
-      type: event.type,
-      runId: event.runId,
-      createdAt: event.createdAt,
-      text: liveEventText(event),
-    },
+    toLiveEventItem(event),
     ...liveEvents.value.filter((item) => item.id !== event.id),
   ].slice(0, 40)
 }
