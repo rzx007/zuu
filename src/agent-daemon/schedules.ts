@@ -8,6 +8,7 @@ import { loadSchedules, prependScheduleRun, saveSchedules } from "./schedule-rec
 import { createRunningScheduleRun } from "./schedule-run-factory";
 import { handleScheduleOverlap } from "./schedule-overlap";
 import { drainQueuedSchedule } from "./schedule-queue";
+import { findScheduleForRun, listScheduleRuns, sortSchedules } from "./schedule-query";
 import { rescheduleSchedules } from "./schedule-rescheduler";
 import type { ScheduleLease } from "./schedule-lease";
 import {
@@ -18,7 +19,6 @@ import {
 } from "./schedule-mutations";
 import type { ScheduleExecutor } from "./schedule-runner";
 import {
-  compareScheduleRuns,
   executeScheduleRun,
   restoreNextRun,
   updateNextRun,
@@ -56,7 +56,7 @@ export class ScheduleStore {
 
   listRuns(scheduleId?: string) {
     const schedules = scheduleId ? [this.get(scheduleId)] : this.sortedSchedules();
-    return schedules.flatMap((schedule) => schedule.runs).sort(compareScheduleRuns);
+    return listScheduleRuns(schedules);
   }
 
   get(scheduleId: string) {
@@ -192,13 +192,11 @@ export class ScheduleStore {
   }
 
   private sortedSchedules() {
-    return [...this.schedules.values()].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+    return sortSchedules(this.schedules.values());
   }
 
   private findScheduleForRun(runId: string) {
-    const schedule = this.sortedSchedules().find((item) => item.runs.some((run) => run.id === runId));
-    if (!schedule) notFound(`Unknown schedule run: ${runId}`, { runId });
-    return schedule;
+    return findScheduleForRun(this.schedules.values(), runId);
   }
 
   private persist() {

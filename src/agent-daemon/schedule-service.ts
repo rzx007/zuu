@@ -2,6 +2,7 @@ import type { CreateScheduleRequest, UpdateScheduleRequest } from "@zuu/client";
 import { notFound } from "../http";
 import type { ProjectRegistry } from "./project-service";
 import { ScheduleLease } from "./schedule-lease";
+import { listScheduleRuns } from "./schedule-query";
 import { ScheduleStore, type ScheduleExecutor } from "./schedules";
 
 export interface ScheduleServiceOptions {
@@ -61,9 +62,7 @@ export class ScheduleService {
     if (scheduleId) {
       return this.getSchedule(scheduleId, projectId).runs;
     }
-    return this.listSchedules(projectId)
-      .flatMap((schedule) => schedule.runs)
-      .sort((a, b) => (b.startedAt ?? b.scheduledFor).localeCompare(a.startedAt ?? a.scheduledFor));
+    return listScheduleRuns(this.listSchedules(projectId));
   }
 
   getScheduleRun(runId: string, projectId?: string) {
