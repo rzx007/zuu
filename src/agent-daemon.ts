@@ -2,4 +2,4 @@ export {
   DaemonServiceRegistry,
   createDaemonServiceRegistry,
   type DaemonServiceRegistryOptions,
-} from "./agent-daemon/daemon-service-registry";
+} from "./agent-daemon/core/daemon-service-registry";

@@ -1,4 +1,4 @@
-import { buildHealth } from "../agent-daemon/health";
+import { buildHealth } from "../agent-daemon/core/health";
 import type { RouteDeps } from "./types";
 
 export function registerCoreRoutes({ app }: RouteDeps) {

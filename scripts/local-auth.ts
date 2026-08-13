@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
-import { getAuthTokenStorePath, getZuuAgentDir } from "../src/agent-daemon/agent-paths";
-import { isTokenExpired, type AuthTokenRecord } from "../src/agent-daemon/auth-tokens";
-import { isAuthTokenRecord } from "../src/agent-daemon/auth-token-validation";
+import { getAuthTokenStorePath, getZuuAgentDir } from "../src/agent-daemon/core/agent-paths";
+import { isTokenExpired, type AuthTokenRecord } from "../src/agent-daemon/auth/auth-tokens";
+import { isAuthTokenRecord } from "../src/agent-daemon/auth/auth-token-validation";
 import { envString } from "./script-env";
 
 export function scriptAdminApiToken() {
