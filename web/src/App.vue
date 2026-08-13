@@ -37,6 +37,7 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
+import { createDefaultToolSelection, STORAGE_KEYS, TOOL_CHOICES } from '@/lib/app-state'
 import {
   errorMessage,
   flattenSessionTree,
@@ -65,10 +66,7 @@ interface WorkflowStageRow {
   tasks: WorkflowTask[]
 }
 
-const tokenKey = 'zuu.apiToken'
-const eventCursorKey = 'zuu.lastEventId'
-const projectKey = 'zuu.projectId'
-let client = createZuuClient({ apiToken: localStorage.getItem(tokenKey) || undefined })
+let client = createZuuClient({ apiToken: localStorage.getItem(STORAGE_KEYS.apiToken) || undefined })
 let messageSeq = 0
 let packageOperationPollId: number | undefined
 let eventStreamController: AbortController | undefined
@@ -78,7 +76,7 @@ const pendingEventRefreshes = new Set<EventRefreshTarget>()
 const countedEventIds = new Set<string>()
 const countedEventOrder: string[] = []
 
-const apiToken = ref(localStorage.getItem(tokenKey) || '')
+const apiToken = ref(localStorage.getItem(STORAGE_KEYS.apiToken) || '')
 const authStatus = ref<AuthStatus>()
 const newAuthTokenActor = ref('webui')
 const newAuthTokenScope = ref<AuthScope>('read')
@@ -94,7 +92,7 @@ const auditSince = ref('')
 const auditUntil = ref('')
 const diagnostics = ref<Diagnostics>()
 const projects = ref<ProjectSummary[]>([])
-const selectedProjectId = ref(localStorage.getItem(projectKey) || '')
+const selectedProjectId = ref(localStorage.getItem(STORAGE_KEYS.projectId) || '')
 const projectName = ref('')
 const projectCwd = ref('')
 const newProjectName = ref('')
@@ -153,19 +151,10 @@ const runEventCounts = reactive<Record<string, number>>({})
 const liveEvents = ref<LiveEventItem[]>([])
 const eventStreamStatus = ref<EventStreamStatus>('stopped')
 const eventStreamError = ref('')
-const lastEventId = ref(localStorage.getItem(eventCursorKey) || '')
+const lastEventId = ref(localStorage.getItem(STORAGE_KEYS.eventCursor) || '')
 
-const toolChoices = ['read', 'grep', 'find', 'ls', 'bash', 'edit', 'write', 'zuu_status']
-const selectedTools = reactive<Record<string, boolean>>({
-  read: true,
-  grep: true,
-  find: true,
-  ls: true,
-  bash: false,
-  edit: false,
-  write: false,
-  zuu_status: true,
-})
+const toolChoices = TOOL_CHOICES
+const selectedTools = reactive(createDefaultToolSelection())
 
 const activeTools = computed(() => toolChoices.filter((tool) => selectedTools[tool]))
 const pendingApprovals = computed(() => approvals.value.filter((approval) => approval.status === 'pending'))
@@ -241,7 +230,7 @@ function syncProjectForm() {
 function setActiveSession(session: SessionSummary) {
   if (session.projectId && session.projectId !== currentProjectId()) {
     selectedProjectId.value = session.projectId
-    localStorage.setItem(projectKey, session.projectId)
+    localStorage.setItem(STORAGE_KEYS.projectId, session.projectId)
   }
   currentSession.value = session
   sessionName.value = session.name || sessionName.value
@@ -304,7 +293,7 @@ async function flushEventRefreshes() {
 
 function handleDaemonEvent(event: PromptStreamEvent) {
   lastEventId.value = event.id
-  localStorage.setItem(eventCursorKey, event.id)
+  localStorage.setItem(STORAGE_KEYS.eventCursor, event.id)
   countRunEvent(event)
   rememberLiveEvent(event)
 
@@ -422,7 +411,7 @@ async function loadProjects() {
   if (!projects.value.some((project) => project.id === selectedProjectId.value)) {
     selectedProjectId.value = projects.value.find((project) => project.id === 'default')?.id || projects.value[0]?.id || 'default'
   }
-  localStorage.setItem(projectKey, currentProjectId())
+  localStorage.setItem(STORAGE_KEYS.projectId, currentProjectId())
   syncProjectForm()
 }
 
@@ -599,8 +588,8 @@ async function refreshAll() {
 
 function saveToken() {
   const token = apiToken.value.trim()
-  if (token) localStorage.setItem(tokenKey, token)
-  else localStorage.removeItem(tokenKey)
+  if (token) localStorage.setItem(STORAGE_KEYS.apiToken, token)
+  else localStorage.removeItem(STORAGE_KEYS.apiToken)
   stopEventStream()
   client = createZuuClient({ apiToken: token || undefined })
   addMessage('event', token ? 'API token saved.' : 'API token cleared.')
@@ -611,7 +600,7 @@ function saveToken() {
 async function rotateAuthToken() {
   const result = await client.rotateAuthToken()
   apiToken.value = result.apiToken
-  localStorage.setItem(tokenKey, result.apiToken)
+  localStorage.setItem(STORAGE_KEYS.apiToken, result.apiToken)
   stopEventStream()
   client = createZuuClient({ apiToken: result.apiToken })
   authStatus.value = result.auth
@@ -677,7 +666,7 @@ async function smokeModel() {
 }
 
 async function switchProject() {
-  localStorage.setItem(projectKey, currentProjectId())
+  localStorage.setItem(STORAGE_KEYS.projectId, currentProjectId())
   syncProjectForm()
   if (currentSession.value?.projectId !== currentProjectId()) {
     currentSession.value = undefined
@@ -706,7 +695,7 @@ async function createProject() {
   })
   projects.value = [response.project, ...projects.value.filter((project) => project.id !== response.project.id)]
   selectedProjectId.value = response.project.id
-  localStorage.setItem(projectKey, response.project.id)
+  localStorage.setItem(STORAGE_KEYS.projectId, response.project.id)
   newProjectName.value = ''
   syncProjectForm()
   addMessage('event', `project created: ${response.project.name}`)
