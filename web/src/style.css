@@ -122,6 +122,173 @@
 }
 
 @layer components {
+  .workbench-shell {
+    @apply bg-background text-foreground grid h-svh min-h-svh overflow-hidden;
+    grid-template-columns: 320px minmax(0, 1fr) 420px;
+  }
+
+  .workbench-shell.is-left-collapsed {
+    grid-template-columns: 52px minmax(0, 1fr) 420px;
+  }
+
+  .workbench-shell.is-right-collapsed {
+    grid-template-columns: 320px minmax(0, 1fr) 0;
+  }
+
+  .workbench-shell.is-left-collapsed.is-right-collapsed {
+    grid-template-columns: 52px minmax(0, 1fr) 0;
+  }
+
+  .workbench-sidebar {
+    @apply border-border bg-sidebar grid min-h-0 border-r;
+    grid-template-columns: 52px minmax(0, 1fr);
+  }
+
+  .is-left-collapsed .workbench-sidebar {
+    grid-template-columns: 52px;
+  }
+
+  .workbench-rail {
+    @apply border-border/70 flex min-h-0 flex-col items-center gap-2 border-r p-2;
+  }
+
+  .rail-brand {
+    @apply bg-primary text-primary-foreground flex size-8 items-center justify-center text-sm font-semibold;
+    border-radius: 8px;
+  }
+
+  .sidebar-content {
+    @apply flex min-h-0 flex-col gap-3 overflow-hidden p-3;
+  }
+
+  .sidebar-header {
+    @apply flex items-center justify-between gap-3;
+  }
+
+  .sidebar-header h1,
+  .conversation-header h2,
+  .workspace-header h2 {
+    @apply truncate text-base font-semibold;
+  }
+
+  .sidebar-header p,
+  .conversation-header p,
+  .workspace-header p {
+    @apply text-muted-foreground truncate text-xs;
+  }
+
+  .sidebar-section {
+    @apply border-border bg-background/60 flex flex-col gap-3 border p-3;
+    border-radius: 8px;
+  }
+
+  .history-row {
+    @apply border-border bg-card/70 flex w-full min-w-0 flex-col gap-1 border p-2 text-left text-xs transition hover:bg-muted/60 disabled:opacity-60;
+    border-radius: 6px;
+  }
+
+  .history-row strong {
+    @apply truncate font-semibold;
+  }
+
+  .history-row span {
+    @apply text-muted-foreground truncate;
+  }
+
+  .row-actions {
+    @apply flex flex-wrap gap-1;
+  }
+
+  .conversation-pane {
+    @apply grid min-h-0 grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden;
+  }
+
+  .conversation-header {
+    @apply border-border bg-background/95 flex items-center justify-between gap-3 border-b px-5 py-3;
+  }
+
+  .header-actions {
+    @apply flex shrink-0 flex-wrap items-center justify-end gap-2;
+  }
+
+  .message-list {
+    @apply mx-auto flex min-h-0 w-full max-w-4xl flex-col gap-3 overflow-auto px-5 py-6;
+  }
+
+  .workspace-canvas {
+    @apply mx-auto flex min-h-0 w-full max-w-4xl flex-col gap-5 overflow-auto px-5 py-6;
+  }
+
+  .workspace-header {
+    @apply border-border bg-card flex items-center justify-between gap-3 border p-4;
+    border-radius: 8px;
+  }
+
+  .action-form {
+    @apply border-border bg-card flex flex-col gap-3 border p-4;
+    border-radius: 8px;
+  }
+
+  .composer {
+    @apply border-border bg-background/95 border-t p-4;
+  }
+
+  .composer {
+    @apply grid grid-cols-[minmax(0,1fr)_auto] gap-3;
+  }
+
+  .composer-actions {
+    @apply flex items-end gap-2;
+  }
+
+  .inspector-pane {
+    @apply border-border bg-muted/20 min-h-0 overflow-hidden border-l;
+  }
+
+  .inspector-header {
+    @apply border-border bg-background border-b p-2;
+  }
+
+  .inspector-content {
+    @apply flex min-h-0 flex-col gap-3 overflow-auto p-3;
+  }
+
+  .artifact-preview {
+    @apply border-border bg-background/70 flex flex-col gap-1 border p-2;
+    border-radius: 6px;
+  }
+
+  .artifact-preview pre {
+    @apply border-border bg-muted/40 max-h-52 overflow-auto whitespace-pre-wrap border p-2 text-xs;
+    border-radius: 6px;
+  }
+
+  .terminal-panel {
+    @apply flex min-h-80 flex-col overflow-hidden border border-zinc-800 bg-zinc-950 text-zinc-100;
+    border-radius: 8px;
+  }
+
+  .terminal-title {
+    @apply flex items-center justify-between border-b border-zinc-800 px-3 py-2 text-xs font-medium;
+  }
+
+  .terminal-panel pre {
+    @apply min-h-0 flex-1 overflow-auto whitespace-pre-wrap p-3 font-mono text-xs leading-5;
+  }
+
+  .browser-panel {
+    @apply border-border bg-card flex min-h-[520px] flex-col overflow-hidden border;
+    border-radius: 8px;
+  }
+
+  .browser-bar {
+    @apply border-border border-b p-2;
+  }
+
+  .browser-panel iframe {
+    @apply min-h-0 flex-1 border-0 bg-background;
+  }
+
   .panel-block,
   .side-panel {
     @apply border-border bg-card text-card-foreground flex min-h-0 flex-col gap-3 border p-3;
@@ -268,5 +435,68 @@
 
   .message-error {
     @apply border-destructive/30 bg-destructive/10 text-destructive;
+  }
+
+  @media (max-width: 1180px) {
+    .workbench-shell,
+    .workbench-shell.is-left-collapsed,
+    .workbench-shell.is-right-collapsed,
+    .workbench-shell.is-left-collapsed.is-right-collapsed {
+      grid-template-columns: 52px minmax(0, 1fr);
+    }
+
+    .workbench-sidebar {
+      grid-template-columns: 52px;
+    }
+
+    .sidebar-content {
+      @apply hidden;
+    }
+
+    .inspector-pane {
+      @apply fixed bottom-0 right-0 top-0 z-20 w-[min(420px,calc(100vw-52px))] shadow-xl;
+    }
+
+    .is-right-collapsed .inspector-pane {
+      @apply hidden;
+    }
+  }
+
+  @media (max-width: 760px) {
+    .workbench-shell,
+    .workbench-shell.is-left-collapsed,
+    .workbench-shell.is-right-collapsed,
+    .workbench-shell.is-left-collapsed.is-right-collapsed {
+      grid-template-columns: 1fr;
+    }
+
+    .workbench-sidebar {
+      @apply hidden;
+    }
+
+    .conversation-header {
+      @apply items-start px-3 py-3;
+    }
+
+    .header-actions {
+      @apply gap-1;
+    }
+
+    .message-list,
+    .workspace-canvas {
+      @apply px-3 py-4;
+    }
+
+    .composer {
+      @apply grid-cols-1 p-3;
+    }
+
+    .composer-actions {
+      @apply justify-end;
+    }
+
+    .inspector-pane {
+      @apply left-0 w-full;
+    }
   }
 }

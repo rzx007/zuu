@@ -18,6 +18,7 @@ import {
 } from '@zuu/client'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
 import { createDefaultToolSelection, STORAGE_KEYS, TOOL_CHOICES } from '@/lib/app'
 import {
@@ -82,6 +83,11 @@ const liveEvents = ref<LiveEventItem[]>([])
 const eventStreamStatus = ref<EventStreamStatus>('stopped')
 const eventStreamError = ref('')
 const lastEventId = ref(localStorage.getItem(STORAGE_KEYS.eventCursor) || '')
+const leftSidebarCollapsed = ref(localStorage.getItem('zuu:left-sidebar-collapsed') === '1')
+const rightPanelCollapsed = ref(localStorage.getItem('zuu:right-panel-collapsed') === '1')
+const activeWorkspace = ref<'chat' | 'workflow' | 'schedule'>('chat')
+const activeInspectorTab = ref<'resources' | 'tasks' | 'terminal' | 'browser' | 'settings'>('tasks')
+const browserUrl = ref('http://localhost:3001/')
 
 const toolChoices = TOOL_CHOICES
 const selectedTools = reactive(createDefaultToolSelection())
@@ -233,10 +239,26 @@ const eventStatusVariant = computed(() => {
   if (eventStreamStatus.value === 'error') return 'destructive'
   return 'outline'
 })
+const terminalOutput = computed(() => {
+  const lines = liveEvents.value.slice(0, 30).map((event) =>
+    `[${event.createdAt}] ${event.type} ${event.runId.slice(0, 8)} ${event.text}`,
+  )
+  return lines.length ? lines.join('\n') : 'No daemon events captured yet.'
+})
 
 function nextId() {
   messageSeq += 1
   return `${Date.now()}-${messageSeq}`
+}
+
+function toggleLeftSidebar() {
+  leftSidebarCollapsed.value = !leftSidebarCollapsed.value
+  localStorage.setItem('zuu:left-sidebar-collapsed', leftSidebarCollapsed.value ? '1' : '0')
+}
+
+function toggleRightPanel() {
+  rightPanelCollapsed.value = !rightPanelCollapsed.value
+  localStorage.setItem('zuu:right-panel-collapsed', rightPanelCollapsed.value ? '1' : '0')
 }
 
 function addMessage(role: MessageRole, text = '') {
@@ -747,21 +769,38 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="min-h-svh bg-background text-foreground">
-    <div class="grid min-h-svh grid-cols-[320px_minmax(0,1fr)] max-lg:grid-cols-1">
-      <aside class="border-border bg-sidebar/70 flex flex-col gap-3 border-r p-4 max-lg:border-r-0 max-lg:border-b">
-        <section class="space-y-1">
-          <div class="flex items-center justify-between gap-3">
-            <h1 class="text-lg font-semibold">Zuu Agent</h1>
-            <Badge variant="outline">{{ statusText }}</Badge>
-          </div>
-          <p class="text-muted-foreground text-xs">Pi SDK daemon, session runtime, tool approvals and package diagnostics.</p>
-        </section>
+  <div
+    class="workbench-shell"
+    :class="{
+      'is-left-collapsed': leftSidebarCollapsed,
+      'is-right-collapsed': rightPanelCollapsed,
+    }"
+  >
+    <aside class="workbench-sidebar">
+      <div class="workbench-rail">
+        <div class="rail-brand">Z</div>
+        <Button variant="ghost" size="icon-sm" aria-label="Toggle left sidebar" @click="toggleLeftSidebar">
+          {{ leftSidebarCollapsed ? '>' : '<' }}
+        </Button>
+        <Button variant="ghost" size="icon-sm" :aria-pressed="activeWorkspace === 'chat'" aria-label="Chat workspace" @click="activeWorkspace = 'chat'">C</Button>
+        <Button variant="ghost" size="icon-sm" :aria-pressed="activeWorkspace === 'workflow'" aria-label="Workflow workspace" @click="activeWorkspace = 'workflow'; activeInspectorTab = 'tasks'">W</Button>
+        <Button variant="ghost" size="icon-sm" :aria-pressed="activeWorkspace === 'schedule'" aria-label="Schedule workspace" @click="activeWorkspace = 'schedule'; activeInspectorTab = 'tasks'">S</Button>
+        <Button variant="ghost" size="icon-sm" aria-label="Settings" @click="activeInspectorTab = 'settings'; rightPanelCollapsed = false">G</Button>
+      </div>
 
-        <section class="panel-block">
+      <div v-if="!leftSidebarCollapsed" class="sidebar-content">
+        <header class="sidebar-header">
+          <div class="min-w-0">
+            <h1>Zuu Agent</h1>
+            <p>{{ currentProjectName }}</p>
+          </div>
+          <Badge :variant="eventStatusVariant">{{ statusText }}</Badge>
+        </header>
+
+        <section class="sidebar-section">
           <div class="section-title">
             <h2>Project</h2>
-            <Badge variant="outline">{{ projects.length }}</Badge>
+            <Button variant="ghost" size="xs" :disabled="isRefreshing" @click="refreshAll">Refresh</Button>
           </div>
           <label class="field-label">
             Active project
@@ -772,220 +811,105 @@ onUnmounted(() => {
             </select>
           </label>
           <p class="empty-text truncate">{{ currentProjectCwd || 'No project loaded.' }}</p>
-          <div class="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
-            <input v-model="projectName" class="field-input min-w-0" placeholder="Project name" @keydown.enter="updateProject().catch((error) => addMessage('error', errorMessage(error)))">
-            <Button variant="outline" size="sm" @click="updateProject().catch((error) => addMessage('error', errorMessage(error)))">Rename</Button>
-          </div>
-          <input v-model="projectCwd" class="field-input" placeholder="D:\code\personal-project\zuu">
-          <div class="flex gap-2">
-            <Button variant="ghost" size="sm" :disabled="currentProject?.id === 'default'" @click="deleteProject().catch((error) => addMessage('error', errorMessage(error)))">Delete</Button>
-            <Button variant="outline" size="sm" class="ml-auto" @click="loadProjects().catch((error) => addMessage('error', errorMessage(error)))">Refresh</Button>
-          </div>
-          <div class="project-create">
-            <input v-model="newProjectName" class="field-input min-w-0" placeholder="New project">
-            <input v-model="newProjectCwd" class="field-input min-w-0" placeholder="cwd">
-            <Button size="sm" @click="createProject().catch((error) => addMessage('error', errorMessage(error)))">Create</Button>
-          </div>
         </section>
 
-        <section class="panel-block">
+        <section class="sidebar-section min-h-0">
           <div class="section-title">
-            <h2>Runtime</h2>
-            <Button variant="ghost" size="xs" :disabled="isRefreshing" @click="refreshAll">Refresh</Button>
+            <h2>Session history</h2>
+            <Badge variant="outline">{{ storedSessions.length }}</Badge>
           </div>
-          <dl class="meta-grid">
-            <div><dt>SDK</dt><dd>{{ diagnostics?.sdk.version || 'loading' }}</dd></div>
-            <div><dt>Models</dt><dd>{{ diagnostics?.models.availableCount ?? 0 }}</dd></div>
-            <div><dt>Providers</dt><dd>{{ configuredProviders }}</dd></div>
-            <div><dt>Skills</dt><dd>{{ diagnostics?.resources.skills ?? 0 }}</dd></div>
-          </dl>
-          <p v-if="resourceDiagnostics.length" class="text-destructive text-xs">{{ resourceDiagnostics.length }} resource diagnostics</p>
-          <p v-if="blockedPackages.length" class="text-destructive text-xs">{{ blockedPackages.length }} blocked packages</p>
-          <p v-if="storeDiagnostics.some((store) => !store.ok)" class="text-destructive text-xs">Store recovery needs review</p>
-          <p v-if="diagnostics?.gaps.length" class="text-destructive text-xs">{{ diagnostics.gaps.join(' / ') }}</p>
-          <label class="field-label">
-            API token
-            <input v-model="apiToken" class="field-input" type="password" placeholder="Optional ZUU_API_TOKEN" @keydown.enter="saveToken">
-          </label>
-          <div class="flex flex-wrap items-center gap-2">
-            <Button variant="outline" size="sm" @click="saveToken">Save token</Button>
-            <Button
-              variant="outline"
-              size="sm"
-              :disabled="!authStatus?.canRotate"
-              @click="rotateAuthToken().catch((error) => addMessage('error', errorMessage(error)))"
+          <div v-if="storedSessions.length" class="list-stack min-h-0 overflow-auto">
+            <button
+              v-for="session in storedSessions.slice(0, 14)"
+              :key="session.path"
+              class="history-row"
+              :disabled="session.isActive"
+              @click="openStoredSession(session.path).catch((error) => addMessage('error', errorMessage(error)))"
             >
-              Rotate
-            </Button>
-            <Badge v-if="authStatus" variant="outline">{{ authStatus.source }}</Badge>
+              <strong>{{ session.name || session.id.slice(0, 8) }}</strong>
+              <span>{{ session.messageCount }} messages / {{ session.updatedAt }}</span>
+            </button>
           </div>
-          <p v-if="authStatus" class="empty-text">
-            {{ authStatus.tokenPreview }}{{ authStatus.tokenFile ? ` / ${authStatus.tokenFile}` : '' }}
-          </p>
-          <div v-if="authStatus?.canRotate" class="project-create">
-            <input v-model="newAuthTokenActor" class="field-input min-w-0" placeholder="actor">
-            <select v-model="newAuthTokenScope" class="field-input min-w-0">
-              <option value="read">read</option>
-              <option value="admin">admin</option>
-            </select>
-            <input v-model="newAuthTokenExpiresAt" class="field-input min-w-0" type="datetime-local" aria-label="Token expires at">
-            <Button size="sm" @click="createAuthToken().catch((error) => addMessage('error', errorMessage(error)))">Create token</Button>
+          <p v-else class="empty-text">No stored sessions yet.</p>
+        </section>
+
+        <section class="sidebar-section min-h-0">
+          <div class="section-title">
+            <h2>Recent runs</h2>
+            <Button variant="ghost" size="xs" @click="loadRuns">Refresh</Button>
           </div>
-          <div v-if="authStatus?.tokens.length" class="list-stack">
-            <div v-for="token in authStatus.tokens" :key="token.id" class="workflow-row">
-              <div class="flex items-center justify-between gap-2">
-                <div class="min-w-0">
-                  <div class="flex flex-wrap items-center gap-2">
-                    <Badge variant="outline">{{ token.scope }}</Badge>
-                    <Badge v-if="token.expired" variant="destructive">expired</Badge>
-                    <span>{{ token.actor }}</span>
-                  </div>
-                  <p class="empty-text">{{ token.tokenPreview }} / {{ token.id }}</p>
-                  <div class="workflow-progress">
-                    <span>created {{ token.createdAt }}</span>
-                    <span v-if="token.expiresAt">expires {{ token.expiresAt }}</span>
-                    <span v-if="token.rotatedAt">rotated {{ token.rotatedAt }}</span>
-                    <span v-if="token.lastUsedAt">used {{ token.lastUsedAt }}</span>
-                  </div>
-                </div>
-                <Button
-                  v-if="authStatus.canRotate"
-                  variant="ghost"
-                  size="xs"
-                  :disabled="token.scope === 'admin' && authAdminTokenCount <= 1"
-                  @click="revokeAuthToken(token.id).catch((error) => addMessage('error', errorMessage(error)))"
-                >
-                  Revoke
-                </Button>
+          <div v-if="runs.length" class="list-stack min-h-0 overflow-auto">
+            <div v-for="run in runs.slice(0, 8)" :key="run.id" class="history-row">
+              <strong>{{ run.id.slice(0, 8) }} / {{ run.status }}</strong>
+              <span>{{ runEventCounts[run.id] ?? 0 }} events</span>
+              <span>{{ previewText(run.prompt, 80) }}</span>
+              <div class="row-actions">
+                <Button v-if="run.status === 'running' || run.status === 'waiting_approval'" variant="outline" size="xs" @click="abortRun(run.id).catch((error) => addMessage('error', errorMessage(error)))">Abort</Button>
+                <Button variant="outline" size="xs" @click="replayRunEvents(run.id).catch((error) => addMessage('error', errorMessage(error)))">Replay</Button>
               </div>
             </div>
           </div>
+          <p v-else class="empty-text">No runs yet.</p>
         </section>
+      </div>
+    </aside>
 
-        <section class="panel-block">
-          <div class="section-title">
-            <h2>Session</h2>
-            <Badge variant="secondary">{{ currentSession?.messageCount ?? 0 }} messages</Badge>
-          </div>
-          <label class="field-label">
-            Session name
-            <input v-model="sessionName" class="field-input">
-          </label>
-          <label class="field-label">
-            Available model
-            <select v-model="selectedModel" class="field-input" @change="chooseModel">
-              <option value="">Use manual model</option>
-              <option v-for="model in models" :key="`${model.provider}/${model.id}`" :value="`${model.provider}/${model.id}`">
-                {{ model.provider }} / {{ model.label || model.id }}
-              </option>
-            </select>
-          </label>
-          <div class="grid grid-cols-2 gap-2">
-            <label class="field-label">
-              Provider
-              <input v-model="provider" class="field-input" placeholder="deepseek">
-            </label>
-            <label class="field-label">
-              Model
-              <input v-model="modelName" class="field-input" placeholder="deepseek-chat">
-            </label>
-          </div>
-          <div class="flex flex-wrap items-center gap-2">
-            <Button variant="outline" size="sm" :disabled="isSmokingModel" @click="smokeModel().catch((error) => addMessage('error', errorMessage(error)))">
-              {{ isSmokingModel ? 'Testing' : 'Smoke test' }}
-            </Button>
-            <Badge v-if="modelSmoke" :variant="modelSmoke.ok ? 'secondary' : 'destructive'">
-              {{ modelSmoke.ok ? 'ok' : modelSmoke.status }}
-            </Badge>
-          </div>
-          <p v-if="modelSmoke" :class="modelSmoke.ok ? 'empty-text' : 'text-destructive text-xs'">
-            {{ modelSmoke.ok ? `run ${modelSmoke.runId?.slice(0, 8) || 'n/a'} / ${modelSmoke.durationMs}ms` : modelSmoke.error || 'model smoke failed' }}
-          </p>
-          <label class="field-label">
-            Thinking
-            <select v-model="thinkingLevel" class="field-input">
-              <option value="off">off</option>
-              <option value="low">low</option>
-              <option value="medium">medium</option>
-              <option value="high">high</option>
-            </select>
-          </label>
-          <div class="tool-grid">
-            <label v-for="tool in toolChoices" :key="tool" class="tool-toggle">
-              <input v-model="selectedTools[tool]" type="checkbox">
-              <span>{{ tool }}</span>
-            </label>
-          </div>
-          <div class="flex flex-wrap gap-2">
-            <Button variant="outline" size="sm" :disabled="!currentSession" @click="saveCurrentSession().catch((error) => addMessage('error', errorMessage(error)))">Save session</Button>
-            <Button variant="ghost" size="sm" :disabled="!currentSession || currentSession.isStreaming" @click="closeCurrentSession().catch((error) => addMessage('error', errorMessage(error)))">Close</Button>
-          </div>
-        </section>
+    <main class="conversation-pane">
+      <header class="conversation-header">
+        <div class="min-w-0">
+          <h2>{{ currentSession?.name || 'New session' }}</h2>
+          <p>{{ currentProjectName }} / {{ currentSession?.model || currentSession?.sessionFile || selectedModelLabel() || 'ready' }}</p>
+        </div>
+        <div class="header-actions">
+          <Badge v-if="pendingApprovals.length" variant="destructive">{{ pendingApprovals.length }} approvals</Badge>
+          <Badge :variant="eventStatusVariant">events {{ eventStreamStatus }}</Badge>
+          <Badge variant="outline">{{ activeTools.length }} tools</Badge>
+          <Button variant="outline" size="icon-sm" aria-label="Toggle right panel" @click="toggleRightPanel">
+            {{ rightPanelCollapsed ? '<' : '>' }}
+          </Button>
+        </div>
+      </header>
 
-        <section class="panel-block">
-          <div class="section-title">
-            <h2>Packages</h2>
-            <div class="flex items-center gap-1">
-              <Badge v-if="runningPackageOperations.length" variant="secondary">{{ runningPackageOperations.length }} installing</Badge>
-              <Badge variant="outline">{{ packages.length }}</Badge>
-            </div>
-          </div>
-          <div v-if="packages.length" class="list-stack">
-            <div v-for="item in packages" :key="item.source" class="compact-row">
-              <div class="min-w-0">
-                <strong>{{ item.source }}</strong>
-                <span>{{ item.scope }} / {{ item.status }} / {{ item.trustStatus }}</span>
-                <span v-if="item.trustedAt">trusted {{ item.trustedAt }}</span>
-                <span v-if="item.installedPath">{{ item.installedPath }}</span>
-                <span v-if="latestPackageOperation(item.source)">
-                  {{ latestPackageOperation(item.source)?.action }} {{ latestPackageOperation(item.source)?.status }} / {{ packageOperationMessage(latestPackageOperation(item.source)) }}
-                </span>
-              </div>
-              <div class="flex flex-wrap justify-end gap-1">
-                <Button v-if="!item.trusted" variant="outline" size="xs" @click="trustPackage(item.source).catch((error) => addMessage('error', errorMessage(error)))">Trust</Button>
-                <Button v-else variant="ghost" size="xs" @click="revokePackageTrust(item.source).catch((error) => addMessage('error', errorMessage(error)))">Revoke</Button>
-                <Button v-if="item.status === 'installed'" variant="outline" size="xs" :disabled="!item.trusted || isPackageOperating(item.source)" @click="updatePackage(item.source).catch((error) => addMessage('error', errorMessage(error)))">Update</Button>
-                <Button v-if="item.status !== 'installed'" variant="outline" size="xs" :disabled="!item.trusted || isPackageOperating(item.source)" @click="installPackage(item.source).catch((error) => addMessage('error', errorMessage(error)))">
-                  {{ isPackageOperating(item.source) ? 'Working' : 'Install' }}
-                </Button>
-                <Button variant="ghost" size="xs" :disabled="isPackageOperating(item.source)" @click="removePackage(item.source).catch((error) => addMessage('error', errorMessage(error)))">Remove</Button>
-              </div>
-            </div>
-          </div>
-          <p v-else class="empty-text">No packages configured.</p>
-          <div class="flex gap-2">
-            <input v-model="packageSource" class="field-input min-w-0" placeholder="npm:@agwab/pi-workflow@0.84.1" @keydown.enter="addPackage().catch((error) => addMessage('error', errorMessage(error)))">
-            <Button variant="outline" size="sm" @click="addPackage().catch((error) => addMessage('error', errorMessage(error)))">Add</Button>
-          </div>
-        </section>
+      <section v-if="activeWorkspace === 'chat'" data-message-list class="message-list">
+        <div v-if="!messages.length" class="empty-surface">
+          <h2>Ready for a run</h2>
+          <p>Choose a model, enable tools, then send a prompt.</p>
+        </div>
+        <article v-for="message in messages" :key="message.id" class="message-bubble" :class="`message-${message.role}`">
+          {{ message.text || '...' }}
+        </article>
+      </section>
 
-        <section class="panel-block">
-          <div class="section-title">
-            <h2>Workflows</h2>
-            <Badge :variant="workflowBackend?.status === 'ready' ? 'secondary' : 'destructive'">
-              {{ workflowBackend?.kind || 'loading' }}
-            </Badge>
+      <section v-else-if="activeWorkspace === 'workflow'" class="workspace-canvas">
+        <div class="workspace-header">
+          <div>
+            <h2>Workflow</h2>
+            <p>{{ workflowBackend?.message || `${workflows.length} workflow definitions` }}</p>
           </div>
-          <p class="empty-text">{{ workflowBackend?.message || `${workflows.length} workflow definitions` }}</p>
+          <Badge :variant="workflowBackend?.status === 'ready' ? 'secondary' : 'destructive'">{{ workflowBackend?.kind || 'loading' }}</Badge>
+        </div>
+        <div class="action-form">
           <label class="field-label">
             Definition
             <select v-model="selectedWorkflowId" class="field-input">
-              <option v-for="workflow in workflows" :key="workflow.id" :value="workflow.id">
-                {{ workflow.name }}
-              </option>
+              <option v-for="workflow in workflows" :key="workflow.id" :value="workflow.id">{{ workflow.name }}</option>
             </select>
           </label>
           <p v-if="selectedWorkflow" class="empty-text">{{ selectedWorkflow.description }}</p>
-          <p v-else-if="!workflows.length" class="empty-text">No workflow definitions available for this backend.</p>
-          <Textarea v-model="workflowPrompt" class="min-h-16" />
-          <Button size="sm" :disabled="!selectedWorkflowId" @click="startWorkflow().catch((error) => addMessage('error', errorMessage(error)))">Run workflow</Button>
-        </section>
+          <Textarea v-model="workflowPrompt" class="min-h-28" />
+          <Button class="w-fit" :disabled="!selectedWorkflowId" @click="startWorkflow().catch((error) => addMessage('error', errorMessage(error)))">Run workflow</Button>
+        </div>
+      </section>
 
-        <section class="panel-block">
-          <div class="section-title">
-            <h2>Schedules</h2>
-            <Badge variant="outline">{{ currentProjectSchedules.length }}</Badge>
+      <section v-else class="workspace-canvas">
+        <div class="workspace-header">
+          <div>
+            <h2>Schedule</h2>
+            <p>{{ currentProjectSchedules.length }} schedules in {{ currentProjectName }}</p>
           </div>
+          <Badge variant="outline">{{ currentProjectSchedules.length }}</Badge>
+        </div>
+        <div class="action-form">
           <label class="field-label">
             Name
             <input v-model="scheduleName" class="field-input">
@@ -1053,508 +977,545 @@ onUnmounted(() => {
           <label v-if="scheduleActionType === 'workflow'" class="field-label">
             Workflow
             <select v-model="selectedWorkflowId" class="field-input">
-              <option v-for="workflow in workflows" :key="workflow.id" :value="workflow.id">
-                {{ workflow.name }}
-              </option>
+              <option v-for="workflow in workflows" :key="workflow.id" :value="workflow.id">{{ workflow.name }}</option>
             </select>
           </label>
-          <Textarea v-model="schedulePrompt" class="min-h-16" />
+          <Textarea v-model="schedulePrompt" class="min-h-28" />
           <div class="flex flex-wrap gap-2">
-            <Button size="sm" :disabled="scheduleActionType === 'workflow' && !selectedWorkflowId" @click="createSchedule().catch((error) => addMessage('error', errorMessage(error)))">{{ editingScheduleId ? 'Save schedule' : 'Create schedule' }}</Button>
-            <Button v-if="editingScheduleId" variant="ghost" size="sm" @click="cancelScheduleEdit">Cancel</Button>
+            <Button :disabled="scheduleActionType === 'workflow' && !selectedWorkflowId" @click="createSchedule().catch((error) => addMessage('error', errorMessage(error)))">{{ editingScheduleId ? 'Save schedule' : 'Create schedule' }}</Button>
+            <Button v-if="editingScheduleId" variant="ghost" @click="cancelScheduleEdit">Cancel</Button>
           </div>
-          <div v-if="currentProjectSchedules.length" class="list-stack max-h-56 overflow-auto">
-            <div v-for="schedule in currentProjectSchedules.slice(0, 6)" :key="schedule.id" class="compact-row">
-              <div class="min-w-0">
-                <strong>{{ schedule.name }}</strong>
-                <span>{{ schedule.status }} / {{ scheduleTriggerLabel(schedule) }}</span>
-                <span>overlap {{ schedule.overlapPolicy }}</span>
-                <span>misfire {{ schedule.misfirePolicy }}</span>
-                <span v-if="schedule.retryPolicy">retry {{ schedule.retryPolicy.maxAttempts }}x</span>
-                <span>{{ scheduleActionLabel(schedule.action) }}</span>
-                <span v-if="schedule.nextRunAt">next {{ schedule.nextRunAt }}</span>
-              </div>
-              <div class="flex flex-wrap justify-end gap-1">
-                <Button variant="outline" size="xs" @click="editSchedule(schedule)">Edit</Button>
-                <Button variant="outline" size="xs" @click="triggerSchedule(schedule.id).catch((error) => addMessage('error', errorMessage(error)))">Run</Button>
-                <Button v-if="schedule.status === 'active'" variant="ghost" size="xs" @click="pauseSchedule(schedule.id).catch((error) => addMessage('error', errorMessage(error)))">Pause</Button>
-                <Button v-else variant="ghost" size="xs" @click="resumeSchedule(schedule.id).catch((error) => addMessage('error', errorMessage(error)))">Resume</Button>
-                <Button variant="ghost" size="xs" @click="deleteSchedule(schedule.id).catch((error) => addMessage('error', errorMessage(error)))">Delete</Button>
-              </div>
-            </div>
-          </div>
-          <p v-else class="empty-text">No schedules yet.</p>
-        </section>
+        </div>
+      </section>
 
-        <section class="panel-block">
-          <div class="section-title">
-            <h2>Stored Sessions</h2>
-            <Badge variant="outline">{{ storedSessions.length }}</Badge>
-          </div>
-          <div v-if="storedSessions.length" class="list-stack max-h-52 overflow-auto">
-            <div v-for="session in storedSessions.slice(0, 8)" :key="session.path" class="compact-row">
-              <div class="min-w-0">
-                <strong>{{ session.name || session.id.slice(0, 8) }}</strong>
-                <span>{{ session.messageCount }} messages · {{ session.updatedAt }}</span>
-              </div>
-              <Button variant="outline" size="xs" :disabled="session.isActive" @click="openStoredSession(session.path).catch((error) => addMessage('error', errorMessage(error)))">Open</Button>
-            </div>
-          </div>
-          <p v-else class="empty-text">No stored sessions yet.</p>
-        </section>
-      </aside>
+      <footer class="composer">
+        <Textarea v-model="prompt" class="min-h-24 resize-y" @keydown.ctrl.enter.prevent="sendPrompt" @keydown.meta.enter.prevent="sendPrompt" />
+        <div class="composer-actions">
+          <Button variant="outline" :disabled="!isRunning" @click="abortPrompt">Abort</Button>
+          <Button variant="outline" :disabled="!canQueueSessionMessage" @click="queueSessionMessage('steer')">Steer</Button>
+          <Button variant="outline" :disabled="!canQueueSessionMessage" @click="queueSessionMessage('followUp')">Follow up</Button>
+          <Button :disabled="isRunning" @click="sendPrompt">Send</Button>
+        </div>
+      </footer>
+    </main>
 
-      <main class="grid min-h-svh grid-rows-[auto_minmax(0,1fr)_auto]">
-        <header class="border-border bg-background flex items-center justify-between gap-3 border-b px-5 py-4 max-md:flex-col max-md:items-start">
-          <div class="min-w-0">
-            <h2 class="truncate text-base font-semibold">{{ currentSession?.name || 'New session' }}</h2>
-            <p class="text-muted-foreground truncate text-xs">{{ currentProjectName }} / {{ currentSession?.model || currentSession?.sessionFile || 'Ask the agent to inspect this project.' }}</p>
-          </div>
-          <div class="flex shrink-0 items-center gap-2">
-            <Badge v-if="pendingApprovals.length" variant="destructive">{{ pendingApprovals.length }} pending approval</Badge>
-            <Badge :variant="eventStatusVariant">events {{ eventStreamStatus }}</Badge>
-            <Badge variant="outline">{{ activeTools.length }} tools</Badge>
-          </div>
-        </header>
-
-        <div class="grid min-h-0 grid-cols-[minmax(0,1fr)_360px] max-xl:grid-cols-1">
-          <section data-message-list class="flex min-h-0 flex-col gap-3 overflow-auto p-5">
-            <div v-if="!messages.length" class="empty-surface">
-              <h2>Ready for a run</h2>
-              <p>Choose a model, enable tools, then send a prompt.</p>
-            </div>
-            <article v-for="message in messages" :key="message.id" class="message-bubble" :class="`message-${message.role}`">
-              {{ message.text || '...' }}
-            </article>
-          </section>
-
-          <aside class="border-border bg-muted/20 flex min-h-0 flex-col gap-3 overflow-auto border-l p-4 max-xl:border-l-0 max-xl:border-t">
-            <section class="side-panel">
-              <div class="section-title">
-                <h2>Event Stream</h2>
-                <Badge :variant="eventStatusVariant">{{ eventStreamStatus }}</Badge>
-              </div>
-              <p v-if="eventStreamError" class="text-destructive text-xs">{{ eventStreamError }}</p>
-              <p v-else class="empty-text">cursor {{ lastEventId ? lastEventId.slice(0, 18) : 'none' }}</p>
-              <div v-if="liveEvents.length" class="list-stack overflow-auto">
-                <div v-for="event in liveEvents.slice(0, 10)" :key="event.id" class="workflow-row">
-                  <div class="flex items-center justify-between gap-2">
-                    <strong>{{ event.type }}</strong>
-                    <Badge variant="outline">{{ event.runId.slice(0, 8) }}</Badge>
-                  </div>
-                  <p>{{ event.text }}</p>
-                  <span>{{ event.createdAt }}</span>
-                </div>
-              </div>
-              <p v-else class="empty-text">Waiting for daemon events.</p>
-            </section>
-
-            <section class="side-panel">
-              <div class="section-title">
-                <h2>Approvals</h2>
-                <Button variant="ghost" size="xs" @click="loadApprovals">Refresh</Button>
-              </div>
-              <div v-if="approvals.length" class="list-stack overflow-auto">
-                <div v-for="approval in approvals.slice(0, 8)" :key="approval.id" class="approval-row">
-                  <div class="flex items-center justify-between gap-2">
-                    <strong>{{ approval.title }}</strong>
-                    <Badge :variant="approval.status === 'pending' ? 'destructive' : 'outline'">{{ approval.status }}</Badge>
-                  </div>
-                  <p>{{ approval.description }}</p>
-                  <div v-if="approval.status === 'pending'" class="flex flex-wrap gap-2">
-                    <Button size="xs" @click="resolveApproval(approval, 'allow_once').catch((error) => addMessage('error', errorMessage(error)))">Allow once</Button>
-                    <Button variant="outline" size="xs" @click="resolveApproval(approval, 'allow_session').catch((error) => addMessage('error', errorMessage(error)))">Allow session</Button>
-                    <Button variant="destructive" size="xs" @click="resolveApproval(approval, 'deny').catch((error) => addMessage('error', errorMessage(error)))">Deny</Button>
-                  </div>
-                </div>
-              </div>
-              <p v-else class="empty-text">No approvals yet.</p>
-            </section>
-
-            <section class="side-panel">
-              <div class="section-title">
-                <h2>Resources</h2>
-                <Button variant="ghost" size="xs" @click="loadDiagnostics">Refresh</Button>
-              </div>
-              <div v-if="resourceDiagnostics.length" class="list-stack overflow-auto">
-                <div v-for="diagnostic in resourceDiagnostics.slice(0, 10)" :key="`${diagnostic.type}-${diagnostic.path || diagnostic.message}`" class="workflow-row">
-                  <div class="flex items-center justify-between gap-2">
-                    <strong>{{ diagnostic.collision?.name || diagnostic.type }}</strong>
-                    <Badge :variant="diagnostic.type === 'error' || diagnostic.type === 'collision' ? 'destructive' : 'outline'">{{ diagnostic.type }}</Badge>
-                  </div>
-                  <p>{{ diagnostic.message }}</p>
-                  <span v-if="diagnostic.path">{{ diagnostic.path }}</span>
-                  <span v-if="diagnostic.collision">winner {{ diagnostic.collision.winnerPath }}</span>
-                  <span v-if="diagnostic.collision">loser {{ diagnostic.collision.loserPath }}</span>
-                </div>
-              </div>
-              <p v-else class="empty-text">No resource diagnostics.</p>
-              <div v-if="storeDiagnostics.length" class="list-stack overflow-auto">
-                <div v-for="store in storeDiagnostics" :key="store.path" class="workflow-row">
-                  <div class="flex items-center justify-between gap-2">
-                    <strong>{{ store.name }}</strong>
-                    <Badge :variant="store.ok ? 'secondary' : 'destructive'">{{ store.ok ? 'ok' : 'review' }}</Badge>
-                  </div>
-                  <span>{{ store.recordCount }} records / {{ store.exists ? 'exists' : 'missing' }}</span>
-                  <span v-if="store.locked">locked <template v-if="store.lockAgeMs !== undefined">{{ Math.round(store.lockAgeMs) }}ms</template></span>
-                  <span v-else>unlocked</span>
-                  <p v-if="store.lockStale">stale lock needs review</p>
-                  <span>{{ store.path }}</span>
-                  <span v-if="store.locked">lock {{ store.lockPath }}</span>
-                  <p v-if="store.recovered">recovered from corrupt JSON</p>
-                  <span v-if="store.backupPath">backup {{ store.backupPath }}</span>
-                  <p v-if="store.error">{{ store.error }}</p>
-                </div>
-              </div>
-            </section>
-
-            <section class="side-panel">
-              <div class="section-title">
-                <h2>Audit</h2>
-                <Button variant="ghost" size="xs" @click="loadAuditEvents">Refresh</Button>
-              </div>
-              <div class="grid grid-cols-1 md:grid-cols-3 gap-2">
-                <select v-model="auditAction" class="field-input">
-                  <option value="">Any action</option>
-                  <option value="api.read">api.read</option>
-                  <option value="api.mutate">api.mutate</option>
-                  <option value="auth.rotate">auth.rotate</option>
-                  <option value="auth.token_create">auth.token_create</option>
-                  <option value="auth.token_revoke">auth.token_revoke</option>
-                  <option value="approval.resolve">approval.resolve</option>
-                  <option value="package.add">package.add</option>
-                  <option value="package.install">package.install</option>
-                  <option value="package.update">package.update</option>
-                  <option value="package.remove">package.remove</option>
-                  <option value="package.trust">package.trust</option>
-                  <option value="package.revoke_trust">package.revoke_trust</option>
-                </select>
-                <select v-model="auditOutcome" class="field-input">
-                  <option value="">Any outcome</option>
-                  <option value="success">success</option>
-                  <option value="failure">failure</option>
-                </select>
-                <select v-model="auditAuthScope" class="field-input">
-                  <option value="">Any scope</option>
-                  <option value="admin">admin</option>
-                  <option value="read">read</option>
-                </select>
-              </div>
-              <input v-model="auditTarget" class="field-input" placeholder="Target contains" @keydown.enter="loadAuditEvents">
-              <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
-                <input v-model="auditAuthActor" class="field-input" placeholder="Auth actor" @keydown.enter="loadAuditEvents">
-                <input v-model="auditAuthTokenId" class="field-input" placeholder="Auth token id" @keydown.enter="loadAuditEvents">
-              </div>
-              <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
-                <input v-model="auditSince" class="field-input" type="datetime-local" aria-label="Audit since" @keydown.enter="loadAuditEvents">
-                <input v-model="auditUntil" class="field-input" type="datetime-local" aria-label="Audit until" @keydown.enter="loadAuditEvents">
-              </div>
-              <div v-if="auditEvents.length" class="list-stack overflow-auto">
-                <div v-for="event in auditEvents.slice(0, 10)" :key="event.id" class="workflow-row">
-                  <div class="flex items-center justify-between gap-2">
-                    <strong>{{ event.action }}</strong>
-                    <Badge :variant="event.outcome === 'success' ? 'secondary' : 'destructive'">{{ event.outcome }}</Badge>
-                  </div>
-                  <span>{{ event.createdAt }}</span>
-                  <span v-if="event.details?.authScope">{{ event.details.authScope }}</span>
-                  <span v-if="event.details?.authActor">{{ event.details.authActor }}</span>
-                  <span v-if="event.details?.authTokenId">{{ event.details.authTokenId }}</span>
-                  <p v-if="event.target">{{ event.target }}</p>
-                </div>
-              </div>
-              <p v-else class="empty-text">No audit events yet.</p>
-            </section>
-
-            <section class="side-panel">
-              <div class="section-title">
-                <h2>Package Ops</h2>
-                <Button variant="ghost" size="xs" @click="loadPackageOperations">Refresh</Button>
-              </div>
-              <div v-if="packageOperations.length" class="list-stack overflow-auto">
-                <div v-for="operation in packageOperations.slice(0, 8)" :key="operation.id" class="workflow-row">
-                  <div class="flex items-center justify-between gap-2">
-                    <strong>{{ operation.source }}</strong>
-                    <Badge :variant="operation.status === 'done' ? 'secondary' : operation.status === 'error' ? 'destructive' : 'outline'">{{ operation.status }}</Badge>
-                  </div>
-                  <span>{{ operation.action }} / {{ operation.startedAt }}</span>
-                  <div class="workflow-progress">
-                    <span>{{ operation.events.length }} events</span>
-                    <span v-if="operation.endedAt">ended {{ operation.endedAt }}</span>
-                  </div>
-                  <p v-if="packageOperationMessage(operation)">{{ packageOperationMessage(operation) }}</p>
-                </div>
-              </div>
-              <p v-else class="empty-text">No package operations yet.</p>
-            </section>
-
-            <section class="side-panel">
-              <div class="section-title">
-                <h2>Schedule Runs</h2>
-                <Button variant="ghost" size="xs" @click="loadSchedules">Refresh</Button>
-              </div>
-              <div v-if="currentProjectSchedules.length" class="list-stack overflow-auto">
-                <div
-                  v-for="schedule in currentProjectSchedules.slice(0, 8)"
-                  :key="schedule.id"
-                  class="workflow-row cursor-pointer"
-                  :class="schedule.id === selectedScheduleId ? 'border-primary/50 bg-primary/5' : ''"
-                  @click="loadScheduleRuns(schedule.id).catch((error) => addMessage('error', errorMessage(error)))"
-                >
-                  <div class="flex items-center justify-between gap-2">
-                    <strong>{{ schedule.name }}</strong>
-                    <Badge :variant="schedule.status === 'active' ? 'secondary' : 'outline'">{{ schedule.status }}</Badge>
-                  </div>
-                  <span>{{ scheduleTriggerLabel(schedule) }}</span>
-                  <span>overlap {{ schedule.overlapPolicy }}</span>
-                  <span>misfire {{ schedule.misfirePolicy }}</span>
-                  <span v-if="schedule.retryPolicy">retry {{ schedule.retryPolicy.maxAttempts }}x / {{ schedule.retryPolicy.backoffMs }}ms</span>
-                  <span v-if="schedule.nextRunAt">next {{ schedule.nextRunAt }}</span>
-                  <div v-if="schedule.runs[0]" class="workflow-progress">
-                    <span>{{ schedule.runs[0].status }}</span>
-                    <span v-if="schedule.runs[0].attempts">attempts {{ schedule.runs[0].attempts }}</span>
-                    <span>scheduled {{ schedule.runs[0].scheduledFor }}</span>
-                    <span v-if="schedule.runs[0].finishedAt">finished {{ schedule.runs[0].finishedAt }}</span>
-                    <span v-if="schedule.runs[0].reason">reason {{ schedule.runs[0].reason }}</span>
-                    <span v-if="schedule.runs[0].workflowRunId">workflow {{ schedule.runs[0].workflowRunId.slice(0, 8) }}</span>
-                    <span v-if="schedule.runs[0].agentRunId">agent {{ schedule.runs[0].agentRunId.slice(0, 8) }}</span>
-                  </div>
-                  <Button v-if="schedule.runs[0]?.status === 'queued' || schedule.runs[0]?.status === 'running'" variant="outline" size="xs" @click.stop="abortScheduleRun(schedule.runs[0].id).catch((error) => addMessage('error', errorMessage(error)))">Abort</Button>
-                  <p v-if="schedule.runs[0]?.error">{{ schedule.runs[0].error }}</p>
-                </div>
-              </div>
-              <p v-else class="empty-text">No schedule runs yet.</p>
-            </section>
-
-            <section class="side-panel">
-              <div class="section-title">
-                <h2>Schedule Detail</h2>
-                <Badge v-if="selectedSchedule" :variant="selectedSchedule.status === 'active' ? 'secondary' : 'outline'">{{ selectedSchedule.status }}</Badge>
-              </div>
-              <div v-if="selectedSchedule" class="list-stack overflow-auto">
-                <div class="workflow-row">
-                  <strong>{{ selectedSchedule.name }}</strong>
-                  <span>{{ scheduleTriggerLabel(selectedSchedule) }}</span>
-                  <span>{{ scheduleActionLabel(selectedSchedule.action) }}</span>
-                  <span v-if="selectedSchedule.nextRunAt">next {{ selectedSchedule.nextRunAt }}</span>
-                  <span v-if="isLoadingScheduleRuns">Loading...</span>
-                </div>
-                <div class="workflow-row">
-                  <div class="section-title">
-                    <strong>Run History</strong>
-                    <span>{{ scheduleRuns.length }}</span>
-                  </div>
-                  <div v-if="scheduleRuns.length" class="list-stack">
-                    <div
-                      v-for="run in scheduleRuns.slice(0, 10)"
-                      :key="run.id"
-                      class="compact-row cursor-pointer"
-                      :class="run.id === selectedScheduleRunId ? 'border-primary/50 bg-primary/5' : ''"
-                      @click="loadScheduleRunDetail(run.id).catch((error) => addMessage('error', errorMessage(error)))"
-                    >
-                      <div class="min-w-0">
-                        <strong>{{ run.id.slice(0, 8) }} 路 {{ run.status }}</strong>
-                        <span>scheduled {{ run.scheduledFor }}</span>
-                        <span v-if="run.attempts">attempts {{ run.attempts }}</span>
-                        <span v-if="run.reason">reason {{ run.reason }}</span>
-                      </div>
-                      <Button v-if="run.status === 'queued' || run.status === 'running'" variant="outline" size="xs" @click.stop="abortScheduleRun(run.id).catch((error) => addMessage('error', errorMessage(error)))">Abort</Button>
-                    </div>
-                  </div>
-                  <p v-else class="empty-text">No runs.</p>
-                </div>
-                <div v-if="selectedScheduleRun" class="workflow-row">
-                  <div class="section-title">
-                    <strong>Selected Run</strong>
-                    <Badge :variant="selectedScheduleRun.status === 'completed' ? 'secondary' : selectedScheduleRun.status === 'failed' || selectedScheduleRun.status === 'aborted' ? 'destructive' : 'outline'">{{ selectedScheduleRun.status }}</Badge>
-                  </div>
-                  <span>{{ selectedScheduleRun.id }}</span>
-                  <span>scheduled {{ selectedScheduleRun.scheduledFor }}</span>
-                  <span v-if="selectedScheduleRun.startedAt">started {{ selectedScheduleRun.startedAt }}</span>
-                  <span v-if="selectedScheduleRun.finishedAt">finished {{ selectedScheduleRun.finishedAt }}</span>
-                  <span v-if="selectedScheduleRun.attempts">attempts {{ selectedScheduleRun.attempts }}</span>
-                  <span v-if="selectedScheduleRun.workflowRunId">workflow {{ selectedScheduleRun.workflowRunId }}</span>
-                  <span v-if="selectedScheduleRun.agentRunId">agent {{ selectedScheduleRun.agentRunId }}</span>
-                  <p v-if="selectedScheduleRun.reason">{{ selectedScheduleRun.reason }}</p>
-                  <p v-if="selectedScheduleRun.error">{{ selectedScheduleRun.error }}</p>
-                  <div class="flex flex-wrap gap-2">
-                    <Button v-if="selectedScheduleRun.workflowRunId" variant="outline" size="xs" @click="loadWorkflowRunDetail(selectedScheduleRun.workflowRunId).catch((error) => addMessage('error', errorMessage(error)))">Open workflow</Button>
-                    <Button v-if="selectedScheduleRun.agentRunId" variant="outline" size="xs" @click="replayRunEvents(selectedScheduleRun.agentRunId).catch((error) => addMessage('error', errorMessage(error)))">Replay agent</Button>
-                  </div>
-                </div>
-              </div>
-              <p v-else class="empty-text">No schedule selected.</p>
-            </section>
-
-            <section class="side-panel">
-              <div class="section-title">
-                <h2>Workflow Runs</h2>
-                <Button variant="ghost" size="xs" @click="loadWorkflowRuns">Refresh</Button>
-              </div>
-              <div v-if="currentProjectWorkflowRuns.length" class="list-stack overflow-auto">
-                <div
-                  v-for="run in currentProjectWorkflowRuns.slice(0, 8)"
-                  :key="run.id"
-                  class="workflow-row cursor-pointer"
-                  :class="run.id === selectedWorkflowRunId ? 'border-primary/50 bg-primary/5' : ''"
-                  @click="loadWorkflowRunDetail(run.id).catch((error) => addMessage('error', errorMessage(error)))"
-                >
-                  <div class="flex items-center justify-between gap-2">
-                    <strong>{{ run.workflowName }}</strong>
-                    <Badge :variant="run.status === 'completed' ? 'secondary' : run.status === 'failed' || run.status === 'aborted' ? 'destructive' : 'outline'">{{ run.status }}</Badge>
-                  </div>
-                  <span>{{ run.id.slice(0, 8) }} · {{ run.startedAt }}</span>
-                  <span v-if="run.finishedAt">finished {{ run.finishedAt }}</span>
-                  <div class="workflow-progress">
-                    <span>{{ run.stages.length }} stages</span>
-                    <span>{{ run.tasks.length }} tasks</span>
-                    <span>{{ run.artifacts.length }} artifacts</span>
-                    <span v-if="run.linkedRunIds?.length">{{ run.linkedRunIds.length }} agent runs</span>
-                  </div>
-                  <p v-if="run.artifacts[0]?.content">{{ previewText(run.artifacts[0].content) }}</p>
-                  <Button v-if="run.status === 'queued' || run.status === 'running'" variant="outline" size="xs" @click.stop="abortWorkflowRun(run.id).catch((error) => addMessage('error', errorMessage(error)))">Abort</Button>
-                </div>
-              </div>
-              <p v-else class="empty-text">No workflow runs yet.</p>
-            </section>
-
-            <section class="side-panel">
-              <div class="section-title">
-                <h2>Workflow Detail</h2>
-                <Badge v-if="selectedWorkflowRun" :variant="selectedWorkflowRun.status === 'completed' ? 'secondary' : selectedWorkflowRun.status === 'failed' || selectedWorkflowRun.status === 'aborted' ? 'destructive' : 'outline'">{{ selectedWorkflowRun.status }}</Badge>
-              </div>
-              <div v-if="selectedWorkflowRun" class="list-stack overflow-auto">
-                <div class="workflow-row">
-                  <strong>{{ selectedWorkflowRun.workflowName }}</strong>
-                  <span>{{ selectedWorkflowRun.id }}</span>
-                  <span v-if="isLoadingWorkflowRunDetail">Loading...</span>
-                  <p v-if="selectedWorkflowRun.prompt">{{ selectedWorkflowRun.prompt }}</p>
-                  <p v-if="selectedWorkflowRun.error">{{ selectedWorkflowRun.error }}</p>
-                  <div v-if="selectedWorkflowRun.linkedRunIds?.length" class="workflow-progress">
-                    <span v-for="agentRunId in selectedWorkflowRun.linkedRunIds" :key="agentRunId">agent {{ agentRunId.slice(0, 8) }}</span>
-                  </div>
-                </div>
-
-                <div class="workflow-row">
-                  <div class="section-title">
-                    <strong>Stages</strong>
-                    <span>{{ workflowRunStages.length }}</span>
-                  </div>
-                  <div v-if="workflowStageRows.length" class="list-stack">
-                    <div v-for="row in workflowStageRows" :key="row.stage.id" class="compact-row">
-                      <div class="min-w-0">
-                        <strong>{{ row.stage.name }}</strong>
-                        <span>{{ row.stage.summary || row.stage.id }}</span>
-                        <span>{{ row.tasks.length }} tasks</span>
-                      </div>
-                      <Badge :variant="row.stage.status === 'completed' ? 'secondary' : row.stage.status === 'failed' || row.stage.status === 'aborted' ? 'destructive' : 'outline'">{{ row.stage.status }}</Badge>
-                    </div>
-                  </div>
-                  <p v-else class="empty-text">No stages.</p>
-                </div>
-
-                <div class="workflow-row">
-                  <div class="section-title">
-                    <strong>Tasks</strong>
-                    <span>{{ workflowRunTasks.length }}</span>
-                  </div>
-                  <div v-if="workflowRunTasks.length" class="list-stack">
-                    <div v-for="task in workflowRunTasks" :key="task.id" class="compact-row">
-                      <div class="min-w-0">
-                        <strong>{{ task.name }}</strong>
-                        <span>{{ task.id.slice(0, 12) }}</span>
-                        <span v-if="task.dependsOn?.length">depends {{ task.dependsOn.join(', ') }}</span>
-                        <span v-if="task.agentRunId">agent {{ task.agentRunId.slice(0, 8) }}</span>
-                        <span v-if="task.sessionId">session {{ task.sessionId.slice(0, 8) }}</span>
-                        <span v-if="task.attempts">attempts {{ task.attempts }}</span>
-                        <span v-if="task.artifactIds.length">{{ task.artifactIds.length }} artifacts</span>
-                        <p v-if="previewText(task.output ?? task.input, 120)">{{ previewText(task.output ?? task.input, 120) }}</p>
-                      </div>
-                      <Badge :variant="task.status === 'completed' ? 'secondary' : task.status === 'failed' || task.status === 'aborted' ? 'destructive' : 'outline'">{{ task.status }}</Badge>
-                    </div>
-                  </div>
-                  <p v-else class="empty-text">No tasks.</p>
-                  <p v-if="workflowUnstagedTasks.length" class="empty-text">{{ workflowUnstagedTasks.length }} unstaged tasks.</p>
-                </div>
-
-                <div class="workflow-row">
-                  <div class="section-title">
-                    <strong>Artifacts</strong>
-                    <span>{{ workflowRunArtifacts.length }}</span>
-                  </div>
-                  <div v-if="workflowRunArtifacts.length" class="list-stack">
-                    <div v-for="artifact in workflowRunArtifacts" :key="artifact.id" class="compact-row">
-                      <div class="min-w-0">
-                        <strong>{{ artifact.name }}</strong>
-                        <span v-if="artifact.taskId">task {{ artifact.taskId.slice(0, 12) }}</span>
-                        <span>{{ artifact.kind }} 路 {{ artifact.createdAt }}</span>
-                        <pre v-if="artifact.content !== undefined" class="mt-2 max-h-44 overflow-auto whitespace-pre-wrap rounded border p-2 text-xs">{{ previewText(artifact.content, 1200) }}</pre>
-                      </div>
-                    </div>
-                  </div>
-                  <p v-else class="empty-text">No artifacts.</p>
-                </div>
-              </div>
-              <p v-else class="empty-text">No workflow run selected.</p>
-            </section>
-
-            <section class="side-panel">
-              <div class="section-title">
-                <h2>Recent Runs</h2>
-                <Button variant="ghost" size="xs" @click="loadRuns">Refresh</Button>
-              </div>
-              <div v-if="runs.length" class="list-stack overflow-auto">
-                <div v-for="run in runs.slice(0, 10)" :key="run.id" class="compact-row">
-                  <div class="min-w-0">
-                    <strong>{{ run.id.slice(0, 8) }} · {{ run.status }}</strong>
-                    <span>{{ runEventCounts[run.id] ?? 0 }} events</span>
-                    <span>{{ run.prompt }}</span>
-                    <span v-if="run.error" class="text-destructive">{{ run.error }}</span>
-                  </div>
-                  <div class="flex flex-wrap justify-end gap-1">
-                    <Button v-if="run.status === 'running' || run.status === 'waiting_approval'" variant="outline" size="xs" @click="abortRun(run.id).catch((error) => addMessage('error', errorMessage(error)))">Abort</Button>
-                    <Button variant="outline" size="xs" @click="replayRunEvents(run.id).catch((error) => addMessage('error', errorMessage(error)))">Replay</Button>
-                  </div>
-                </div>
-              </div>
-              <p v-else class="empty-text">No runs yet.</p>
-            </section>
-
-            <section class="side-panel">
-              <div class="section-title">
-                <h2>Session Tree</h2>
-                <Button variant="ghost" size="xs" @click="loadSessionTree">Refresh</Button>
-              </div>
-              <div v-if="flatTree.length" class="list-stack overflow-auto">
-                <div v-for="{ entry, depth } in flatTree.slice(0, 30)" :key="entry.id" class="tree-row" :style="{ paddingLeft: `${8 + Math.min(depth * 12, 48)}px` }">
-                  <strong>{{ entry.role || entry.type }} · {{ entry.id.slice(0, 8) }}</strong>
-                  <span>{{ (entry.text || entry.timestamp || '').slice(0, 110) }}</span>
-                  <div class="flex gap-2">
-                    <Button variant="outline" size="xs" @click="forkFromEntry(entry.id, 'before').catch((error) => addMessage('error', errorMessage(error)))">Before</Button>
-                    <Button variant="outline" size="xs" @click="forkFromEntry(entry.id, 'at').catch((error) => addMessage('error', errorMessage(error)))">At</Button>
-                  </div>
-                </div>
-              </div>
-              <p v-else class="empty-text">Open a session first.</p>
-              <div class="mt-2 flex gap-2">
-                <input v-model="importPath" class="field-input min-w-0" placeholder="D:\\path\\session.jsonl" @keydown.enter="importSession().catch((error) => addMessage('error', errorMessage(error)))">
-                <Button variant="outline" size="sm" @click="importSession().catch((error) => addMessage('error', errorMessage(error)))">Import</Button>
-              </div>
-            </section>
-          </aside>
+    <aside v-if="!rightPanelCollapsed" class="inspector-pane">
+      <Tabs v-model="activeInspectorTab" class="h-full min-h-0">
+        <div class="inspector-header">
+          <TabsList class="w-full">
+            <TabsTrigger value="tasks">Tasks</TabsTrigger>
+            <TabsTrigger value="resources">Resources</TabsTrigger>
+            <TabsTrigger value="terminal">Terminal</TabsTrigger>
+            <TabsTrigger value="browser">Browser</TabsTrigger>
+            <TabsTrigger value="settings">Settings</TabsTrigger>
+          </TabsList>
         </div>
 
-        <footer class="border-border bg-background border-t p-4">
-          <div class="mx-auto grid max-w-5xl grid-cols-[minmax(0,1fr)_auto] gap-3 max-md:grid-cols-1">
-            <Textarea v-model="prompt" class="min-h-24 resize-y" @keydown.ctrl.enter.prevent="sendPrompt" @keydown.meta.enter.prevent="sendPrompt" />
-            <div class="flex items-end gap-2">
-              <Button variant="outline" :disabled="!isRunning" @click="abortPrompt">Abort</Button>
-              <Button variant="outline" :disabled="!canQueueSessionMessage" @click="queueSessionMessage('steer')">Steer</Button>
-              <Button variant="outline" :disabled="!canQueueSessionMessage" @click="queueSessionMessage('followUp')">Follow up</Button>
-              <Button :disabled="isRunning" @click="sendPrompt">Send</Button>
+        <TabsContent value="tasks" class="inspector-content">
+          <section class="side-panel">
+            <div class="section-title">
+              <h2>Workflow runs</h2>
+              <Button variant="ghost" size="xs" @click="loadWorkflowRuns">Refresh</Button>
             </div>
-          </div>
-        </footer>
-      </main>
-    </div>
+            <div v-if="currentProjectWorkflowRuns.length" class="list-stack">
+              <div
+                v-for="run in currentProjectWorkflowRuns.slice(0, 8)"
+                :key="run.id"
+                class="workflow-row cursor-pointer"
+                :class="run.id === selectedWorkflowRunId ? 'border-primary/50 bg-primary/5' : ''"
+                @click="loadWorkflowRunDetail(run.id).catch((error) => addMessage('error', errorMessage(error)))"
+              >
+                <div class="flex items-center justify-between gap-2">
+                  <strong>{{ run.workflowName }}</strong>
+                  <Badge :variant="run.status === 'completed' ? 'secondary' : run.status === 'failed' || run.status === 'aborted' ? 'destructive' : 'outline'">{{ run.status }}</Badge>
+                </div>
+                <span>{{ run.id.slice(0, 8) }} / {{ run.startedAt }}</span>
+                <div class="workflow-progress">
+                  <span>{{ run.tasks.length }} tasks</span>
+                  <span>{{ run.artifacts.length }} artifacts</span>
+                  <span v-if="run.linkedRunIds?.length">{{ run.linkedRunIds.length }} agents</span>
+                </div>
+                <Button v-if="run.status === 'queued' || run.status === 'running'" variant="outline" size="xs" @click.stop="abortWorkflowRun(run.id).catch((error) => addMessage('error', errorMessage(error)))">Abort</Button>
+              </div>
+            </div>
+            <p v-else class="empty-text">No workflow runs yet.</p>
+          </section>
+
+          <section class="side-panel">
+            <div class="section-title">
+              <h2>Workflow detail</h2>
+              <Badge v-if="selectedWorkflowRun" :variant="selectedWorkflowRun.status === 'completed' ? 'secondary' : selectedWorkflowRun.status === 'failed' || selectedWorkflowRun.status === 'aborted' ? 'destructive' : 'outline'">{{ selectedWorkflowRun.status }}</Badge>
+            </div>
+            <div v-if="selectedWorkflowRun" class="list-stack">
+              <div class="workflow-row">
+                <strong>{{ selectedWorkflowRun.workflowName }}</strong>
+                <span>{{ selectedWorkflowRun.id }}</span>
+                <span v-if="isLoadingWorkflowRunDetail">Loading...</span>
+                <p v-if="selectedWorkflowRun.error">{{ selectedWorkflowRun.error }}</p>
+              </div>
+              <div v-if="workflowStageRows.length" class="workflow-row">
+                <div class="section-title">
+                  <strong>Stages</strong>
+                  <span>{{ workflowRunStages.length }}</span>
+                </div>
+                <div v-for="row in workflowStageRows" :key="row.stage.id" class="compact-row">
+                  <div class="min-w-0">
+                    <strong>{{ row.stage.name }}</strong>
+                    <span>{{ row.stage.summary || row.stage.id }}</span>
+                    <span>{{ row.tasks.length }} tasks</span>
+                  </div>
+                  <Badge :variant="row.stage.status === 'completed' ? 'secondary' : row.stage.status === 'failed' || row.stage.status === 'aborted' ? 'destructive' : 'outline'">{{ row.stage.status }}</Badge>
+                </div>
+              </div>
+              <div v-for="task in workflowRunTasks" :key="task.id" class="compact-row">
+                <div class="min-w-0">
+                  <strong>{{ task.name }}</strong>
+                  <span v-if="task.dependsOn?.length">depends {{ task.dependsOn.join(', ') }}</span>
+                  <span v-if="task.agentRunId">agent {{ task.agentRunId.slice(0, 8) }}</span>
+                  <span v-if="task.attempts">attempts {{ task.attempts }}</span>
+                  <p v-if="previewText(task.output ?? task.input, 120)">{{ previewText(task.output ?? task.input, 120) }}</p>
+                </div>
+                <Badge :variant="task.status === 'completed' ? 'secondary' : task.status === 'failed' || task.status === 'aborted' ? 'destructive' : 'outline'">{{ task.status }}</Badge>
+              </div>
+              <div v-if="workflowRunArtifacts.length" class="workflow-row">
+                <div class="section-title">
+                  <strong>Artifacts</strong>
+                  <span>{{ workflowRunArtifacts.length }}</span>
+                </div>
+                <div v-for="artifact in workflowRunArtifacts" :key="artifact.id" class="artifact-preview">
+                  <strong>{{ artifact.name }}</strong>
+                  <span v-if="artifact.taskId">task {{ artifact.taskId.slice(0, 12) }}</span>
+                  <pre v-if="artifact.content !== undefined">{{ previewText(artifact.content, 900) }}</pre>
+                </div>
+              </div>
+              <p v-if="workflowUnstagedTasks.length" class="empty-text">{{ workflowUnstagedTasks.length }} unstaged tasks.</p>
+            </div>
+            <p v-else class="empty-text">No workflow run selected.</p>
+          </section>
+
+          <section class="side-panel">
+            <div class="section-title">
+              <h2>Schedule runs</h2>
+              <Button variant="ghost" size="xs" @click="loadSchedules">Refresh</Button>
+            </div>
+            <div v-if="currentProjectSchedules.length" class="list-stack">
+              <div
+                v-for="schedule in currentProjectSchedules.slice(0, 8)"
+                :key="schedule.id"
+                class="workflow-row cursor-pointer"
+                :class="schedule.id === selectedScheduleId ? 'border-primary/50 bg-primary/5' : ''"
+                @click="loadScheduleRuns(schedule.id).catch((error) => addMessage('error', errorMessage(error)))"
+              >
+                <div class="flex items-center justify-between gap-2">
+                  <strong>{{ schedule.name }}</strong>
+                  <Badge :variant="schedule.status === 'active' ? 'secondary' : 'outline'">{{ schedule.status }}</Badge>
+                </div>
+                <span>{{ scheduleTriggerLabel(schedule) }}</span>
+                <span>{{ scheduleActionLabel(schedule.action) }}</span>
+                <span v-if="schedule.nextRunAt">next {{ schedule.nextRunAt }}</span>
+                <div class="row-actions">
+                  <Button variant="outline" size="xs" @click.stop="editSchedule(schedule); activeWorkspace = 'schedule'">Edit</Button>
+                  <Button variant="outline" size="xs" @click.stop="triggerSchedule(schedule.id).catch((error) => addMessage('error', errorMessage(error)))">Run</Button>
+                  <Button v-if="schedule.status === 'active'" variant="ghost" size="xs" @click.stop="pauseSchedule(schedule.id).catch((error) => addMessage('error', errorMessage(error)))">Pause</Button>
+                  <Button v-else variant="ghost" size="xs" @click.stop="resumeSchedule(schedule.id).catch((error) => addMessage('error', errorMessage(error)))">Resume</Button>
+                  <Button variant="ghost" size="xs" @click.stop="deleteSchedule(schedule.id).catch((error) => addMessage('error', errorMessage(error)))">Delete</Button>
+                </div>
+              </div>
+            </div>
+            <p v-else class="empty-text">No schedules yet.</p>
+          </section>
+
+          <section class="side-panel">
+            <div class="section-title">
+              <h2>Schedule detail</h2>
+              <Badge v-if="selectedSchedule" :variant="selectedSchedule.status === 'active' ? 'secondary' : 'outline'">{{ selectedSchedule.status }}</Badge>
+            </div>
+            <div v-if="selectedSchedule" class="list-stack">
+              <div class="workflow-row">
+                <strong>{{ selectedSchedule.name }}</strong>
+                <span>{{ scheduleTriggerLabel(selectedSchedule) }}</span>
+                <span>{{ scheduleActionLabel(selectedSchedule.action) }}</span>
+                <span v-if="selectedSchedule.nextRunAt">next {{ selectedSchedule.nextRunAt }}</span>
+                <span v-if="isLoadingScheduleRuns">Loading...</span>
+              </div>
+              <div v-if="scheduleRuns.length" class="list-stack">
+                <div
+                  v-for="run in scheduleRuns.slice(0, 8)"
+                  :key="run.id"
+                  class="compact-row cursor-pointer"
+                  :class="run.id === selectedScheduleRunId ? 'border-primary/50 bg-primary/5' : ''"
+                  @click="loadScheduleRunDetail(run.id).catch((error) => addMessage('error', errorMessage(error)))"
+                >
+                  <div class="min-w-0">
+                    <strong>{{ run.id.slice(0, 8) }} / {{ run.status }}</strong>
+                    <span>scheduled {{ run.scheduledFor }}</span>
+                    <span v-if="run.attempts">attempts {{ run.attempts }}</span>
+                    <span v-if="run.reason">reason {{ run.reason }}</span>
+                  </div>
+                  <Button v-if="run.status === 'queued' || run.status === 'running'" variant="outline" size="xs" @click.stop="abortScheduleRun(run.id).catch((error) => addMessage('error', errorMessage(error)))">Abort</Button>
+                </div>
+              </div>
+              <div v-if="selectedScheduleRun" class="workflow-row">
+                <div class="section-title">
+                  <strong>Selected run</strong>
+                  <Badge :variant="selectedScheduleRun.status === 'completed' ? 'secondary' : selectedScheduleRun.status === 'failed' || selectedScheduleRun.status === 'aborted' ? 'destructive' : 'outline'">{{ selectedScheduleRun.status }}</Badge>
+                </div>
+                <span>{{ selectedScheduleRun.id }}</span>
+                <span>scheduled {{ selectedScheduleRun.scheduledFor }}</span>
+                <span v-if="selectedScheduleRun.workflowRunId">workflow {{ selectedScheduleRun.workflowRunId }}</span>
+                <span v-if="selectedScheduleRun.agentRunId">agent {{ selectedScheduleRun.agentRunId }}</span>
+                <p v-if="selectedScheduleRun.error">{{ selectedScheduleRun.error }}</p>
+              </div>
+            </div>
+            <p v-else class="empty-text">No schedule selected.</p>
+          </section>
+        </TabsContent>
+
+        <TabsContent value="resources" class="inspector-content">
+          <section class="side-panel">
+            <div class="section-title">
+              <h2>Runtime resources</h2>
+              <Button variant="ghost" size="xs" @click="loadDiagnostics">Refresh</Button>
+            </div>
+            <dl class="meta-grid">
+              <div><dt>SDK</dt><dd>{{ diagnostics?.sdk.version || 'loading' }}</dd></div>
+              <div><dt>Models</dt><dd>{{ diagnostics?.models.availableCount ?? 0 }}</dd></div>
+              <div><dt>Providers</dt><dd>{{ configuredProviders }}</dd></div>
+              <div><dt>Skills</dt><dd>{{ diagnostics?.resources.skills ?? 0 }}</dd></div>
+            </dl>
+            <p v-if="diagnostics?.gaps.length" class="text-destructive text-xs">{{ diagnostics.gaps.join(' / ') }}</p>
+          </section>
+
+          <section class="side-panel">
+            <div class="section-title">
+              <h2>Resource diagnostics</h2>
+              <Badge variant="outline">{{ resourceDiagnostics.length }}</Badge>
+            </div>
+            <div v-if="resourceDiagnostics.length" class="list-stack">
+              <div v-for="diagnostic in resourceDiagnostics.slice(0, 12)" :key="`${diagnostic.type}-${diagnostic.path || diagnostic.message}`" class="workflow-row">
+                <div class="flex items-center justify-between gap-2">
+                  <strong>{{ diagnostic.collision?.name || diagnostic.type }}</strong>
+                  <Badge :variant="diagnostic.type === 'error' || diagnostic.type === 'collision' ? 'destructive' : 'outline'">{{ diagnostic.type }}</Badge>
+                </div>
+                <p>{{ diagnostic.message }}</p>
+                <span v-if="diagnostic.path">{{ diagnostic.path }}</span>
+              </div>
+            </div>
+            <p v-else class="empty-text">No resource diagnostics.</p>
+          </section>
+
+          <section class="side-panel">
+            <div class="section-title">
+              <h2>Session tree</h2>
+              <Button variant="ghost" size="xs" @click="loadSessionTree">Refresh</Button>
+            </div>
+            <div v-if="flatTree.length" class="list-stack">
+              <div v-for="{ entry, depth } in flatTree.slice(0, 24)" :key="entry.id" class="tree-row" :style="{ paddingLeft: `${8 + Math.min(depth * 12, 48)}px` }">
+                <strong>{{ entry.role || entry.type }} / {{ entry.id.slice(0, 8) }}</strong>
+                <span>{{ (entry.text || entry.timestamp || '').slice(0, 110) }}</span>
+                <div class="row-actions">
+                  <Button variant="outline" size="xs" @click="forkFromEntry(entry.id, 'before').catch((error) => addMessage('error', errorMessage(error)))">Before</Button>
+                  <Button variant="outline" size="xs" @click="forkFromEntry(entry.id, 'at').catch((error) => addMessage('error', errorMessage(error)))">At</Button>
+                </div>
+              </div>
+            </div>
+            <p v-else class="empty-text">Open a session first.</p>
+            <div class="flex gap-2">
+              <input v-model="importPath" class="field-input min-w-0" placeholder="D:\\path\\session.jsonl" @keydown.enter="importSession().catch((error) => addMessage('error', errorMessage(error)))">
+              <Button variant="outline" size="sm" @click="importSession().catch((error) => addMessage('error', errorMessage(error)))">Import</Button>
+            </div>
+          </section>
+
+          <section class="side-panel">
+            <div class="section-title">
+              <h2>Stores</h2>
+              <Badge variant="outline">{{ storeDiagnostics.length }}</Badge>
+            </div>
+            <div v-if="storeDiagnostics.length" class="list-stack">
+              <div v-for="store in storeDiagnostics" :key="store.path" class="workflow-row">
+                <div class="flex items-center justify-between gap-2">
+                  <strong>{{ store.name }}</strong>
+                  <Badge :variant="store.ok ? 'secondary' : 'destructive'">{{ store.ok ? 'ok' : 'review' }}</Badge>
+                </div>
+                <span>{{ store.recordCount }} records / {{ store.exists ? 'exists' : 'missing' }}</span>
+                <span>{{ store.path }}</span>
+                <p v-if="store.error">{{ store.error }}</p>
+              </div>
+            </div>
+          </section>
+
+          <section v-if="blockedPackages.length" class="side-panel">
+            <div class="section-title">
+              <h2>Blocked packages</h2>
+              <Badge variant="destructive">{{ blockedPackages.length }}</Badge>
+            </div>
+            <div v-for="source in blockedPackages.slice(0, 8)" :key="source" class="workflow-row">
+              <strong>{{ source }}</strong>
+            </div>
+          </section>
+        </TabsContent>
+
+        <TabsContent value="terminal" class="inspector-content">
+          <section class="terminal-panel">
+            <div class="terminal-title">
+              <span>daemon events</span>
+              <Badge :variant="eventStatusVariant">{{ eventStreamStatus }}</Badge>
+            </div>
+            <pre>{{ terminalOutput }}</pre>
+          </section>
+          <section class="side-panel">
+            <div class="section-title">
+              <h2>Approvals</h2>
+              <Button variant="ghost" size="xs" @click="loadApprovals">Refresh</Button>
+            </div>
+            <div v-if="approvals.length" class="list-stack">
+              <div v-for="approval in approvals.slice(0, 8)" :key="approval.id" class="approval-row">
+                <div class="flex items-center justify-between gap-2">
+                  <strong>{{ approval.title }}</strong>
+                  <Badge :variant="approval.status === 'pending' ? 'destructive' : 'outline'">{{ approval.status }}</Badge>
+                </div>
+                <p>{{ approval.description }}</p>
+                <div v-if="approval.status === 'pending'" class="flex flex-wrap gap-2">
+                  <Button size="xs" @click="resolveApproval(approval, 'allow_once').catch((error) => addMessage('error', errorMessage(error)))">Allow once</Button>
+                  <Button variant="outline" size="xs" @click="resolveApproval(approval, 'allow_session').catch((error) => addMessage('error', errorMessage(error)))">Allow session</Button>
+                  <Button variant="destructive" size="xs" @click="resolveApproval(approval, 'deny').catch((error) => addMessage('error', errorMessage(error)))">Deny</Button>
+                </div>
+              </div>
+            </div>
+            <p v-else class="empty-text">No approvals yet.</p>
+          </section>
+        </TabsContent>
+
+        <TabsContent value="browser" class="inspector-content">
+          <section class="browser-panel">
+            <div class="browser-bar">
+              <input v-model="browserUrl" class="field-input" aria-label="Browser URL">
+            </div>
+            <iframe :src="browserUrl" title="Browser preview" />
+          </section>
+        </TabsContent>
+
+        <TabsContent value="settings" class="inspector-content">
+          <section class="side-panel">
+            <div class="section-title">
+              <h2>Auth</h2>
+              <Badge v-if="authStatus" variant="outline">{{ authStatus.source }}</Badge>
+            </div>
+            <label class="field-label">
+              API token
+              <input v-model="apiToken" class="field-input" type="password" placeholder="Optional ZUU_API_TOKEN" @keydown.enter="saveToken">
+            </label>
+            <div class="flex flex-wrap gap-2">
+              <Button variant="outline" size="sm" @click="saveToken">Save token</Button>
+              <Button variant="outline" size="sm" :disabled="!authStatus?.canRotate" @click="rotateAuthToken().catch((error) => addMessage('error', errorMessage(error)))">Rotate</Button>
+            </div>
+            <p v-if="authStatus" class="empty-text">{{ authStatus.tokenPreview }}{{ authStatus.tokenFile ? ` / ${authStatus.tokenFile}` : '' }}</p>
+            <div v-if="authStatus?.canRotate" class="project-create">
+              <input v-model="newAuthTokenActor" class="field-input min-w-0" placeholder="actor">
+              <select v-model="newAuthTokenScope" class="field-input min-w-0">
+                <option value="read">read</option>
+                <option value="admin">admin</option>
+              </select>
+              <input v-model="newAuthTokenExpiresAt" class="field-input min-w-0" type="datetime-local" aria-label="Token expires at">
+              <Button size="sm" @click="createAuthToken().catch((error) => addMessage('error', errorMessage(error)))">Create</Button>
+            </div>
+            <div v-if="authStatus?.tokens.length" class="list-stack">
+              <div v-for="token in authStatus.tokens" :key="token.id" class="workflow-row">
+                <div class="flex items-center justify-between gap-2">
+                  <div class="min-w-0">
+                    <div class="flex flex-wrap items-center gap-2">
+                      <Badge variant="outline">{{ token.scope }}</Badge>
+                      <Badge v-if="token.expired" variant="destructive">expired</Badge>
+                      <span>{{ token.actor }}</span>
+                    </div>
+                    <p class="empty-text">{{ token.tokenPreview }} / {{ token.id }}</p>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="xs"
+                    :disabled="token.scope === 'admin' && authAdminTokenCount <= 1"
+                    @click="revokeAuthToken(token.id).catch((error) => addMessage('error', errorMessage(error)))"
+                  >
+                    Revoke
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="side-panel">
+            <div class="section-title">
+              <h2>Session settings</h2>
+              <Badge variant="secondary">{{ currentSession?.messageCount ?? 0 }} messages</Badge>
+            </div>
+            <label class="field-label">
+              Session name
+              <input v-model="sessionName" class="field-input">
+            </label>
+            <label class="field-label">
+              Available model
+              <select v-model="selectedModel" class="field-input" @change="chooseModel">
+                <option value="">Use manual model</option>
+                <option v-for="model in models" :key="`${model.provider}/${model.id}`" :value="`${model.provider}/${model.id}`">{{ model.provider }} / {{ model.label || model.id }}</option>
+              </select>
+            </label>
+            <div class="grid grid-cols-2 gap-2">
+              <label class="field-label">
+                Provider
+                <input v-model="provider" class="field-input" placeholder="deepseek">
+              </label>
+              <label class="field-label">
+                Model
+                <input v-model="modelName" class="field-input" placeholder="deepseek-chat">
+              </label>
+            </div>
+            <label class="field-label">
+              Thinking
+              <select v-model="thinkingLevel" class="field-input">
+                <option value="off">off</option>
+                <option value="low">low</option>
+                <option value="medium">medium</option>
+                <option value="high">high</option>
+              </select>
+            </label>
+            <div class="tool-grid">
+              <label v-for="tool in toolChoices" :key="tool" class="tool-toggle">
+                <input v-model="selectedTools[tool]" type="checkbox">
+                <span>{{ tool }}</span>
+              </label>
+            </div>
+            <div class="flex flex-wrap gap-2">
+              <Button variant="outline" size="sm" :disabled="!currentSession" @click="saveCurrentSession().catch((error) => addMessage('error', errorMessage(error)))">Save session</Button>
+              <Button variant="ghost" size="sm" :disabled="!currentSession || currentSession.isStreaming" @click="closeCurrentSession().catch((error) => addMessage('error', errorMessage(error)))">Close</Button>
+              <Button variant="outline" size="sm" :disabled="isSmokingModel" @click="smokeModel().catch((error) => addMessage('error', errorMessage(error)))">{{ isSmokingModel ? 'Testing' : 'Smoke test' }}</Button>
+            </div>
+            <p v-if="modelSmoke" :class="modelSmoke.ok ? 'empty-text' : 'text-destructive text-xs'">
+              {{ modelSmoke.ok ? `run ${modelSmoke.runId?.slice(0, 8) || 'n/a'} / ${modelSmoke.durationMs}ms` : modelSmoke.error || 'model smoke failed' }}
+            </p>
+          </section>
+
+          <section class="side-panel">
+            <div class="section-title">
+              <h2>Project settings</h2>
+              <Badge variant="outline">{{ projects.length }}</Badge>
+            </div>
+            <div class="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
+              <input v-model="projectName" class="field-input min-w-0" placeholder="Project name" @keydown.enter="updateProject().catch((error) => addMessage('error', errorMessage(error)))">
+              <Button variant="outline" size="sm" @click="updateProject().catch((error) => addMessage('error', errorMessage(error)))">Save</Button>
+            </div>
+            <input v-model="projectCwd" class="field-input" placeholder="D:\code\personal-project\zuu">
+            <Button variant="ghost" size="sm" class="w-fit" :disabled="currentProject?.id === 'default'" @click="deleteProject().catch((error) => addMessage('error', errorMessage(error)))">Delete project</Button>
+            <div class="project-create">
+              <input v-model="newProjectName" class="field-input min-w-0" placeholder="New project">
+              <input v-model="newProjectCwd" class="field-input min-w-0" placeholder="cwd">
+              <Button size="sm" @click="createProject().catch((error) => addMessage('error', errorMessage(error)))">Create</Button>
+            </div>
+          </section>
+
+          <section class="side-panel">
+            <div class="section-title">
+              <h2>Packages</h2>
+              <Badge variant="outline">{{ packages.length }}</Badge>
+            </div>
+            <div v-if="packages.length" class="list-stack">
+              <div v-for="item in packages" :key="item.source" class="compact-row">
+                <div class="min-w-0">
+                  <strong>{{ item.source }}</strong>
+                  <span>{{ item.scope }} / {{ item.status }} / {{ item.trustStatus }}</span>
+                </div>
+                <div class="row-actions">
+                  <Button v-if="!item.trusted" variant="outline" size="xs" @click="trustPackage(item.source).catch((error) => addMessage('error', errorMessage(error)))">Trust</Button>
+                  <Button v-else variant="ghost" size="xs" @click="revokePackageTrust(item.source).catch((error) => addMessage('error', errorMessage(error)))">Revoke</Button>
+                  <Button v-if="item.status === 'installed'" variant="outline" size="xs" :disabled="!item.trusted || isPackageOperating(item.source)" @click="updatePackage(item.source).catch((error) => addMessage('error', errorMessage(error)))">Update</Button>
+                  <Button v-if="item.status !== 'installed'" variant="outline" size="xs" :disabled="!item.trusted || isPackageOperating(item.source)" @click="installPackage(item.source).catch((error) => addMessage('error', errorMessage(error)))">Install</Button>
+                  <Button variant="ghost" size="xs" :disabled="isPackageOperating(item.source)" @click="removePackage(item.source).catch((error) => addMessage('error', errorMessage(error)))">Remove</Button>
+                </div>
+              </div>
+            </div>
+            <p v-else class="empty-text">No packages configured.</p>
+            <div class="flex gap-2">
+              <input v-model="packageSource" class="field-input min-w-0" placeholder="npm:@agwab/pi-workflow@0.84.1" @keydown.enter="addPackage().catch((error) => addMessage('error', errorMessage(error)))">
+              <Button variant="outline" size="sm" @click="addPackage().catch((error) => addMessage('error', errorMessage(error)))">Add</Button>
+            </div>
+          </section>
+
+          <section class="side-panel">
+            <div class="section-title">
+              <h2>Package ops</h2>
+              <Badge v-if="runningPackageOperations.length" variant="secondary">{{ runningPackageOperations.length }} running</Badge>
+            </div>
+            <div v-if="packageOperations.length" class="list-stack">
+              <div v-for="operation in packageOperations.slice(0, 8)" :key="operation.id" class="workflow-row">
+                <div class="flex items-center justify-between gap-2">
+                  <strong>{{ operation.source }}</strong>
+                  <Badge :variant="operation.status === 'done' ? 'secondary' : operation.status === 'error' ? 'destructive' : 'outline'">{{ operation.status }}</Badge>
+                </div>
+                <span>{{ operation.action }} / {{ operation.startedAt }}</span>
+                <p v-if="packageOperationMessage(operation)">{{ packageOperationMessage(operation) }}</p>
+                <span v-if="latestPackageOperation(operation.source)">latest {{ latestPackageOperation(operation.source)?.status }}</span>
+              </div>
+            </div>
+            <p v-else class="empty-text">No package operations yet.</p>
+          </section>
+
+          <section class="side-panel">
+            <div class="section-title">
+              <h2>Audit</h2>
+              <Button variant="ghost" size="xs" @click="loadAuditEvents">Refresh</Button>
+            </div>
+            <div class="grid grid-cols-3 gap-2">
+              <select v-model="auditAction" class="field-input">
+                <option value="">Any action</option>
+                <option value="api.read">api.read</option>
+                <option value="api.mutate">api.mutate</option>
+                <option value="auth.rotate">auth.rotate</option>
+                <option value="auth.token_create">auth.token_create</option>
+                <option value="auth.token_revoke">auth.token_revoke</option>
+                <option value="approval.resolve">approval.resolve</option>
+                <option value="package.add">package.add</option>
+                <option value="package.install">package.install</option>
+                <option value="package.update">package.update</option>
+                <option value="package.remove">package.remove</option>
+                <option value="package.trust">package.trust</option>
+                <option value="package.revoke_trust">package.revoke_trust</option>
+              </select>
+              <select v-model="auditOutcome" class="field-input">
+                <option value="">Any outcome</option>
+                <option value="success">success</option>
+                <option value="failure">failure</option>
+              </select>
+              <select v-model="auditAuthScope" class="field-input">
+                <option value="">Any scope</option>
+                <option value="admin">admin</option>
+                <option value="read">read</option>
+              </select>
+            </div>
+            <input v-model="auditTarget" class="field-input" placeholder="Target contains" @keydown.enter="loadAuditEvents">
+            <div class="grid grid-cols-2 gap-2">
+              <input v-model="auditAuthActor" class="field-input" placeholder="Auth actor" @keydown.enter="loadAuditEvents">
+              <input v-model="auditAuthTokenId" class="field-input" placeholder="Auth token id" @keydown.enter="loadAuditEvents">
+            </div>
+            <div class="grid grid-cols-2 gap-2">
+              <input v-model="auditSince" class="field-input" type="datetime-local" aria-label="Audit since" @keydown.enter="loadAuditEvents">
+              <input v-model="auditUntil" class="field-input" type="datetime-local" aria-label="Audit until" @keydown.enter="loadAuditEvents">
+            </div>
+            <div v-if="auditEvents.length" class="list-stack">
+              <div v-for="event in auditEvents.slice(0, 8)" :key="event.id" class="workflow-row">
+                <div class="flex items-center justify-between gap-2">
+                  <strong>{{ event.action }}</strong>
+                  <Badge :variant="event.outcome === 'success' ? 'secondary' : 'destructive'">{{ event.outcome }}</Badge>
+                </div>
+                <span>{{ event.createdAt }}</span>
+                <span v-if="event.details?.authScope">{{ event.details.authScope }}</span>
+                <span v-if="event.details?.authActor">{{ event.details.authActor }}</span>
+                <span v-if="event.details?.authTokenId">{{ event.details.authTokenId }}</span>
+                <p v-if="event.target">{{ event.target }}</p>
+              </div>
+            </div>
+            <p v-else class="empty-text">No audit events yet.</p>
+          </section>
+        </TabsContent>
+      </Tabs>
+    </aside>
   </div>
 </template>
