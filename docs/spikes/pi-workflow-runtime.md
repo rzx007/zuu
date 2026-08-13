@@ -86,6 +86,8 @@ ZUU_PI_WORKFLOW_BASE_URL=http://127.0.0.1:3001 pnpm check:pi-workflow
 ZUU_API_TOKEN=<token> pnpm check:pi-workflow
 ```
 
+未显式设置 `ZUU_API_TOKEN` 时，检查脚本会读取当前 `ZUU_AGENT_DIR` 下的本地 admin token；默认路径是 `.zuu/pi-agent/auth-token.json`，脚本不会打印原始 token。
+
 期望输出：
 
 ```text
