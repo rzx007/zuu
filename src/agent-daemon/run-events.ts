@@ -1,29 +1,10 @@
 import type { EventStreamQuery, PromptStreamEvent } from "@zuu/client";
-import { JsonFileStore } from "./json-file-store";
-import { compareEvents, eventsAfter, isPromptStreamEvent, matchesEventQuery, snapshotEvent } from "./run-event-query";
+import { loadRunEventRecords, saveRunEventRecords, type RunEventRecord } from "./run-event-records";
+import { compareEvents, eventsAfter, matchesEventQuery, snapshotEvent } from "./run-event-query";
 
-const RUN_EVENT_HISTORY_LIMIT = 200;
 const RUN_EVENT_LIMIT = 1_000;
 
-interface RunEventRecord {
-  runId: string;
-  updatedAt: string;
-  events: PromptStreamEvent[];
-}
-
 export type RunEventDraft = Omit<PromptStreamEvent, "id" | "createdAt">;
-
-function isRunEventRecord(value: unknown): value is RunEventRecord {
-  return Boolean(
-    value &&
-      typeof value === "object" &&
-      "runId" in value &&
-      "updatedAt" in value &&
-      "events" in value &&
-      Array.isArray((value as { events?: unknown }).events) &&
-      (value as { events: unknown[] }).events.every(isPromptStreamEvent),
-  );
-}
 
 export class RunEventStore {
   private readonly records: Map<string, RunEventRecord>;
@@ -79,28 +60,6 @@ export class RunEventStore {
   private persist() {
     saveRunEventRecords(this.path, [...this.records.values()].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)));
   }
-}
-
-function loadRunEventRecords(path: string): RunEventRecord[] {
-  return createRunEventStore(path).load(Array.isArray).filter(isRunEventRecord);
-}
-
-function saveRunEventRecords(path: string, records: RunEventRecord[]) {
-  createRunEventStore(path).save(records.slice(0, RUN_EVENT_HISTORY_LIMIT));
-}
-
-function createRunEventStore(path: string) {
-  return new JsonFileStore<unknown[]>({
-    name: "run-events",
-    path,
-    defaultValue: [],
-    countRecords: (value) => value.reduce<number>((count, record) => count + countRecordEvents(record), 0),
-  });
-}
-
-function countRecordEvents(value: unknown) {
-  if (!value || typeof value !== "object" || !("events" in value)) return 0;
-  return Array.isArray(value.events) ? value.events.length : 0;
 }
 
 function inferNextSequence(events: PromptStreamEvent[]) {
