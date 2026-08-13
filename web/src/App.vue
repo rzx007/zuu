@@ -4,7 +4,6 @@ import {
   createZuuClient,
   type Approval,
   type ApprovalDecision,
-  type CreateScheduleRequest,
   type Diagnostics,
   type ModelSmokeResponse,
   type ModelSummary,
@@ -12,10 +11,6 @@ import {
   type PromptStreamEvent,
   type ProjectSummary,
   type RunSummary,
-  type Schedule,
-  type ScheduleAction,
-  type ScheduleOverlapPolicy,
-  type ScheduleRun,
   type SessionSummary,
   type SessionTreeEntry,
   type StoredSessionSummary,
@@ -33,12 +28,12 @@ import {
   previewText,
   scheduleActionLabel,
   scheduleTriggerLabel,
-  toDatetimeLocal,
 } from '@/lib/format'
 import { toLiveEventItem, type LiveEventItem } from '@/lib/live-events'
 import { createPromptModel, formatPromptModel, parseModelSelection } from '@/lib/model-selection'
 import { usePackagePanel } from '@/lib/package-panel'
 import { createRecentIdSet } from '@/lib/recent-ids'
+import { useSchedulePanel } from '@/lib/schedule-panel'
 import { useSecurityPanel } from '@/lib/security-panel'
 import { useWorkflowPanel } from '@/lib/workflow-panel'
 
@@ -81,28 +76,10 @@ const sessionTree = ref<SessionTreeEntry[]>([])
 const importPath = ref('')
 const runs = ref<RunSummary[]>([])
 const approvals = ref<Approval[]>([])
-const schedules = ref<Schedule[]>([])
-const selectedScheduleId = ref('')
-const selectedScheduleRunId = ref('')
-const scheduleRuns = ref<ScheduleRun[]>([])
-const scheduleName = ref('Scheduled Zuu run')
-const scheduleKind = ref<'once' | 'interval' | 'cron'>('once')
-const scheduleRunAt = ref(toDatetimeLocal(new Date(Date.now() + 10 * 60_000)))
-const scheduleEveryMinutes = ref(30)
-const scheduleCron = ref('*/5 * * * *')
-const scheduleTimezone = ref(Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC')
-const scheduleActionType = ref<'workflow' | 'prompt'>('workflow')
-const scheduleOverlapPolicy = ref<ScheduleOverlapPolicy>('skip')
-const scheduleMisfirePolicy = ref<'skip' | 'run_once'>('skip')
-const scheduleRetryAttempts = ref(1)
-const scheduleRetryBackoffMs = ref(0)
-const schedulePrompt = ref('Run a scheduled Zuu status check and summarize the result.')
-const editingScheduleId = ref('')
 const messages = ref<MessageItem[]>([])
 const isRunning = ref(false)
 const isRefreshing = ref(false)
 const isSmokingModel = ref(false)
-const isLoadingScheduleRuns = ref(false)
 const controller = ref<AbortController>()
 const runEventCounts = reactive<Record<string, number>>({})
 const liveEvents = ref<LiveEventItem[]>([])
@@ -172,6 +149,55 @@ const {
   addMessage,
 })
 const {
+  selectedScheduleId,
+  selectedScheduleRunId,
+  scheduleRuns,
+  scheduleName,
+  scheduleKind,
+  scheduleRunAt,
+  scheduleEveryMinutes,
+  scheduleCron,
+  scheduleTimezone,
+  scheduleActionType,
+  scheduleOverlapPolicy,
+  scheduleMisfirePolicy,
+  scheduleRetryAttempts,
+  scheduleRetryBackoffMs,
+  schedulePrompt,
+  editingScheduleId,
+  isLoadingScheduleRuns,
+  currentProjectSchedules,
+  selectedSchedule,
+  selectedScheduleRun,
+  loadSchedules,
+  loadScheduleRuns,
+  loadScheduleRunDetail,
+  createSchedule,
+  editSchedule,
+  cancelScheduleEdit,
+  pauseSchedule,
+  resumeSchedule,
+  triggerSchedule,
+  deleteSchedule,
+  abortScheduleRun,
+} = useSchedulePanel({
+  getClient: () => client,
+  currentProjectId,
+  selectedWorkflowId,
+  promptContext: () => ({
+    sessionId: currentSession.value?.id,
+    sessionName: sessionName.value.trim() || undefined,
+    prompt: prompt.value.trim(),
+    thinkingLevel: thinkingLevel.value,
+    tools: activeTools.value,
+    model: selectedModelRequest(),
+    modelLabel: selectedModelLabel(),
+  }),
+  addMessage,
+  loadRuns,
+  loadWorkflowRuns,
+})
+const {
   packages,
   packageOperations,
   packageSource,
@@ -206,15 +232,6 @@ const storeDiagnostics = computed(() => diagnostics.value?.resources.stores || [
 const currentProject = computed(() => projects.value.find((project) => project.id === currentProjectId()))
 const currentProjectName = computed(() => currentProject.value?.name || currentProjectId())
 const currentProjectCwd = computed(() => currentProject.value?.cwd || '')
-const currentProjectSchedules = computed(() =>
-  schedules.value.filter((schedule) => schedule.action.projectId === currentProjectId()),
-)
-const selectedSchedule = computed(() =>
-  currentProjectSchedules.value.find((schedule) => schedule.id === selectedScheduleId.value),
-)
-const selectedScheduleRun = computed(() =>
-  scheduleRuns.value.find((run) => run.id === selectedScheduleRunId.value),
-)
 const eventStatusVariant = computed(() => {
   if (eventStreamStatus.value === 'live') return 'secondary'
   if (eventStreamStatus.value === 'error') return 'destructive'
@@ -417,64 +434,6 @@ async function loadApprovals() {
   approvals.value = (await client.listApprovals()).approvals
 }
 
-async function loadSchedules() {
-  schedules.value = (await client.listProjectSchedules(currentProjectId())).schedules
-  const nextScheduleId =
-    currentProjectSchedules.value.find((schedule) => schedule.id === selectedScheduleId.value)?.id ||
-    currentProjectSchedules.value[0]?.id ||
-    ''
-  if (!nextScheduleId) {
-    clearScheduleRunDetail()
-    return
-  }
-  await loadScheduleRuns(nextScheduleId)
-}
-
-function clearScheduleRunDetail() {
-  selectedScheduleId.value = ''
-  selectedScheduleRunId.value = ''
-  scheduleRuns.value = []
-}
-
-async function loadScheduleRuns(scheduleId = selectedScheduleId.value) {
-  if (!scheduleId) {
-    clearScheduleRunDetail()
-    return
-  }
-
-  const projectId = currentProjectId()
-  selectedScheduleId.value = scheduleId
-  isLoadingScheduleRuns.value = true
-  try {
-    const response = await client.listProjectScheduleRuns(projectId, scheduleId)
-    if (selectedScheduleId.value !== scheduleId || currentProjectId() !== projectId) return
-    scheduleRuns.value = response.runs
-    const nextRunId = response.runs.find((run) => run.id === selectedScheduleRunId.value)?.id || response.runs[0]?.id || ''
-    selectedScheduleRunId.value = nextRunId
-    if (nextRunId) {
-      await loadScheduleRunDetail(nextRunId)
-    }
-  } finally {
-    if (selectedScheduleId.value === scheduleId) {
-      isLoadingScheduleRuns.value = false
-    }
-  }
-}
-
-async function loadScheduleRunDetail(runId = selectedScheduleRunId.value) {
-  if (!runId) {
-    selectedScheduleRunId.value = ''
-    return
-  }
-  const projectId = currentProjectId()
-  selectedScheduleRunId.value = runId
-  const response = await client.getProjectScheduleRun(projectId, runId)
-  if (selectedScheduleRunId.value !== runId || currentProjectId() !== projectId) return
-  scheduleRuns.value = [response.run, ...scheduleRuns.value.filter((run) => run.id !== response.run.id)].sort((a, b) =>
-    (b.startedAt || b.scheduledFor).localeCompare(a.startedAt || a.scheduledFor),
-  )
-}
-
 async function refreshAll() {
   isRefreshing.value = true
   try {
@@ -665,145 +624,6 @@ async function resolveApproval(approval: Approval, decision: ApprovalDecision) {
   addMessage('event', `${decision}: ${result.approval.title}`)
   await Promise.all([loadApprovals(), loadRuns()])
   await loadAuditEvents()
-}
-
-function scheduleAction(): ScheduleAction | undefined {
-  if (scheduleActionType.value === 'workflow') {
-    if (!selectedWorkflowId.value) return undefined
-    return {
-      type: 'workflow',
-      workflowId: selectedWorkflowId.value,
-      projectId: currentProjectId(),
-      sessionId: currentSession.value?.id,
-      prompt: schedulePrompt.value.trim() || undefined,
-      inputs: {
-        tools: activeTools.value,
-        model: selectedModelLabel(),
-      },
-    }
-  }
-
-  return {
-    type: 'prompt',
-    prompt: schedulePrompt.value.trim() || prompt.value.trim(),
-    projectId: currentProjectId(),
-    sessionId: currentSession.value?.id,
-    name: sessionName.value.trim() || undefined,
-    thinkingLevel: thinkingLevel.value,
-    tools: activeTools.value,
-    model: selectedModelRequest(),
-  }
-}
-
-async function createSchedule() {
-  const action = scheduleAction()
-  if (!action) return
-  const everyMinutes = Math.max(1, Number(scheduleEveryMinutes.value) || 1)
-  const cronTimezone = scheduleTimezone.value.trim()
-  if (scheduleKind.value === 'cron' && !cronTimezone) {
-    addMessage('error', 'cron schedule timezone is required')
-    return
-  }
-  const trigger = (() => {
-    if (scheduleKind.value === 'once') {
-      return { kind: 'once' as const, runAt: new Date(scheduleRunAt.value).toISOString() }
-    }
-    if (scheduleKind.value === 'interval') {
-      return { kind: 'interval' as const, everyMs: everyMinutes * 60_000 }
-    }
-    return {
-      kind: 'cron' as const,
-      cron: scheduleCron.value.trim() || '*/5 * * * *',
-      timezone: cronTimezone,
-    }
-  })()
-  const input: CreateScheduleRequest = {
-    name: scheduleName.value.trim() || undefined,
-    trigger,
-    action,
-    overlapPolicy: scheduleOverlapPolicy.value,
-    misfirePolicy: scheduleMisfirePolicy.value,
-    retryPolicy:
-      scheduleRetryAttempts.value > 1
-        ? {
-            maxAttempts: Math.min(5, Math.max(1, Number(scheduleRetryAttempts.value) || 1)),
-            backoffMs: Math.min(60_000, Math.max(0, Number(scheduleRetryBackoffMs.value) || 0)),
-          }
-        : undefined,
-  }
-  const result = editingScheduleId.value
-    ? await client.updateProjectSchedule(currentProjectId(), editingScheduleId.value, input)
-    : await client.createProjectSchedule(currentProjectId(), input)
-  addMessage('event', `schedule ${editingScheduleId.value ? 'updated' : 'created'}: ${result.schedule.name}`)
-  selectedScheduleId.value = result.schedule.id
-  editingScheduleId.value = ''
-  await loadSchedules()
-}
-
-function editSchedule(schedule: Schedule) {
-  editingScheduleId.value = schedule.id
-  scheduleName.value = schedule.name
-  scheduleKind.value = schedule.trigger.kind
-  if (schedule.trigger.kind === 'once') {
-    scheduleRunAt.value = toDatetimeLocal(new Date(schedule.trigger.runAt || Date.now()))
-  } else if (schedule.trigger.kind === 'interval') {
-    scheduleEveryMinutes.value = Math.max(1, Math.round((schedule.trigger.everyMs || 60_000) / 60_000))
-  } else {
-    scheduleCron.value = schedule.trigger.cron
-    scheduleTimezone.value = schedule.trigger.timezone
-  }
-  scheduleActionType.value = schedule.action.type
-  scheduleOverlapPolicy.value = schedule.overlapPolicy
-  scheduleMisfirePolicy.value = schedule.misfirePolicy
-  scheduleRetryAttempts.value = schedule.retryPolicy?.maxAttempts || 1
-  scheduleRetryBackoffMs.value = schedule.retryPolicy?.backoffMs || 0
-  if (schedule.action.type === 'workflow') {
-    selectedWorkflowId.value = schedule.action.workflowId
-    schedulePrompt.value = schedule.action.prompt || ''
-  } else {
-    schedulePrompt.value = schedule.action.prompt
-  }
-}
-
-function cancelScheduleEdit() {
-  editingScheduleId.value = ''
-}
-
-async function pauseSchedule(scheduleId: string) {
-  const result = await client.pauseProjectSchedule(currentProjectId(), scheduleId)
-  addMessage('event', `schedule paused: ${result.schedule.name}`)
-  await loadSchedules()
-}
-
-async function resumeSchedule(scheduleId: string) {
-  const result = await client.resumeProjectSchedule(currentProjectId(), scheduleId)
-  addMessage('event', `schedule active: ${result.schedule.name}`)
-  await loadSchedules()
-}
-
-async function triggerSchedule(scheduleId: string) {
-  const result = await client.triggerProjectSchedule(currentProjectId(), scheduleId)
-  addMessage('event', `schedule triggered: ${result.schedule.name}`)
-  selectedScheduleId.value = result.schedule.id
-  selectedScheduleRunId.value = result.schedule.runs[0]?.id || ''
-  await Promise.all([loadSchedules(), loadWorkflowRuns(), loadRuns()])
-}
-
-async function deleteSchedule(scheduleId: string) {
-  const result = await client.deleteProjectSchedule(currentProjectId(), scheduleId)
-  addMessage('event', `schedule deleted: ${result.schedule.name}`)
-  if (selectedScheduleId.value === result.schedule.id) {
-    clearScheduleRunDetail()
-  }
-  await loadSchedules()
-}
-
-async function abortScheduleRun(runId: string) {
-  const result = await client.abortProjectScheduleRun(currentProjectId(), runId)
-  addMessage('event', `schedule run ${result.run.status}: ${runId.slice(0, 8)}`)
-  selectedScheduleId.value = result.run.scheduleId
-  selectedScheduleRunId.value = result.run.id
-  await Promise.all([loadSchedules(), loadWorkflowRuns(), loadRuns()])
 }
 
 async function replayRunEvents(runId: string) {
