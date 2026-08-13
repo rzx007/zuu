@@ -942,11 +942,10 @@ V1 指标：
 ```text
 ZUU_HOST=127.0.0.1
 ZUU_PORT=8787
-ZUU_DATA_DIR=...
-ZUU_TOKEN=...
-ZUU_LOG_LEVEL=info
-ZUU_MAX_PROJECT_RUNS=4
-ZUU_MAX_SUBAGENTS=4
+ZUU_AGENT_DIR=.zuu/pi-agent
+ZUU_API_TOKEN=...
+ZUU_ALLOWED_CWD=D:\code\personal-project\zuu;D:\other\allowed\workspace
+ZUU_WORKFLOW_BACKEND=fake
 ```
 
 Provider API Key 继续遵循 Pi `ModelRuntime` 解析顺序。Client 永远不能读取 API Key。
