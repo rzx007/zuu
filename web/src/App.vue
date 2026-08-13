@@ -18,6 +18,9 @@ import {
 } from '@zuu/client'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
 import Conversation from '@/components/ai-elements/conversation/Conversation.vue'
@@ -110,6 +113,7 @@ const rightPanelCollapsed = ref(localStorage.getItem('zuu:right-panel-collapsed'
 const activeWorkspace = ref<'chat' | 'workflow' | 'schedule'>('chat')
 const activeInspectorTab = ref<'resources' | 'tasks' | 'terminal' | 'browser' | 'settings'>('tasks')
 const browserUrl = ref('http://localhost:3001/')
+const emptySelectValue = '__zuu_empty__'
 
 const toolChoices = TOOL_CHOICES
 const selectedTools = reactive(createDefaultToolSelection())
@@ -243,6 +247,32 @@ const {
   loadAuditEvents,
   loadDiagnostics,
   loadWorkflows,
+})
+
+const selectedModelOption = computed({
+  get: () => selectedModel.value || emptySelectValue,
+  set: (value) => {
+    selectedModel.value = value === emptySelectValue ? '' : String(value)
+    chooseModel()
+  },
+})
+const auditActionOption = computed({
+  get: () => auditAction.value || emptySelectValue,
+  set: (value) => {
+    auditAction.value = (value === emptySelectValue ? '' : String(value)) as typeof auditAction.value
+  },
+})
+const auditOutcomeOption = computed({
+  get: () => auditOutcome.value || emptySelectValue,
+  set: (value) => {
+    auditOutcome.value = (value === emptySelectValue ? '' : String(value)) as typeof auditOutcome.value
+  },
+})
+const auditAuthScopeOption = computed({
+  get: () => auditAuthScope.value || emptySelectValue,
+  set: (value) => {
+    auditAuthScope.value = (value === emptySelectValue ? '' : String(value)) as typeof auditAuthScope.value
+  },
 })
 
 const pendingApprovals = computed(() => approvals.value.filter((approval) => approval.status === 'pending'))
@@ -843,11 +873,16 @@ onUnmounted(() => {
           </div>
           <label class="field-label">
             Active project
-            <select v-model="selectedProjectId" class="field-input" @change="switchProject().catch((error) => addMessage('error', errorMessage(error)))">
-              <option v-for="project in projects" :key="project.id" :value="project.id">
-                {{ project.name }} / {{ project.status }}
-              </option>
-            </select>
+            <Select v-model="selectedProjectId" @update:model-value="switchProject().catch((error) => addMessage('error', errorMessage(error)))">
+              <SelectTrigger class="w-full">
+                <SelectValue placeholder="Active project" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem v-for="project in projects" :key="project.id" :value="project.id">
+                  {{ project.name }} / {{ project.status }}
+                </SelectItem>
+              </SelectContent>
+            </Select>
           </label>
           <p class="empty-text truncate">{{ currentProjectCwd || 'No project loaded.' }}</p>
         </section>
@@ -939,9 +974,14 @@ onUnmounted(() => {
         <div class="action-form">
           <label class="field-label">
             Definition
-            <select v-model="selectedWorkflowId" class="field-input">
-              <option v-for="workflow in workflows" :key="workflow.id" :value="workflow.id">{{ workflow.name }}</option>
-            </select>
+            <Select v-model="selectedWorkflowId">
+              <SelectTrigger class="w-full">
+                <SelectValue placeholder="Workflow definition" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem v-for="workflow in workflows" :key="workflow.id" :value="workflow.id">{{ workflow.name }}</SelectItem>
+              </SelectContent>
+            </Select>
           </label>
           <p v-if="selectedWorkflow" class="empty-text">{{ selectedWorkflow.description }}</p>
           <Textarea v-model="workflowPrompt" class="min-h-28" />
@@ -960,73 +1000,98 @@ onUnmounted(() => {
         <div class="action-form">
           <label class="field-label">
             Name
-            <input v-model="scheduleName" class="field-input">
+            <Input v-model="scheduleName" />
           </label>
           <div class="grid grid-cols-2 gap-2">
             <label class="field-label">
               Trigger
-              <select v-model="scheduleKind" class="field-input">
-                <option value="once">Once</option>
-                <option value="interval">Interval</option>
-                <option value="cron">Cron</option>
-              </select>
+              <Select v-model="scheduleKind">
+                <SelectTrigger class="w-full">
+                  <SelectValue placeholder="Trigger" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="once">Once</SelectItem>
+                  <SelectItem value="interval">Interval</SelectItem>
+                  <SelectItem value="cron">Cron</SelectItem>
+                </SelectContent>
+              </Select>
             </label>
             <label class="field-label">
               Action
-              <select v-model="scheduleActionType" class="field-input">
-                <option value="workflow">Workflow</option>
-                <option value="prompt">Prompt</option>
-              </select>
+              <Select v-model="scheduleActionType">
+                <SelectTrigger class="w-full">
+                  <SelectValue placeholder="Action" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="workflow">Workflow</SelectItem>
+                  <SelectItem value="prompt">Prompt</SelectItem>
+                </SelectContent>
+              </Select>
             </label>
           </div>
           <div class="grid grid-cols-2 gap-2">
             <label class="field-label">
               Overlap
-              <select v-model="scheduleOverlapPolicy" class="field-input">
-                <option value="skip">Skip</option>
-                <option value="queue">Queue</option>
-                <option value="parallel">Parallel</option>
-              </select>
+              <Select v-model="scheduleOverlapPolicy">
+                <SelectTrigger class="w-full">
+                  <SelectValue placeholder="Overlap" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="skip">Skip</SelectItem>
+                  <SelectItem value="queue">Queue</SelectItem>
+                  <SelectItem value="parallel">Parallel</SelectItem>
+                </SelectContent>
+              </Select>
             </label>
             <label class="field-label">
               Misfire
-              <select v-model="scheduleMisfirePolicy" class="field-input">
-                <option value="skip">Skip missed</option>
-                <option value="run_once">Run once</option>
-              </select>
+              <Select v-model="scheduleMisfirePolicy">
+                <SelectTrigger class="w-full">
+                  <SelectValue placeholder="Misfire" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="skip">Skip missed</SelectItem>
+                  <SelectItem value="run_once">Run once</SelectItem>
+                </SelectContent>
+              </Select>
             </label>
           </div>
           <div class="grid grid-cols-2 gap-2">
             <label class="field-label">
               Attempts
-              <input v-model.number="scheduleRetryAttempts" class="field-input" type="number" min="1" max="5">
+              <Input v-model.number="scheduleRetryAttempts" type="number" min="1" max="5" />
             </label>
             <label class="field-label">
               Backoff ms
-              <input v-model.number="scheduleRetryBackoffMs" class="field-input" type="number" min="0" max="60000" step="100">
+              <Input v-model.number="scheduleRetryBackoffMs" type="number" min="0" max="60000" step="100" />
             </label>
           </div>
           <label v-if="scheduleKind === 'once'" class="field-label">
             Run at
-            <input v-model="scheduleRunAt" class="field-input" type="datetime-local">
+            <Input v-model="scheduleRunAt" type="datetime-local" />
           </label>
           <label v-else-if="scheduleKind === 'interval'" class="field-label">
             Every minutes
-            <input v-model.number="scheduleEveryMinutes" class="field-input" type="number" min="1">
+            <Input v-model.number="scheduleEveryMinutes" type="number" min="1" />
           </label>
           <label v-else class="field-label">
             Cron
-            <input v-model="scheduleCron" class="field-input" placeholder="*/5 * * * *">
+            <Input v-model="scheduleCron" placeholder="*/5 * * * *" />
           </label>
           <label v-if="scheduleKind === 'cron'" class="field-label">
             Timezone
-            <input v-model="scheduleTimezone" class="field-input" placeholder="Asia/Shanghai">
+            <Input v-model="scheduleTimezone" placeholder="Asia/Shanghai" />
           </label>
           <label v-if="scheduleActionType === 'workflow'" class="field-label">
             Workflow
-            <select v-model="selectedWorkflowId" class="field-input">
-              <option v-for="workflow in workflows" :key="workflow.id" :value="workflow.id">{{ workflow.name }}</option>
-            </select>
+            <Select v-model="selectedWorkflowId">
+              <SelectTrigger class="w-full">
+                <SelectValue placeholder="Workflow" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem v-for="workflow in workflows" :key="workflow.id" :value="workflow.id">{{ workflow.name }}</SelectItem>
+              </SelectContent>
+            </Select>
           </label>
           <Textarea v-model="schedulePrompt" class="min-h-28" />
           <div class="flex flex-wrap gap-2">
@@ -1274,7 +1339,7 @@ onUnmounted(() => {
             </div>
             <p v-else class="empty-text">Open a session first.</p>
             <div class="flex gap-2">
-              <input v-model="importPath" class="field-input min-w-0" placeholder="D:\\path\\session.jsonl" @keydown.enter="importSession().catch((error) => addMessage('error', errorMessage(error)))">
+              <Input v-model="importPath" class="min-w-0" placeholder="D:\\path\\session.jsonl" @keydown.enter="importSession().catch((error) => addMessage('error', errorMessage(error)))" />
               <Button variant="outline" size="sm" @click="importSession().catch((error) => addMessage('error', errorMessage(error)))">Import</Button>
             </div>
           </section>
@@ -1360,7 +1425,7 @@ onUnmounted(() => {
             </div>
             <label class="field-label">
               API token
-              <input v-model="apiToken" class="field-input" type="password" placeholder="Optional ZUU_API_TOKEN" @keydown.enter="saveToken">
+              <Input v-model="apiToken" type="password" placeholder="Optional ZUU_API_TOKEN" @keydown.enter="saveToken" />
             </label>
             <div class="flex flex-wrap gap-2">
               <Button variant="outline" size="sm" @click="saveToken">Save token</Button>
@@ -1368,12 +1433,17 @@ onUnmounted(() => {
             </div>
             <p v-if="authStatus" class="empty-text">{{ authStatus.tokenPreview }}{{ authStatus.tokenFile ? ` / ${authStatus.tokenFile}` : '' }}</p>
             <div v-if="authStatus?.canRotate" class="project-create">
-              <input v-model="newAuthTokenActor" class="field-input min-w-0" placeholder="actor">
-              <select v-model="newAuthTokenScope" class="field-input min-w-0">
-                <option value="read">read</option>
-                <option value="admin">admin</option>
-              </select>
-              <input v-model="newAuthTokenExpiresAt" class="field-input min-w-0" type="datetime-local" aria-label="Token expires at">
+              <Input v-model="newAuthTokenActor" class="min-w-0" placeholder="actor" />
+              <Select v-model="newAuthTokenScope">
+                <SelectTrigger class="min-w-0">
+                  <SelectValue placeholder="scope" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="read">read</SelectItem>
+                  <SelectItem value="admin">admin</SelectItem>
+                </SelectContent>
+              </Select>
+              <Input v-model="newAuthTokenExpiresAt" class="min-w-0" type="datetime-local" aria-label="Token expires at" />
               <Button size="sm" @click="createAuthToken().catch((error) => addMessage('error', errorMessage(error)))">Create</Button>
             </div>
             <div v-if="authStatus?.tokens.length" class="list-stack">
@@ -1407,37 +1477,47 @@ onUnmounted(() => {
             </div>
             <label class="field-label">
               Session name
-              <input v-model="sessionName" class="field-input">
+              <Input v-model="sessionName" />
             </label>
             <label class="field-label">
               Available model
-              <select v-model="selectedModel" class="field-input" @change="chooseModel">
-                <option value="">Use manual model</option>
-                <option v-for="model in models" :key="`${model.provider}/${model.id}`" :value="`${model.provider}/${model.id}`">{{ model.provider }} / {{ model.label || model.id }}</option>
-              </select>
+              <Select v-model="selectedModelOption">
+                <SelectTrigger class="w-full">
+                  <SelectValue placeholder="Use manual model" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem :value="emptySelectValue">Use manual model</SelectItem>
+                  <SelectItem v-for="model in models" :key="`${model.provider}/${model.id}`" :value="`${model.provider}/${model.id}`">{{ model.provider }} / {{ model.label || model.id }}</SelectItem>
+                </SelectContent>
+              </Select>
             </label>
             <div class="grid grid-cols-2 gap-2">
               <label class="field-label">
                 Provider
-                <input v-model="provider" class="field-input" placeholder="deepseek">
+                <Input v-model="provider" placeholder="deepseek" />
               </label>
               <label class="field-label">
                 Model
-                <input v-model="modelName" class="field-input" placeholder="deepseek-chat">
+                <Input v-model="modelName" placeholder="deepseek-chat" />
               </label>
             </div>
             <label class="field-label">
               Thinking
-              <select v-model="thinkingLevel" class="field-input">
-                <option value="off">off</option>
-                <option value="low">low</option>
-                <option value="medium">medium</option>
-                <option value="high">high</option>
-              </select>
+              <Select v-model="thinkingLevel">
+                <SelectTrigger class="w-full">
+                  <SelectValue placeholder="Thinking" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="off">off</SelectItem>
+                  <SelectItem value="low">low</SelectItem>
+                  <SelectItem value="medium">medium</SelectItem>
+                  <SelectItem value="high">high</SelectItem>
+                </SelectContent>
+              </Select>
             </label>
             <div class="tool-grid">
               <label v-for="tool in toolChoices" :key="tool" class="tool-toggle">
-                <input v-model="selectedTools[tool]" type="checkbox">
+                <Switch v-model="selectedTools[tool]" size="sm" />
                 <span>{{ tool }}</span>
               </label>
             </div>
@@ -1457,14 +1537,14 @@ onUnmounted(() => {
               <Badge variant="outline">{{ projects.length }}</Badge>
             </div>
             <div class="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
-              <input v-model="projectName" class="field-input min-w-0" placeholder="Project name" @keydown.enter="updateProject().catch((error) => addMessage('error', errorMessage(error)))">
+              <Input v-model="projectName" class="min-w-0" placeholder="Project name" @keydown.enter="updateProject().catch((error) => addMessage('error', errorMessage(error)))" />
               <Button variant="outline" size="sm" @click="updateProject().catch((error) => addMessage('error', errorMessage(error)))">Save</Button>
             </div>
-            <input v-model="projectCwd" class="field-input" placeholder="D:\code\personal-project\zuu">
+            <Input v-model="projectCwd" placeholder="D:\code\personal-project\zuu" />
             <Button variant="ghost" size="sm" class="w-fit" :disabled="currentProject?.id === 'default'" @click="deleteProject().catch((error) => addMessage('error', errorMessage(error)))">Delete project</Button>
             <div class="project-create">
-              <input v-model="newProjectName" class="field-input min-w-0" placeholder="New project">
-              <input v-model="newProjectCwd" class="field-input min-w-0" placeholder="cwd">
+              <Input v-model="newProjectName" class="min-w-0" placeholder="New project" />
+              <Input v-model="newProjectCwd" class="min-w-0" placeholder="cwd" />
               <Button size="sm" @click="createProject().catch((error) => addMessage('error', errorMessage(error)))">Create</Button>
             </div>
           </section>
@@ -1491,7 +1571,7 @@ onUnmounted(() => {
             </div>
             <p v-else class="empty-text">No packages configured.</p>
             <div class="flex gap-2">
-              <input v-model="packageSource" class="field-input min-w-0" placeholder="npm:@agwab/pi-workflow@0.84.1" @keydown.enter="addPackage().catch((error) => addMessage('error', errorMessage(error)))">
+              <Input v-model="packageSource" class="min-w-0" placeholder="npm:@agwab/pi-workflow@0.84.1" @keydown.enter="addPackage().catch((error) => addMessage('error', errorMessage(error)))" />
               <Button variant="outline" size="sm" @click="addPackage().catch((error) => addMessage('error', errorMessage(error)))">Add</Button>
             </div>
           </section>
@@ -1521,40 +1601,55 @@ onUnmounted(() => {
               <Button variant="ghost" size="xs" @click="loadAuditEvents">Refresh</Button>
             </div>
             <div class="grid grid-cols-3 gap-2">
-              <select v-model="auditAction" class="field-input">
-                <option value="">Any action</option>
-                <option value="api.read">api.read</option>
-                <option value="api.mutate">api.mutate</option>
-                <option value="auth.rotate">auth.rotate</option>
-                <option value="auth.token_create">auth.token_create</option>
-                <option value="auth.token_revoke">auth.token_revoke</option>
-                <option value="approval.resolve">approval.resolve</option>
-                <option value="package.add">package.add</option>
-                <option value="package.install">package.install</option>
-                <option value="package.update">package.update</option>
-                <option value="package.remove">package.remove</option>
-                <option value="package.trust">package.trust</option>
-                <option value="package.revoke_trust">package.revoke_trust</option>
-              </select>
-              <select v-model="auditOutcome" class="field-input">
-                <option value="">Any outcome</option>
-                <option value="success">success</option>
-                <option value="failure">failure</option>
-              </select>
-              <select v-model="auditAuthScope" class="field-input">
-                <option value="">Any scope</option>
-                <option value="admin">admin</option>
-                <option value="read">read</option>
-              </select>
+              <Select v-model="auditActionOption">
+                <SelectTrigger class="w-full">
+                  <SelectValue placeholder="Any action" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem :value="emptySelectValue">Any action</SelectItem>
+                  <SelectItem value="api.read">api.read</SelectItem>
+                  <SelectItem value="api.mutate">api.mutate</SelectItem>
+                  <SelectItem value="auth.rotate">auth.rotate</SelectItem>
+                  <SelectItem value="auth.token_create">auth.token_create</SelectItem>
+                  <SelectItem value="auth.token_revoke">auth.token_revoke</SelectItem>
+                  <SelectItem value="approval.resolve">approval.resolve</SelectItem>
+                  <SelectItem value="package.add">package.add</SelectItem>
+                  <SelectItem value="package.install">package.install</SelectItem>
+                  <SelectItem value="package.update">package.update</SelectItem>
+                  <SelectItem value="package.remove">package.remove</SelectItem>
+                  <SelectItem value="package.trust">package.trust</SelectItem>
+                  <SelectItem value="package.revoke_trust">package.revoke_trust</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select v-model="auditOutcomeOption">
+                <SelectTrigger class="w-full">
+                  <SelectValue placeholder="Any outcome" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem :value="emptySelectValue">Any outcome</SelectItem>
+                  <SelectItem value="success">success</SelectItem>
+                  <SelectItem value="failure">failure</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select v-model="auditAuthScopeOption">
+                <SelectTrigger class="w-full">
+                  <SelectValue placeholder="Any scope" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem :value="emptySelectValue">Any scope</SelectItem>
+                  <SelectItem value="admin">admin</SelectItem>
+                  <SelectItem value="read">read</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
-            <input v-model="auditTarget" class="field-input" placeholder="Target contains" @keydown.enter="loadAuditEvents">
+            <Input v-model="auditTarget" placeholder="Target contains" @keydown.enter="loadAuditEvents" />
             <div class="grid grid-cols-2 gap-2">
-              <input v-model="auditAuthActor" class="field-input" placeholder="Auth actor" @keydown.enter="loadAuditEvents">
-              <input v-model="auditAuthTokenId" class="field-input" placeholder="Auth token id" @keydown.enter="loadAuditEvents">
+              <Input v-model="auditAuthActor" placeholder="Auth actor" @keydown.enter="loadAuditEvents" />
+              <Input v-model="auditAuthTokenId" placeholder="Auth token id" @keydown.enter="loadAuditEvents" />
             </div>
             <div class="grid grid-cols-2 gap-2">
-              <input v-model="auditSince" class="field-input" type="datetime-local" aria-label="Audit since" @keydown.enter="loadAuditEvents">
-              <input v-model="auditUntil" class="field-input" type="datetime-local" aria-label="Audit until" @keydown.enter="loadAuditEvents">
+              <Input v-model="auditSince" type="datetime-local" aria-label="Audit since" @keydown.enter="loadAuditEvents" />
+              <Input v-model="auditUntil" type="datetime-local" aria-label="Audit until" @keydown.enter="loadAuditEvents" />
             </div>
             <div v-if="auditEvents.length" class="list-stack">
               <div v-for="event in auditEvents.slice(0, 8)" :key="event.id" class="workflow-row">
