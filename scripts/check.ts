@@ -82,6 +82,19 @@ function assertApiValidationError(error: unknown, field: string) {
   }
 }
 
+async function waitForWorkflowRun<T extends { status: string }>(
+  load: () => Promise<T>,
+  timeoutMs = 5_000,
+) {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    const run = await load();
+    if (run.status !== "queued" && run.status !== "running") return run;
+    if (Date.now() >= deadline) throw new Error(`workflow run did not finish before timeout; status=${run.status}`);
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+}
+
 async function drainStream(stream: AsyncGenerator<unknown>) {
   for await (const _event of stream) {
     // Exhaust the stream so client-side status and SSE parsing are exercised.
@@ -1132,11 +1145,15 @@ async function main() {
   if (!nativeDefinitions.some((definition) => definition.id === "project-review") || "steps" in nativeDefinitions[0]) {
     throw new Error("native workflow definitions should expose stable public DTOs");
   }
-  const nativeRun = await nativeBackend.start("project-review", {
+  const nativeStartedRun = await nativeBackend.start("project-review", {
     projectId: defaultProject.id,
     prompt: "native contract check",
     inputs: { source: "scripts/check.ts" },
   });
+  if (nativeStartedRun.status !== "running") {
+    throw new Error("native workflow start should return a running background run");
+  }
+  const nativeRun = await waitForWorkflowRun(() => nativeBackend.getRun(nativeStartedRun.id));
   if (
     nativeRun.status !== "completed" ||
     nativeRun.tasks.length !== 2 ||
@@ -1149,12 +1166,52 @@ async function main() {
   if (!nativeTaskPrompts[1]?.includes("Upstream artifacts") || !nativeTaskPrompts[1]?.includes("native result 1")) {
     throw new Error("native workflow sequence should inject upstream artifact context");
   }
-  const nativeDagRun = await nativeBackend.start("deep-research", {
+  const nativeStartedDagRun = await nativeBackend.start("deep-research", {
     projectId: defaultProject.id,
     prompt: "native dag check",
   });
+  const nativeDagRun = await waitForWorkflowRun(() => nativeBackend.getRun(nativeStartedDagRun.id));
   if (nativeDagRun.status !== "completed" || nativeDagRun.tasks.length < 3 || nativeDagRun.artifacts.length !== nativeDagRun.tasks.length) {
     throw new Error("native workflow DAG should complete all tasks");
+  }
+  const slowNativeBackend = createWorkflowBackend({
+    path: join(mkdtempSync(join(tmpdir(), "zuu-native-abort-check-")), "workflow-runs.json"),
+    agentDir: mkdtempSync(join(tmpdir(), "zuu-native-abort-agent-check-")),
+    packages: [],
+    requestedKind: "native",
+    runPrompt: async function* (request) {
+      await new Promise((resolve) => setTimeout(resolve, 25));
+      const timestamp = new Date().toISOString();
+      yield {
+        id: "native-abort:event:1",
+        createdAt: timestamp,
+        runId: "native-abort-agent-run",
+        type: "done",
+        run: {
+          id: "native-abort-agent-run",
+          sessionId: "native-abort-session",
+          projectId: request.projectId ?? "default",
+          source: "workflow",
+          status: "completed",
+          prompt: request.prompt,
+          startedAt: timestamp,
+          finishedAt: timestamp,
+        },
+      };
+    },
+  });
+  const slowNativeRun = await slowNativeBackend.start("release-notes", {
+    projectId: defaultProject.id,
+    prompt: "abort native background check",
+  });
+  if (slowNativeRun.status !== "running") {
+    throw new Error("native workflow should start in the background before slow tasks finish");
+  }
+  await slowNativeBackend.abort(slowNativeRun.id);
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  const abortedNativeRun = await slowNativeBackend.getRun(slowNativeRun.id);
+  if (abortedNativeRun.status !== "aborted" || abortedNativeRun.tasks.some((task) => task.status !== "aborted")) {
+    throw new Error("native workflow abort should keep the run aborted after background tasks settle");
   }
 
   const schedulesBefore = await client.listProjectSchedules(defaultProject.id);

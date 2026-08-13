@@ -54,8 +54,7 @@ export class NativeWorkflowBackend implements WorkflowBackend {
     const run = createNativeWorkflowRun(definition, request);
     this.store.set(run);
 
-    await this.execute(definition, run, request);
-    this.store.set(run);
+    void this.execute(definition, run, request);
     return run;
   }
 
