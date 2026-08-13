@@ -8,7 +8,7 @@ export function registerSessionRoutes(deps: RouteDeps) {
   const { app, daemon } = deps;
   app.get("/v1/sessions", (c) => {
     try {
-      return c.json({ sessions: daemon.listSessions(c.req.query("projectId")) });
+      return c.json({ sessions: daemon.api.sessionApiService.listSessions(c.req.query("projectId")) });
     } catch (error) {
       return c.json(jsonError(error, 404), toStatus(error, 404));
     }
@@ -16,7 +16,7 @@ export function registerSessionRoutes(deps: RouteDeps) {
 
   app.get("/v1/session-files", async (c) => {
     try {
-      return c.json({ sessions: await daemon.listStoredSessions(c.req.query("cwd"), c.req.query("projectId")) });
+      return c.json({ sessions: await daemon.api.sessionApiService.listStoredSessions(c.req.query("cwd"), c.req.query("projectId")) });
     } catch (error) {
       return c.json(jsonError(error, 500), toStatus(error, 500));
     }
@@ -24,7 +24,7 @@ export function registerSessionRoutes(deps: RouteDeps) {
 
   app.get("/v1/sessions/:sessionId", (c) => {
     try {
-      return c.json({ session: daemon.getSession(c.req.param("sessionId"), c.req.query("projectId")) });
+      return c.json({ session: daemon.api.sessionApiService.getSession(c.req.param("sessionId"), c.req.query("projectId")) });
     } catch (error) {
       return c.json(jsonError(error, 404), toStatus(error, 404));
     }
@@ -33,7 +33,7 @@ export function registerSessionRoutes(deps: RouteDeps) {
   app.patch("/v1/sessions/:sessionId", async (c) => {
     try {
       const body = parseUpdateSession(await readJson(c.req));
-      return c.json({ session: daemon.updateSession(c.req.param("sessionId"), body, c.req.query("projectId")) });
+      return c.json({ session: daemon.api.sessionApiService.updateSession(c.req.param("sessionId"), body, c.req.query("projectId")) });
     } catch (error) {
       return c.json(jsonError(error, 400), toStatus(error, 400));
     }
@@ -41,7 +41,7 @@ export function registerSessionRoutes(deps: RouteDeps) {
 
   app.delete("/v1/sessions/:sessionId", async (c) => {
     try {
-      return c.json({ session: await daemon.deleteSession(c.req.param("sessionId"), c.req.query("projectId")) });
+      return c.json({ session: await daemon.api.sessionApiService.deleteSession(c.req.param("sessionId"), c.req.query("projectId")) });
     } catch (error) {
       return c.json(jsonError(error, 404), toStatus(error, 404));
     }
@@ -49,7 +49,7 @@ export function registerSessionRoutes(deps: RouteDeps) {
 
   app.get("/v1/sessions/:sessionId/tree", (c) => {
     try {
-      return c.json({ tree: daemon.summarizeSessionTree(c.req.param("sessionId")) });
+      return c.json({ tree: daemon.api.sessionApiService.summarizeSessionTree(c.req.param("sessionId")) });
     } catch (error) {
       return c.json(jsonError(error, 404), toStatus(error, 404));
     }
@@ -58,8 +58,8 @@ export function registerSessionRoutes(deps: RouteDeps) {
   app.post("/v1/sessions", async (c) => {
     try {
       const body = parseCreateSession(await readJson(c.req, { optional: true }));
-      const session = await daemon.createSession(body);
-      return c.json({ session: daemon.summarizeSession(session) }, 201);
+      const session = await daemon.api.sessionApiService.createSession(body);
+      return c.json({ session: daemon.api.sessionApiService.summarizeSession(session) }, 201);
     } catch (error) {
       return c.json(jsonError(error, 400), toStatus(error, 400));
     }
@@ -68,8 +68,8 @@ export function registerSessionRoutes(deps: RouteDeps) {
   app.post("/v1/sessions/open", async (c) => {
     try {
       const body = parseOpenSession(await readJson(c.req));
-      const session = await daemon.openSession(body);
-      return c.json({ session: daemon.summarizeSession(session) }, 201);
+      const session = await daemon.api.sessionApiService.openSession(body);
+      return c.json({ session: daemon.api.sessionApiService.summarizeSession(session) }, 201);
     } catch (error) {
       return c.json(jsonError(error, 400), toStatus(error, 400));
     }

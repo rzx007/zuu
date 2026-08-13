@@ -1,7 +1,7 @@
 import type { ServerType } from "@hono/node-server";
-import type { ZuuDaemon } from "./agent-daemon";
+import type { DaemonServiceRegistry } from "./agent-daemon/daemon-service-registry";
 
-export function installShutdownHandlers(server: ServerType, daemon: Pick<ZuuDaemon, "dispose">) {
+export function installShutdownHandlers(server: ServerType, daemon: Pick<DaemonServiceRegistry, "dispose">) {
   let shuttingDown = false;
   const shutdown = async (signal: NodeJS.Signals) => {
     if (shuttingDown) return;

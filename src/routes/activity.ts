@@ -8,12 +8,12 @@ export function registerActivityRoutes({ app, daemon }: RouteDeps) {
   app.get("/v1/runs", (c) => {
     const sessionId = c.req.query("sessionId");
     const projectId = c.req.query("projectId");
-    return c.json({ runs: daemon.listRuns(sessionId, projectId) });
+    return c.json({ runs: daemon.api.runApiService.listRuns(sessionId, projectId) });
   });
 
   app.get("/v1/runs/:runId", (c) => {
     try {
-      return c.json({ run: daemon.getRun(c.req.param("runId")) });
+      return c.json({ run: daemon.api.runApiService.getRun(c.req.param("runId")) });
     } catch (error) {
       return c.json(jsonError(error, 404), toStatus(error, 404));
     }
@@ -21,7 +21,7 @@ export function registerActivityRoutes({ app, daemon }: RouteDeps) {
 
   app.post("/v1/runs/:runId/abort", async (c) => {
     try {
-      return c.json({ run: await daemon.abortRun(c.req.param("runId")) });
+      return c.json({ run: await daemon.api.runApiService.abortRun(c.req.param("runId")) });
     } catch (error) {
       return c.json(jsonError(error, 404), toStatus(error, 404));
     }
@@ -29,7 +29,7 @@ export function registerActivityRoutes({ app, daemon }: RouteDeps) {
 
   app.get("/v1/runs/:runId/events", (c) => {
     try {
-      return c.json({ events: daemon.listRunEvents(c.req.param("runId"), c.req.query("afterEventId")) });
+      return c.json({ events: daemon.api.runApiService.listRunEvents(c.req.param("runId"), c.req.query("afterEventId")) });
     } catch (error) {
       return c.json(jsonError(error, 404), toStatus(error, 404));
     }
@@ -47,7 +47,7 @@ export function registerActivityRoutes({ app, daemon }: RouteDeps) {
     };
     let replayEvents: PromptStreamEvent[];
     try {
-      replayEvents = daemon.listEvents(query);
+      replayEvents = daemon.api.runApiService.listEvents(query);
     } catch (error) {
       return c.json(jsonError(error, 404), toStatus(error, 404));
     }
@@ -59,7 +59,7 @@ export function registerActivityRoutes({ app, daemon }: RouteDeps) {
         notify?.();
         notify = undefined;
       };
-      const unsubscribe = daemon.subscribeEvents(liveQuery, (event) => {
+      const unsubscribe = daemon.api.runApiService.subscribeEvents(liveQuery, (event) => {
         queue.push(event);
         wake();
       });

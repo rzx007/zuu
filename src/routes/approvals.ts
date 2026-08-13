@@ -6,7 +6,7 @@ import type { RouteDeps } from "./types";
 export function registerApprovalRoutes({ app, daemon }: RouteDeps) {
   app.get("/v1/approvals", (c) => {
     try {
-      return c.json({ approvals: daemon.listApprovals(c.req.query("status") as ApprovalStatus | undefined) });
+      return c.json({ approvals: daemon.api.approvalApiService.listApprovals(c.req.query("status") as ApprovalStatus | undefined) });
     } catch (error) {
       return c.json(jsonError(error, 400), toStatus(error, 400));
     }
@@ -14,7 +14,7 @@ export function registerApprovalRoutes({ app, daemon }: RouteDeps) {
 
   app.get("/v1/approvals/:approvalId", (c) => {
     try {
-      return c.json({ approval: daemon.getApproval(c.req.param("approvalId")) });
+      return c.json({ approval: daemon.api.approvalApiService.getApproval(c.req.param("approvalId")) });
     } catch (error) {
       return c.json(jsonError(error, 404), toStatus(error, 404));
     }
@@ -23,7 +23,7 @@ export function registerApprovalRoutes({ app, daemon }: RouteDeps) {
   app.post("/v1/approvals/:approvalId/resolve", async (c) => {
     try {
       const body = parseResolveApproval(await readJson(c.req));
-      return c.json({ approval: daemon.resolveApproval(c.req.param("approvalId"), body) });
+      return c.json({ approval: daemon.api.approvalApiService.resolveApproval(c.req.param("approvalId"), body) });
     } catch (error) {
       return c.json(jsonError(error, 400), toStatus(error, 400));
     }

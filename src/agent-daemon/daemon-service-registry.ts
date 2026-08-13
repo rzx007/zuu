@@ -1,6 +1,4 @@
 import type {
-  ModelSmokeRequest,
-  ModelSmokeResponse,
   PromptRequest,
   PromptStreamEvent,
   StartWorkflowRequest,
@@ -23,8 +21,19 @@ interface DaemonServiceRegistryCallbacks {
   startWorkflow(workflowId: string, request: StartWorkflowRequest): Promise<WorkflowRun>;
 }
 
-interface DaemonServiceRegistryOptions {
+export interface DaemonServiceRegistryOptions {
   audit?: AuditService;
+}
+
+export function createDaemonServiceRegistry(options: DaemonServiceRegistryOptions = {}) {
+  let registry!: DaemonServiceRegistry;
+  registry = new DaemonServiceRegistry({
+    prompt: (request) => registry.core.promptService.prompt(request),
+    abortSession: (sessionId) => registry.api.sessionApiService.abortSession(sessionId),
+    deleteSession: (sessionId) => registry.api.sessionApiService.deleteSession(sessionId),
+    startWorkflow: (workflowId, request) => registry.api.workflowApiService.startWorkflow(workflowId, request),
+  }, options);
+  return registry;
 }
 
 export class DaemonServiceRegistry {
@@ -49,18 +58,6 @@ export class DaemonServiceRegistry {
       sessionService: this.core.sessionService,
       workflowService: this.core.workflowService,
     });
-  }
-
-  diagnostics() {
-    return this.api.modelApiService.diagnostics();
-  }
-
-  listModels() {
-    return this.api.modelApiService.listModels();
-  }
-
-  smokeModel(request: ModelSmokeRequest = {}): Promise<ModelSmokeResponse> {
-    return this.api.modelApiService.smokeModel(request);
   }
 
   async dispose() {

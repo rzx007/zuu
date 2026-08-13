@@ -6,12 +6,12 @@ import type { RouteDeps } from "./types";
 
 export function registerProjectRoutes(deps: RouteDeps) {
   const { app, daemon } = deps;
-  app.get("/v1/projects", (c) => c.json({ projects: daemon.listProjects() }));
+  app.get("/v1/projects", (c) => c.json({ projects: daemon.api.projectApiService.listProjects() }));
 
   app.post("/v1/projects", async (c) => {
     try {
       const body = parseCreateProject(await readJson(c.req));
-      return c.json({ project: daemon.createProject(body) }, 201);
+      return c.json({ project: daemon.api.projectApiService.createProject(body) }, 201);
     } catch (error) {
       return c.json(jsonError(error, 400), toStatus(error, 400));
     }
@@ -19,7 +19,7 @@ export function registerProjectRoutes(deps: RouteDeps) {
 
   app.get("/v1/projects/:projectId", (c) => {
     try {
-      return c.json({ project: daemon.getProject(c.req.param("projectId")) });
+      return c.json({ project: daemon.api.projectApiService.getProject(c.req.param("projectId")) });
     } catch (error) {
       return c.json(jsonError(error, 404), toStatus(error, 404));
     }
@@ -28,7 +28,7 @@ export function registerProjectRoutes(deps: RouteDeps) {
   app.patch("/v1/projects/:projectId", async (c) => {
     try {
       const body = parseUpdateProject(await readJson(c.req));
-      return c.json({ project: daemon.updateProject(c.req.param("projectId"), body) });
+      return c.json({ project: daemon.api.projectApiService.updateProject(c.req.param("projectId"), body) });
     } catch (error) {
       return c.json(jsonError(error, 400), toStatus(error, 400));
     }
@@ -36,7 +36,7 @@ export function registerProjectRoutes(deps: RouteDeps) {
 
   app.delete("/v1/projects/:projectId", (c) => {
     try {
-      return c.json({ project: daemon.deleteProject(c.req.param("projectId")) });
+      return c.json({ project: daemon.api.projectApiService.deleteProject(c.req.param("projectId")) });
     } catch (error) {
       return c.json(jsonError(error, 400), toStatus(error, 400));
     }

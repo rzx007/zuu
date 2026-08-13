@@ -2349,7 +2349,7 @@ async function main() {
     if (!Array.isArray(registrySchedules)) {
       throw new Error("daemon service registry should wire schedule API service");
     }
-    const registryModels = await registry.listModels();
+    const registryModels = await registry.api.modelApiService.listModels();
     if (!Array.isArray(registryModels.models)) {
       throw new Error("daemon service registry should expose model helpers");
     }

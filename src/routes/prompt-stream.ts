@@ -1,12 +1,12 @@
 import type { PromptRequest, PromptStreamEvent } from "@zuu/client";
 import type { Context } from "hono";
 import { streamSSE } from "hono/streaming";
-import type { ZuuDaemon } from "../agent-daemon";
+import type { DaemonServiceRegistry } from "../agent-daemon/daemon-service-registry";
 import { jsonError, toStatus } from "../http";
 import { writePromptStreamEvent } from "./sse";
 
-export async function streamPromptResponse(c: Context, daemon: Pick<ZuuDaemon, "prompt">, request: PromptRequest) {
-  const events = daemon.prompt(request);
+export async function streamPromptResponse(c: Context, daemon: DaemonServiceRegistry, request: PromptRequest) {
+  const events = daemon.core.promptService.prompt(request);
   let first: IteratorResult<PromptStreamEvent>;
   try {
     first = await events.next();
