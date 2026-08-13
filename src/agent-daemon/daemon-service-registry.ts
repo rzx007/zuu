@@ -11,8 +11,11 @@ import type {
   WorkflowRun,
 } from "@zuu/client";
 import type { AuditService } from "./audit-service";
-import { ApprovalApiService } from "./approval-api-service";
 import { ApprovalService } from "./approval-service";
+import {
+  createDaemonApiServices,
+  type DaemonApiServices,
+} from "./daemon-api-services";
 import {
   getApprovalStorePath,
   getPackageOperationStorePath,
@@ -24,21 +27,14 @@ import {
   getScheduleStorePath,
   getZuuAgentDir,
 } from "./environment";
-import { ModelApiService } from "./model-api-service";
 import { ModelService } from "./model-service";
-import { PackageApiService } from "./package-api-service";
 import { PackageService } from "./packages";
-import { ProjectApiService } from "./project-api-service";
 import { ProjectService } from "./project-service";
 import { PromptService } from "./prompt-service";
-import { RunApiService } from "./run-api-service";
 import { RunService } from "./run-service";
-import { ScheduleApiService } from "./schedule-api-service";
 import { createDaemonScheduleExecutor, launchPromptAsRun } from "./schedule-executor";
 import { ScheduleService } from "./schedule-service";
-import { SessionApiService } from "./session-api-service";
 import { SessionService } from "./session-service";
-import { WorkflowApiService } from "./workflow-api-service";
 import { WorkflowService } from "./workflow-service";
 
 interface DaemonServiceRegistryCallbacks {
@@ -74,14 +70,14 @@ export class DaemonServiceRegistry {
   readonly promptService: PromptService;
   readonly scheduleService: ScheduleService;
 
-  readonly approvalApiService: ApprovalApiService;
-  readonly modelApiService: ModelApiService;
-  readonly packageApiService: PackageApiService;
-  readonly projectApiService: ProjectApiService;
-  readonly runApiService: RunApiService;
-  readonly scheduleApiService: ScheduleApiService;
-  readonly sessionApiService: SessionApiService;
-  readonly workflowApiService: WorkflowApiService;
+  readonly approvalApiService: DaemonApiServices["approvalApiService"];
+  readonly modelApiService: DaemonApiServices["modelApiService"];
+  readonly packageApiService: DaemonApiServices["packageApiService"];
+  readonly projectApiService: DaemonApiServices["projectApiService"];
+  readonly runApiService: DaemonApiServices["runApiService"];
+  readonly scheduleApiService: DaemonApiServices["scheduleApiService"];
+  readonly sessionApiService: DaemonApiServices["sessionApiService"];
+  readonly workflowApiService: DaemonApiServices["workflowApiService"];
 
   constructor(
     private readonly callbacks: DaemonServiceRegistryCallbacks,
@@ -121,20 +117,26 @@ export class DaemonServiceRegistry {
       }),
     });
 
-    this.approvalApiService = new ApprovalApiService(this.approvalService, options.audit);
-    this.modelApiService = new ModelApiService(this.modelService, {
-      workflowBackend: () => this.workflowService.getBackendInfo(),
-      activeModel: () => this.sessionService.listSessions()[0]?.model,
-      prompt: (request) => this.callbacks.prompt(request),
-      abortSession: (sessionId) => this.callbacks.abortSession(sessionId),
-      deleteSession: (sessionId) => this.callbacks.deleteSession(sessionId),
+    const apiServices = createDaemonApiServices({
+      audit: options.audit,
+      callbacks: this.callbacks,
+      approvalService: this.approvalService,
+      modelService: this.modelService,
+      packageService: this.packageService,
+      projectService: this.projectService,
+      runService: this.runService,
+      scheduleService: this.scheduleService,
+      sessionService: this.sessionService,
+      workflowService: this.workflowService,
     });
-    this.packageApiService = new PackageApiService(this.packageService, options.audit);
-    this.projectApiService = new ProjectApiService(this.projectService);
-    this.runApiService = new RunApiService(this.runService, this.sessionService);
-    this.scheduleApiService = new ScheduleApiService(this.scheduleService);
-    this.sessionApiService = new SessionApiService(this.sessionService, this.runService);
-    this.workflowApiService = new WorkflowApiService(this.workflowService);
+    this.approvalApiService = apiServices.approvalApiService;
+    this.modelApiService = apiServices.modelApiService;
+    this.packageApiService = apiServices.packageApiService;
+    this.projectApiService = apiServices.projectApiService;
+    this.runApiService = apiServices.runApiService;
+    this.scheduleApiService = apiServices.scheduleApiService;
+    this.sessionApiService = apiServices.sessionApiService;
+    this.workflowApiService = apiServices.workflowApiService;
   }
 
   diagnostics() {
