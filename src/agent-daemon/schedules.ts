@@ -1,7 +1,6 @@
 import type {
   CreateScheduleRequest,
   Schedule,
-  ScheduleRun,
   UpdateScheduleRequest,
 } from "@zuu/client";
 import { notFound } from "../http";
@@ -11,6 +10,7 @@ import {
   createRunningScheduleRun,
 } from "./schedule-run-factory";
 import { handleScheduleOverlap } from "./schedule-overlap";
+import { drainQueuedSchedule } from "./schedule-queue";
 import type { ScheduleLease } from "./schedule-lease";
 import type { ScheduleExecutor } from "./schedule-runner";
 import {
@@ -166,8 +166,7 @@ export class ScheduleStore {
     const previousNextRunAt = schedule.nextRunAt;
     if (!options.automatic) this.clearTimer(schedule.id);
     const runningRun = createRunningScheduleRun(schedule, previousNextRunAt, options);
-    const run: ScheduleRun = runningRun;
-    prependScheduleRun(schedule, run);
+    prependScheduleRun(schedule, runningRun);
     schedule.updatedAt = runningRun.startedAt;
     if (options.automatic) {
       updateNextRun(schedule);
@@ -176,7 +175,7 @@ export class ScheduleStore {
     if (options.automatic) this.arm(schedule);
 
     try {
-      await executeScheduleRun(schedule, run, this.executor);
+      await executeScheduleRun(schedule, runningRun, this.executor);
     } finally {
       if (!options.automatic) {
         restoreNextRun(schedule, previousNextRunAt);
@@ -202,31 +201,11 @@ export class ScheduleStore {
   }
 
   private drainQueued(schedule: Schedule) {
-    const queuedRun = [...schedule.runs]
-      .filter((run) => run.status === "queued")
-      .sort(compareScheduleRuns)
-      .at(-1);
-    if (!queuedRun || schedule.runs.some((run) => run.status === "running")) return;
-    void this.runQueued(schedule, queuedRun);
-  }
-
-  private async runQueued(schedule: Schedule, run: ScheduleRun) {
-    const previousNextRunAt = schedule.nextRunAt;
-    const startedAt = new Date().toISOString();
-    this.clearTimer(schedule.id);
-    run.status = "running";
-    run.startedAt = startedAt;
-    schedule.updatedAt = startedAt;
-    this.persist();
-
-    try {
-      await executeScheduleRun(schedule, run, this.executor);
-    } finally {
-      restoreNextRun(schedule, previousNextRunAt);
-      this.persist();
-      this.arm(schedule);
-      this.drainQueued(schedule);
-    }
+    drainQueuedSchedule(schedule, this.executor, {
+      clearTimer: (id) => this.clearTimer(id),
+      persist: () => this.persist(),
+      arm: (item) => this.arm(item),
+    });
   }
 
   private skipMisfire(schedule: Schedule) {
