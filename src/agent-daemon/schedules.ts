@@ -8,12 +8,9 @@ import { notFound } from "../http";
 import { loadSchedules, prependScheduleRun, saveSchedules } from "./schedule-records";
 import {
   createMisfireSkippedRun,
-  createOverlapSkippedRun,
-  createQueueFullSkippedRun,
-  createQueuedOverlapRun,
   createRunningScheduleRun,
-  type ScheduleTriggerOptions,
 } from "./schedule-run-factory";
+import { handleScheduleOverlap } from "./schedule-overlap";
 import type { ScheduleLease } from "./schedule-lease";
 import type { ScheduleExecutor } from "./schedule-runner";
 import {
@@ -159,10 +156,12 @@ export class ScheduleStore {
 
   async trigger(scheduleId: string, options: { automatic?: boolean } = {}) {
     const schedule = this.get(scheduleId);
-    if (schedule.runs.some((run) => run.status === "running")) {
-      if (schedule.overlapPolicy === "skip") return this.skipOverlap(schedule, options);
-      if (schedule.overlapPolicy === "queue") return this.queueOverlap(schedule, options);
-    }
+    const overlapResult = handleScheduleOverlap(schedule, options, {
+      clearTimer: (id) => this.clearTimer(id),
+      persist: () => this.persist(),
+      arm: (item) => this.arm(item),
+    });
+    if (overlapResult) return overlapResult;
 
     const previousNextRunAt = schedule.nextRunAt;
     if (!options.automatic) this.clearTimer(schedule.id);
@@ -200,59 +199,6 @@ export class ScheduleStore {
 
   dispose() {
     this.timers.dispose();
-  }
-
-  private skipOverlap(schedule: Schedule, options: ScheduleTriggerOptions) {
-    const previousNextRunAt = schedule.nextRunAt;
-    this.clearTimer(schedule.id);
-    const run = createOverlapSkippedRun(schedule, previousNextRunAt, options);
-    prependScheduleRun(schedule, run);
-    schedule.updatedAt = run.finishedAt;
-    if (options.automatic) {
-      updateNextRun(schedule);
-    } else {
-      restoreNextRun(schedule, previousNextRunAt);
-    }
-    this.persist();
-    this.arm(schedule);
-    return schedule;
-  }
-
-  private queueOverlap(schedule: Schedule, options: ScheduleTriggerOptions) {
-    if (schedule.runs.some((run) => run.status === "queued")) {
-      return this.skipQueueFull(schedule, options);
-    }
-
-    const previousNextRunAt = schedule.nextRunAt;
-    const recordedAt = new Date().toISOString();
-    this.clearTimer(schedule.id);
-    const run = createQueuedOverlapRun(schedule, previousNextRunAt, options, recordedAt);
-    prependScheduleRun(schedule, run);
-    schedule.updatedAt = recordedAt;
-    if (options.automatic) {
-      updateNextRun(schedule);
-    } else {
-      restoreNextRun(schedule, previousNextRunAt);
-    }
-    this.persist();
-    this.arm(schedule);
-    return schedule;
-  }
-
-  private skipQueueFull(schedule: Schedule, options: ScheduleTriggerOptions) {
-    const previousNextRunAt = schedule.nextRunAt;
-    this.clearTimer(schedule.id);
-    const run = createQueueFullSkippedRun(schedule, previousNextRunAt, options);
-    prependScheduleRun(schedule, run);
-    schedule.updatedAt = run.finishedAt;
-    if (options.automatic) {
-      updateNextRun(schedule);
-    } else {
-      restoreNextRun(schedule, previousNextRunAt);
-    }
-    this.persist();
-    this.arm(schedule);
-    return schedule;
   }
 
   private drainQueued(schedule: Schedule) {
