@@ -20,6 +20,14 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
+import Conversation from '@/components/ai-elements/conversation/Conversation.vue'
+import ConversationContent from '@/components/ai-elements/conversation/ConversationContent.vue'
+import Message from '@/components/ai-elements/message/Message.vue'
+import MessageContent from '@/components/ai-elements/message/MessageContent.vue'
+import PromptInput from '@/components/ai-elements/prompt-input/PromptInput.vue'
+import PromptInputFooter from '@/components/ai-elements/prompt-input/PromptInputFooter.vue'
+import PromptInputTextarea from '@/components/ai-elements/prompt-input/PromptInputTextarea.vue'
+import type { PromptInputMessage } from '@/components/ai-elements/prompt-input/types'
 import { createDefaultToolSelection, STORAGE_KEYS, TOOL_CHOICES } from '@/lib/app'
 import {
   errorMessage,
@@ -249,6 +257,10 @@ const terminalOutput = computed(() => {
 function nextId() {
   messageSeq += 1
   return `${Date.now()}-${messageSeq}`
+}
+
+function messageFrom(role: MessageRole) {
+  return role === 'user' ? 'user' : 'assistant'
 }
 
 function toggleLeftSidebar() {
@@ -704,10 +716,11 @@ async function consumePromptStream(stream: AsyncGenerator<PromptStreamEvent>, ag
   }
 }
 
-async function sendPrompt() {
-  const text = prompt.value.trim()
+async function sendPrompt(inputText = prompt.value) {
+  const text = inputText.trim()
   if (!text) return
 
+  prompt.value = text
   const request = createPromptRequest(text)
   addMessage('user', text)
   const agentMessage = addMessage('agent')
@@ -722,6 +735,10 @@ async function sendPrompt() {
     controller.value = undefined
     isRunning.value = false
   }
+}
+
+async function submitPromptInput(message: PromptInputMessage) {
+  await sendPrompt(message.text)
 }
 
 async function queueSessionMessage(behavior: 'steer' | 'followUp') {
@@ -870,15 +887,24 @@ onUnmounted(() => {
         </div>
       </header>
 
-      <section v-if="activeWorkspace === 'chat'" data-message-list class="message-list">
-        <div v-if="!messages.length" class="empty-surface">
-          <h2>Ready for a run</h2>
-          <p>Choose a model, enable tools, then send a prompt.</p>
-        </div>
-        <article v-for="message in messages" :key="message.id" class="message-bubble" :class="`message-${message.role}`">
-          {{ message.text || '...' }}
-        </article>
-      </section>
+      <Conversation v-if="activeWorkspace === 'chat'" data-message-list class="message-list">
+        <ConversationContent class="message-list-content">
+          <div v-if="!messages.length" class="empty-surface">
+            <h2>Ready for a run</h2>
+            <p>Choose a model, enable tools, then send a prompt.</p>
+          </div>
+          <Message
+            v-for="message in messages"
+            :key="message.id"
+            :from="messageFrom(message.role)"
+            :class="message.role === 'event' || message.role === 'error' ? 'max-w-none' : undefined"
+          >
+            <MessageContent class="message-bubble" :class="`message-${message.role}`">
+              {{ message.text || '...' }}
+            </MessageContent>
+          </Message>
+        </ConversationContent>
+      </Conversation>
 
       <section v-else-if="activeWorkspace === 'workflow'" class="workspace-canvas">
         <div class="workspace-header">
@@ -989,13 +1015,18 @@ onUnmounted(() => {
       </section>
 
       <footer class="composer">
-        <Textarea v-model="prompt" class="min-h-24 resize-y" @keydown.ctrl.enter.prevent="sendPrompt" @keydown.meta.enter.prevent="sendPrompt" />
-        <div class="composer-actions">
-          <Button variant="outline" :disabled="!isRunning" @click="abortPrompt">Abort</Button>
-          <Button variant="outline" :disabled="!canQueueSessionMessage" @click="queueSessionMessage('steer')">Steer</Button>
-          <Button variant="outline" :disabled="!canQueueSessionMessage" @click="queueSessionMessage('followUp')">Follow up</Button>
-          <Button :disabled="isRunning" @click="sendPrompt">Send</Button>
-        </div>
+        <PromptInput class="composer-input" :initial-input="prompt" @submit="submitPromptInput" @error="(error) => addMessage('error', error.message)">
+          <PromptInputTextarea class="min-h-24 resize-y" />
+          <PromptInputFooter>
+            <div class="empty-text">{{ activeTools.length }} tools / {{ selectedModelLabel() }}</div>
+            <div class="composer-actions">
+              <Button type="button" variant="outline" :disabled="!isRunning" @click="abortPrompt">Abort</Button>
+              <Button type="button" variant="outline" :disabled="!canQueueSessionMessage" @click="queueSessionMessage('steer')">Steer</Button>
+              <Button type="button" variant="outline" :disabled="!canQueueSessionMessage" @click="queueSessionMessage('followUp')">Follow up</Button>
+              <Button type="submit" :disabled="isRunning">Send</Button>
+            </div>
+          </PromptInputFooter>
+        </PromptInput>
       </footer>
     </main>
 

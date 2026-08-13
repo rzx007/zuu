@@ -34,7 +34,9 @@ flowchart LR
 ## 组件策略
 
 - 使用 `components/ui` 里的 Button、Badge、Tabs、Textarea。
-- 使用 `components/ai-elements` 里的 Terminal、WebPreview。
+- 中心对话流使用 `components/ai-elements/conversation` 与 `components/ai-elements/message`。
+- Prompt 输入使用 `components/ai-elements/prompt-input` 的 `PromptInput`、`PromptInputTextarea`、`PromptInputFooter`。
+- `Terminal`、`WebPreview`、`FileTree` 等组件后续接入前，需要先修正组件库里 `@hugeicons/vue`/`@lucide/vue` 的图标导入兼容。
 - 业务状态继续复用 `web/src/lib/panels/*` composables。
 - 后续再把左栏、聊天区、右栏 panel 拆到 `web/src/components/workbench/`，每个目录保留 `index.ts`。
 
@@ -44,6 +46,6 @@ flowchart LR
 - 左侧和右侧可以收起。
 - 设置、包管理、审计、模型 smoke test 等进入右侧 Settings。
 - Workflow 与 Schedule 状态进入右侧 Tasks。
-- Event stream 进入右侧 Terminal。
-- 浏览器 preview 进入右侧 Browser。
+- Event stream 进入右侧 Terminal panel。
+- 浏览器 preview 进入右侧 Browser panel。
 - `pnpm check` 通过。

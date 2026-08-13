@@ -212,7 +212,11 @@
   }
 
   .message-list {
-    @apply mx-auto flex min-h-0 w-full max-w-4xl flex-col gap-3 overflow-auto px-5 py-6;
+    @apply min-h-0 overflow-hidden;
+  }
+
+  .message-list-content {
+    @apply mx-auto flex min-h-full w-full max-w-4xl flex-col gap-3 px-5 py-6;
   }
 
   .workspace-canvas {
@@ -233,8 +237,8 @@
     @apply border-border bg-background/95 border-t p-4;
   }
 
-  .composer {
-    @apply grid grid-cols-[minmax(0,1fr)_auto] gap-3;
+  .composer-input {
+    @apply mx-auto w-full max-w-4xl;
   }
 
   .composer-actions {
