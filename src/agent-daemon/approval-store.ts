@@ -6,6 +6,7 @@ import type {
   ResolveApprovalRequest,
 } from "@zuu/client";
 import { ApiError, notFound, validationError } from "../http";
+import { expireApprovals } from "./approval-expiration";
 import { JsonFileStore } from "./json-file-store";
 
 const APPROVAL_HISTORY_LIMIT = 500;
@@ -161,22 +162,8 @@ export class ApprovalStore {
   }
 
   private expireApprovals() {
-    const now = Date.now();
-    let changed = false;
-    const expired: Approval[] = [];
-    for (const approval of this.approvals.values()) {
-      if (
-        (approval.status === "pending" || approval.status === "allowed") &&
-        approval.expiresAt &&
-        Date.parse(approval.expiresAt) <= now
-      ) {
-        approval.status = "expired";
-        approval.updatedAt = new Date().toISOString();
-        changed = true;
-        expired.push(approval);
-      }
-    }
-    if (changed) {
+    const expired = expireApprovals(this.approvals.values());
+    if (expired.length > 0) {
       this.persist();
       expired.forEach((approval) => this.notifyWaiters(approval));
     }
