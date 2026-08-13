@@ -31,6 +31,7 @@ import {
   deleteManagedSession,
 } from "./session-lifecycle";
 import { SessionRuntimeRegistry } from "./session-registry";
+import { getManagedRuntimeForProject } from "./session-runtime-access";
 import {
   type CreateSessionOptions,
   type ManagedRuntime,
@@ -100,21 +101,18 @@ export class SessionService {
   }
 
   getSession(sessionId: string, projectId?: string) {
-    const managed = this.getManagedRuntime(sessionId);
-    if (projectId) this.assertSessionProject(managed, sessionId, projectId);
+    const managed = this.getManagedRuntime(sessionId, projectId);
     return this.summarizeSession(managed.runtime.session);
   }
 
   updateSession(sessionId: string, request: UpdateSessionRequest, projectId?: string) {
-    const managed = this.getManagedRuntime(sessionId);
-    if (projectId) this.assertSessionProject(managed, sessionId, projectId);
+    const managed = this.getManagedRuntime(sessionId, projectId);
     applySessionUpdate(managed, request);
     return this.summarizeSession(managed.runtime.session);
   }
 
   async deleteSession(sessionId: string, projectId?: string) {
-    const managed = this.getManagedRuntime(sessionId);
-    if (projectId) this.assertSessionProject(managed, sessionId, projectId);
+    const managed = this.getManagedRuntime(sessionId, projectId);
     return deleteManagedSession(
       managed,
       sessionId,
@@ -184,15 +182,8 @@ export class SessionService {
     await this.runtimes.dispose();
   }
 
-  private getManagedRuntime(sessionId: string) {
-    return this.runtimes.get(sessionId);
-  }
-
-  private assertSessionProject(managed: ManagedRuntime, sessionId: string, projectId: string) {
-    this.options.projects.get(projectId);
-    if (managed.projectId !== projectId) {
-      notFound(`Unknown session: ${sessionId}`, { sessionId, projectId });
-    }
+  private getManagedRuntime(sessionId: string, projectId?: string) {
+    return getManagedRuntimeForProject(this.runtimes, this.options.projects, sessionId, projectId);
   }
 
   private deleteManagedRuntime(managed: ManagedRuntime) {
