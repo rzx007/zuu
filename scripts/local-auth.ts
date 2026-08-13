@@ -2,9 +2,10 @@ import { existsSync, readFileSync } from "node:fs";
 import { getAuthTokenStorePath, getZuuAgentDir } from "../src/agent-daemon/agent-paths";
 import { isTokenExpired, type AuthTokenRecord } from "../src/agent-daemon/auth-tokens";
 import { isAuthTokenRecord } from "../src/agent-daemon/auth-token-validation";
+import { envString } from "./script-env";
 
 export function scriptAdminApiToken() {
-  const envToken = process.env.ZUU_API_TOKEN?.trim();
+  const envToken = envString("ZUU_API_TOKEN");
   if (envToken) return envToken;
 
   const record = loadLocalTokenRecord();

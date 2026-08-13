@@ -1,12 +1,6 @@
 import { createZuuClient } from "@zuu/client";
 import { scriptAdminApiToken } from "./local-auth";
-
-const baseUrl = process.env.ZUU_PI_WORKFLOW_BASE_URL ?? "http://127.0.0.1:3001";
-const workflowId = process.env.ZUU_PI_WORKFLOW_ID ?? "deep-research";
-const shouldRun = process.env.ZUU_PI_WORKFLOW_RUN === "1";
-const prompt =
-  process.env.ZUU_PI_WORKFLOW_PROMPT ??
-  "Validate that Zuu can launch pi-workflow through the pi-package adapter. Keep the result concise.";
+import { envFlag, envString } from "./script-env";
 
 function fail(message: string): never {
   throw new Error(message);
@@ -23,6 +17,7 @@ function apiToken() {
 }
 
 async function main() {
+  const baseUrl = envString("ZUU_PI_WORKFLOW_BASE_URL", "http://127.0.0.1:3001");
   const client = createZuuClient({
     baseUrl,
     apiToken: apiToken(),
@@ -41,12 +36,13 @@ async function main() {
   }
 
   const workflows = await client.listWorkflows();
+  const workflowId = envString("ZUU_PI_WORKFLOW_ID", "deep-research");
   const workflow = workflows.workflows.find((item) => item.id === workflowId);
   if (!workflow) {
     fail(`Workflow ${workflowId} was not listed. Available workflows: ${workflows.workflows.map((item) => item.id).join(", ")}`);
   }
 
-  if (!shouldRun) {
+  if (!envFlag("ZUU_PI_WORKFLOW_RUN")) {
     console.log(
       [
         "pi-workflow backend is ready.",
@@ -59,7 +55,9 @@ async function main() {
   }
 
   const result = await client.startWorkflow(workflow.id, {
-    prompt,
+    prompt:
+      envString("ZUU_PI_WORKFLOW_PROMPT") ??
+      "Validate that Zuu can launch pi-workflow through the pi-package adapter. Keep the result concise.",
     inputs: {
       source: "scripts/check-pi-workflow-runtime.ts",
     },

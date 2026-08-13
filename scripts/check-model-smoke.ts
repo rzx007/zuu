@@ -1,8 +1,8 @@
 import { createZuuClient, type ModelSmokeRequest } from "@zuu/client";
 import { scriptAdminApiToken } from "./local-auth";
+import { envEnum, envPositiveInteger, envString } from "./script-env";
 
-const baseUrl = process.env.ZUU_BASE_URL ?? "http://127.0.0.1:3001";
-const THINKING_LEVELS = new Set<ModelSmokeRequest["thinkingLevel"]>([
+const THINKING_LEVELS = [
   "off",
   "minimal",
   "low",
@@ -10,49 +10,41 @@ const THINKING_LEVELS = new Set<ModelSmokeRequest["thinkingLevel"]>([
   "high",
   "xhigh",
   "max",
-]);
+] as const satisfies readonly NonNullable<ModelSmokeRequest["thinkingLevel"]>[];
 
 function fail(message: string): never {
   throw new Error(message);
 }
 
 function optionalModel(): ModelSmokeRequest["model"] {
-  const provider = process.env.ZUU_MODEL_PROVIDER?.trim();
-  const id = process.env.ZUU_MODEL_ID?.trim();
+  const provider = envString("ZUU_MODEL_PROVIDER");
+  const id = envString("ZUU_MODEL_ID");
   if (!provider && !id) return undefined;
   if (!provider || !id) fail("ZUU_MODEL_PROVIDER and ZUU_MODEL_ID must be set together.");
   return { provider, id };
 }
 
 function optionalTimeoutMs() {
-  const raw = process.env.ZUU_MODEL_TIMEOUT_MS?.trim();
-  if (!raw) return undefined;
-  const value = Number(raw);
-  if (!Number.isInteger(value) || value <= 0) fail("ZUU_MODEL_TIMEOUT_MS must be a positive integer.");
-  return value;
+  return envPositiveInteger("ZUU_MODEL_TIMEOUT_MS");
 }
 
 function optionalThinkingLevel() {
-  const raw = process.env.ZUU_MODEL_THINKING_LEVEL?.trim();
-  if (!raw) return undefined;
-  if (!THINKING_LEVELS.has(raw as ModelSmokeRequest["thinkingLevel"])) {
-    fail("ZUU_MODEL_THINKING_LEVEL must be one of off, minimal, low, medium, high, xhigh, or max.");
-  }
-  return raw as ModelSmokeRequest["thinkingLevel"];
+  return envEnum("ZUU_MODEL_THINKING_LEVEL", THINKING_LEVELS);
 }
 
 async function main() {
   const apiToken = scriptAdminApiToken();
   if (!apiToken) fail("ZUU_API_TOKEN is not set and no active local admin token was found.");
 
+  const baseUrl = envString("ZUU_BASE_URL", "http://127.0.0.1:3001");
   const client = createZuuClient({ baseUrl, apiToken });
   const health = await client.health();
   if (!health.ok) fail(`Zuu daemon is not healthy at ${baseUrl}`);
 
   const result = await client.smokeModel({
     model: optionalModel(),
-    projectId: process.env.ZUU_MODEL_PROJECT_ID,
-    prompt: process.env.ZUU_MODEL_PROMPT ?? "只回复 zuu-ok",
+    projectId: envString("ZUU_MODEL_PROJECT_ID"),
+    prompt: envString("ZUU_MODEL_PROMPT", "只回复 zuu-ok"),
     thinkingLevel: optionalThinkingLevel(),
     timeoutMs: optionalTimeoutMs(),
   });
