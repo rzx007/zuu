@@ -2341,11 +2341,11 @@ async function main() {
     }),
   });
   try {
-    const registryProjects = registry.projectApiService.listProjects();
+    const registryProjects = registry.api.projectApiService.listProjects();
     if (!registryProjects.some((item) => item.id === "default")) {
       throw new Error("daemon service registry should wire project API service");
     }
-    const registrySchedules = registry.scheduleApiService.listSchedules("default");
+    const registrySchedules = registry.api.scheduleApiService.listSchedules("default");
     if (!Array.isArray(registrySchedules)) {
       throw new Error("daemon service registry should wire schedule API service");
     }
