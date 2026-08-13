@@ -20,12 +20,6 @@ import {
   type SessionTreeEntry,
   type StoredSessionSummary,
   type ThinkingLevel,
-  type WorkflowArtifact,
-  type WorkflowBackendInfo,
-  type WorkflowDefinition,
-  type WorkflowRun,
-  type WorkflowStage,
-  type WorkflowTask,
 } from '@zuu/client'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -46,6 +40,7 @@ import { createPromptModel, formatPromptModel, parseModelSelection } from '@/lib
 import { usePackagePanel } from '@/lib/package-panel'
 import { createRecentIdSet } from '@/lib/recent-ids'
 import { useSecurityPanel } from '@/lib/security-panel'
+import { useWorkflowPanel } from '@/lib/workflow-panel'
 
 type MessageRole = 'user' | 'agent' | 'event' | 'error'
 type EventStreamStatus = 'connecting' | 'live' | 'stopped' | 'error'
@@ -55,11 +50,6 @@ interface MessageItem {
   id: string
   role: MessageRole
   text: string
-}
-
-interface WorkflowStageRow {
-  stage: WorkflowStage
-  tasks: WorkflowTask[]
 }
 
 let client = createZuuClient({ apiToken: localStorage.getItem(STORAGE_KEYS.apiToken) || undefined })
@@ -91,15 +81,6 @@ const sessionTree = ref<SessionTreeEntry[]>([])
 const importPath = ref('')
 const runs = ref<RunSummary[]>([])
 const approvals = ref<Approval[]>([])
-const workflows = ref<WorkflowDefinition[]>([])
-const workflowBackend = ref<WorkflowBackendInfo>()
-const workflowRuns = ref<WorkflowRun[]>([])
-const selectedWorkflowId = ref('')
-const selectedWorkflowRunId = ref('')
-const workflowRunStages = ref<WorkflowStage[]>([])
-const workflowRunTasks = ref<WorkflowTask[]>([])
-const workflowRunArtifacts = ref<WorkflowArtifact[]>([])
-const workflowPrompt = ref('Review the current Zuu agent platform slice and produce a workflow artifact.')
 const schedules = ref<Schedule[]>([])
 const selectedScheduleId = ref('')
 const selectedScheduleRunId = ref('')
@@ -121,7 +102,6 @@ const messages = ref<MessageItem[]>([])
 const isRunning = ref(false)
 const isRefreshing = ref(false)
 const isSmokingModel = ref(false)
-const isLoadingWorkflowRunDetail = ref(false)
 const isLoadingScheduleRuns = ref(false)
 const controller = ref<AbortController>()
 const runEventCounts = reactive<Record<string, number>>({})
@@ -132,6 +112,7 @@ const lastEventId = ref(localStorage.getItem(STORAGE_KEYS.eventCursor) || '')
 
 const toolChoices = TOOL_CHOICES
 const selectedTools = reactive(createDefaultToolSelection())
+const activeTools = computed(() => toolChoices.filter((tool) => selectedTools[tool]))
 const {
   apiToken,
   authStatus,
@@ -161,6 +142,36 @@ const {
   refreshAll,
 })
 const {
+  workflows,
+  workflowBackend,
+  selectedWorkflowId,
+  selectedWorkflowRunId,
+  workflowRunStages,
+  workflowRunTasks,
+  workflowRunArtifacts,
+  workflowPrompt,
+  isLoadingWorkflowRunDetail,
+  selectedWorkflow,
+  currentProjectWorkflowRuns,
+  selectedWorkflowRun,
+  workflowStageRows,
+  workflowUnstagedTasks,
+  loadWorkflows,
+  loadWorkflowRuns,
+  loadWorkflowRunDetail,
+  startWorkflow,
+  abortWorkflowRun,
+} = useWorkflowPanel({
+  getClient: () => client,
+  currentProjectId,
+  promptContext: () => ({
+    sessionId: currentSession.value?.id,
+    tools: activeTools.value,
+    modelLabel: selectedModelLabel(),
+  }),
+  addMessage,
+})
+const {
   packages,
   packageOperations,
   packageSource,
@@ -184,7 +195,6 @@ const {
   loadWorkflows,
 })
 
-const activeTools = computed(() => toolChoices.filter((tool) => selectedTools[tool]))
 const pendingApprovals = computed(() => approvals.value.filter((approval) => approval.status === 'pending'))
 const flatTree = computed(() => flattenSessionTree(sessionTree.value))
 const statusText = computed(() => (isRunning.value ? 'running' : 'ready'))
@@ -196,7 +206,6 @@ const storeDiagnostics = computed(() => diagnostics.value?.resources.stores || [
 const currentProject = computed(() => projects.value.find((project) => project.id === currentProjectId()))
 const currentProjectName = computed(() => currentProject.value?.name || currentProjectId())
 const currentProjectCwd = computed(() => currentProject.value?.cwd || '')
-const selectedWorkflow = computed(() => workflows.value.find((workflow) => workflow.id === selectedWorkflowId.value))
 const currentProjectSchedules = computed(() =>
   schedules.value.filter((schedule) => schedule.action.projectId === currentProjectId()),
 )
@@ -206,22 +215,6 @@ const selectedSchedule = computed(() =>
 const selectedScheduleRun = computed(() =>
   scheduleRuns.value.find((run) => run.id === selectedScheduleRunId.value),
 )
-const currentProjectWorkflowRuns = computed(() =>
-  workflowRuns.value.filter((run) => run.projectId === currentProjectId()),
-)
-const selectedWorkflowRun = computed(() =>
-  currentProjectWorkflowRuns.value.find((run) => run.id === selectedWorkflowRunId.value),
-)
-const workflowStageRows = computed<WorkflowStageRow[]>(() =>
-  workflowRunStages.value.map((stage) => ({
-    stage,
-    tasks: workflowRunTasks.value.filter((task) => task.stageId === stage.id),
-  })),
-)
-const workflowUnstagedTasks = computed(() => {
-  const stageIds = new Set(workflowRunStages.value.map((stage) => stage.id))
-  return workflowRunTasks.value.filter((task) => !stageIds.has(task.stageId))
-})
 const eventStatusVariant = computed(() => {
   if (eventStreamStatus.value === 'live') return 'secondary'
   if (eventStreamStatus.value === 'error') return 'destructive'
@@ -422,70 +415,6 @@ async function loadSessionTree() {
 
 async function loadApprovals() {
   approvals.value = (await client.listApprovals()).approvals
-}
-
-async function loadWorkflows() {
-  const response = await client.listProjectWorkflows(currentProjectId())
-  workflows.value = response.workflows
-  workflowBackend.value = response.backend
-  if (!selectedWorkflowId.value && workflows.value[0]) {
-    selectedWorkflowId.value = workflows.value[0].id
-  }
-}
-
-function clearWorkflowRunDetail() {
-  selectedWorkflowRunId.value = ''
-  workflowRunStages.value = []
-  workflowRunTasks.value = []
-  workflowRunArtifacts.value = []
-}
-
-async function loadWorkflowRuns() {
-  workflowRuns.value = (await client.listProjectWorkflowRuns(currentProjectId())).runs
-  const nextRunId =
-    currentProjectWorkflowRuns.value.find((run) => run.id === selectedWorkflowRunId.value)?.id ||
-    currentProjectWorkflowRuns.value[0]?.id ||
-    ''
-  if (!nextRunId) {
-    clearWorkflowRunDetail()
-    return
-  }
-  await loadWorkflowRunDetail(nextRunId)
-}
-
-async function loadWorkflowRunDetail(runId = selectedWorkflowRunId.value) {
-  if (!runId) {
-    clearWorkflowRunDetail()
-    return
-  }
-
-  const projectId = currentProjectId()
-  selectedWorkflowRunId.value = runId
-  isLoadingWorkflowRunDetail.value = true
-  try {
-    const [runResponse, stagesResponse, tasksResponse] = await Promise.all([
-      client.getProjectWorkflowRun(projectId, runId),
-      client.listProjectWorkflowStages(projectId, runId),
-      client.listProjectWorkflowTasks(projectId, runId),
-    ])
-    const artifacts = await Promise.all(
-      runResponse.run.artifacts.slice(0, 8).map(async (artifact) => {
-        const response = await client.getProjectWorkflowArtifact(projectId, artifact.id)
-        return response.artifact
-      }),
-    )
-    if (selectedWorkflowRunId.value !== runId || currentProjectId() !== projectId) return
-    workflowRuns.value = [runResponse.run, ...workflowRuns.value.filter((run) => run.id !== runResponse.run.id)].sort((a, b) =>
-      b.startedAt.localeCompare(a.startedAt),
-    )
-    workflowRunStages.value = stagesResponse.stages
-    workflowRunTasks.value = tasksResponse.tasks
-    workflowRunArtifacts.value = artifacts
-  } finally {
-    if (selectedWorkflowRunId.value === runId) {
-      isLoadingWorkflowRunDetail.value = false
-    }
-  }
 }
 
 async function loadSchedules() {
@@ -736,28 +665,6 @@ async function resolveApproval(approval: Approval, decision: ApprovalDecision) {
   addMessage('event', `${decision}: ${result.approval.title}`)
   await Promise.all([loadApprovals(), loadRuns()])
   await loadAuditEvents()
-}
-
-async function startWorkflow() {
-  if (!selectedWorkflowId.value) return
-  const result = await client.startProjectWorkflow(currentProjectId(), selectedWorkflowId.value, {
-    sessionId: currentSession.value?.id,
-    prompt: workflowPrompt.value.trim() || undefined,
-    inputs: {
-      tools: activeTools.value,
-      model: selectedModelLabel(),
-    },
-  })
-  addMessage('event', `workflow ${result.run.status}: ${result.run.workflowName} (${result.run.id.slice(0, 8)})`)
-  selectedWorkflowRunId.value = result.run.id
-  await loadWorkflowRuns()
-}
-
-async function abortWorkflowRun(runId: string) {
-  const result = await client.abortProjectWorkflowRun(currentProjectId(), runId)
-  addMessage('event', `workflow ${result.run.status}: ${result.run.workflowName}`)
-  selectedWorkflowRunId.value = result.run.id
-  await loadWorkflowRuns()
 }
 
 function scheduleAction(): ScheduleAction | undefined {
