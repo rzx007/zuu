@@ -26,9 +26,9 @@ import {
   newManagedSession,
   switchManagedSession,
 } from "./session-actions";
+import { createSessionRuntime } from "./session-factory";
 import { SessionRuntimeRegistry } from "./session-registry";
 import {
-  createManagedRuntime,
   type CreateSessionOptions,
   type ManagedRuntime,
 } from "./session-runtime";
@@ -56,40 +56,10 @@ export class SessionService {
   constructor(private readonly options: SessionServiceOptions) {}
 
   async createSession(options: CreateSessionOptions = {}) {
-    if (options.sessionFile) {
-      assertAllowedPath(options.sessionFile, "sessionFile");
-      const existing = this.findRuntimeBySessionFile(options.sessionFile);
-      if (existing) {
-        if (options.projectId && existing.projectId !== options.projectId) {
-          throw new ApiError(`Session file is already open in project ${existing.projectId}`, {
-            status: 409,
-            code: "session_file_busy",
-            details: { sessionFile: options.sessionFile, projectId: existing.projectId },
-          });
-        }
-        return existing.runtime.session;
-      }
-    }
-
-    const project = this.options.projects.resolveProject(options);
-    const managed = await createManagedRuntime(
-      {
-        agentDir: this.options.agentDir,
-        projectId: project.id,
-        cwd: project.cwd,
-        packageService: this.options.packageService,
-        modelRuntimePromise: this.options.modelRuntimePromise,
-        approvals: this.options.approvals,
-        activeRunBySessionId: this.options.activeRunBySessionId,
-        approvalWaitBySessionId: this.options.approvalWaitBySessionId,
-        eventBus: this.options.eventBus,
-        startedAt: this.options.startedAt,
-        getSessionCount: () => this.runtimes.size,
-      },
-      options,
-    );
-    this.runtimes.add(managed);
-    return managed.runtime.session;
+    return createSessionRuntime(options, {
+      ...this.options,
+      runtimes: this.runtimes,
+    });
   }
 
   async openSession(options: OpenSessionRequest) {
@@ -217,10 +187,6 @@ export class SessionService {
 
   async dispose() {
     await this.runtimes.dispose();
-  }
-
-  private findRuntimeBySessionFile(sessionFile: string) {
-    return this.runtimes.findBySessionFile(sessionFile);
   }
 
   private getManagedRuntime(sessionId: string) {
