@@ -1,5 +1,6 @@
 import type { EventStreamQuery, PromptStreamEvent } from "@zuu/client";
 import { JsonFileStore } from "./json-file-store";
+import { compareEvents, eventsAfter, isPromptStreamEvent, matchesEventQuery, snapshotEvent } from "./run-event-query";
 
 const RUN_EVENT_HISTORY_LIMIT = 200;
 const RUN_EVENT_LIMIT = 1_000;
@@ -102,47 +103,10 @@ function countRecordEvents(value: unknown) {
   return Array.isArray(value.events) ? value.events.length : 0;
 }
 
-function isPromptStreamEvent(value: unknown): value is PromptStreamEvent {
-  return Boolean(
-    value &&
-      typeof value === "object" &&
-      "id" in value &&
-      typeof value.id === "string" &&
-      "createdAt" in value &&
-      typeof value.createdAt === "string" &&
-      "runId" in value &&
-      typeof value.runId === "string" &&
-      "type" in value &&
-      typeof value.type === "string",
-  );
-}
-
 function inferNextSequence(events: PromptStreamEvent[]) {
   return events.reduce((max, event) => {
     const suffix = event.id.split(":").pop();
     const sequence = suffix ? Number(suffix) : Number.NaN;
     return Number.isFinite(sequence) ? Math.max(max, sequence) : max;
   }, 0);
-}
-
-function snapshotEvent(event: PromptStreamEvent): PromptStreamEvent {
-  return JSON.parse(JSON.stringify(event)) as PromptStreamEvent;
-}
-
-function eventsAfter(events: PromptStreamEvent[], afterEventId?: string) {
-  if (!afterEventId) return events;
-  const index = events.findIndex((event) => event.id === afterEventId);
-  return index >= 0 ? events.slice(index + 1) : events;
-}
-
-export function matchesEventQuery(event: PromptStreamEvent, query: EventStreamQuery = {}) {
-  const matchesRun = !query.runId || event.runId === query.runId;
-  const matchesSession =
-    !query.sessionId || event.session?.id === query.sessionId || event.run?.sessionId === query.sessionId;
-  return matchesRun && matchesSession;
-}
-
-function compareEvents(a: PromptStreamEvent, b: PromptStreamEvent) {
-  const byTime = a.createdAt.localeCompare(b.createdAt);
-  return byTime || a.id.localeCompare(b.id);
 }

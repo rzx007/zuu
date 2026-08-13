@@ -1,7 +1,8 @@
 import type { EventStreamQuery, PromptRequest, PromptStreamEvent, RunSummary } from "@zuu/client";
 import { notFound } from "../http";
+import { matchesEventQuery } from "./run-event-query";
 import { loadRunHistory, saveRunHistory } from "./run-history";
-import { matchesEventQuery, RunEventStore, type RunEventDraft } from "./run-events";
+import { RunEventStore, type RunEventDraft } from "./run-events";
 
 type EventListener = (event: PromptStreamEvent) => void;
 
