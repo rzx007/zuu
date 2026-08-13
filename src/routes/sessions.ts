@@ -7,10 +7,10 @@ import {
   parseImportSession,
   parseNewSession,
   parseOpenSession,
-  parsePrompt,
   parseSwitchSession,
   parseUpdateSession,
-} from "../request-validation";
+} from "../session-request-validation";
+import { parsePrompt } from "../prompt-request-validation";
 import { streamPromptResponse } from "./prompt-stream";
 import type { RouteDeps } from "./types";
 

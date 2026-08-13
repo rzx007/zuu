@@ -1,5 +1,5 @@
 import { jsonError, readJson, toStatus } from "../http";
-import { parseStartWorkflow } from "../request-validation";
+import { parseStartWorkflow } from "../workflow-request-validation";
 import type { RouteDeps } from "./types";
 
 export function registerWorkflowRoutes({ app, daemon }: RouteDeps) {

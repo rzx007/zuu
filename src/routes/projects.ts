@@ -1,11 +1,6 @@
 import { jsonError, readJson, toStatus } from "../http";
-import {
-  parseCreateProject,
-  parseCreateSession,
-  parseOpenSession,
-  parseUpdateProject,
-  parseUpdateSession,
-} from "../request-validation";
+import { parseCreateProject, parseUpdateProject } from "../project-request-validation";
+import { parseCreateSession, parseOpenSession, parseUpdateSession } from "../session-request-validation";
 import type { RouteDeps } from "./types";
 
 export function registerProjectRoutes({ app, daemon }: RouteDeps) {

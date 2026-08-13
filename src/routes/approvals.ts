@@ -1,6 +1,6 @@
 import type { ApprovalStatus } from "@zuu/client";
 import { jsonError, readJson, toStatus } from "../http";
-import { parseResolveApproval } from "../request-validation";
+import { parseResolveApproval } from "../workflow-request-validation";
 import type { RouteDeps } from "./types";
 
 export function registerApprovalRoutes({ app, daemon }: RouteDeps) {
