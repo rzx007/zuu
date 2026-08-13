@@ -16,6 +16,7 @@ import {
   resumeScheduleRecord,
 } from "./schedule-mutations";
 import type { ScheduleExecutor } from "./schedule-runner";
+import { abortScheduleRun } from "./schedule-abort";
 import { ScheduleTimerRegistry } from "./schedule-timers";
 import { triggerSchedule } from "./schedule-trigger";
 
@@ -67,18 +68,10 @@ export class ScheduleStore {
 
   abortRun(runId: string) {
     const schedule = this.findScheduleForRun(runId);
-    const run = schedule.runs.find((item) => item.id === runId);
-    if (!run) notFound(`Unknown schedule run: ${runId}`, { runId });
-    if (run.status !== "queued" && run.status !== "running") return run;
-
-    const now = new Date().toISOString();
-    run.status = "aborted";
-    run.finishedAt = now;
-    run.reason = "schedule_run_aborted";
-    schedule.updatedAt = now;
-    this.persist();
-    this.drainQueued(schedule);
-    return run;
+    return abortScheduleRun(schedule, runId, {
+      persist: () => this.persist(),
+      drainQueued: (item) => this.drainQueued(item),
+    });
   }
 
   create(request: CreateScheduleRequest) {
