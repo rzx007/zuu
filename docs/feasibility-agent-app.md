@@ -5,7 +5,7 @@
 | 项目 | zuu（Hono + `@earendil-works/pi-coding-agent`） |
 | 文档类型 | 可行性分析 / 能力调研 |
 | 依据 | [Pi SDK](https://pi.dev/docs/latest/sdk)、[Packages](https://pi.dev/docs/latest/packages)、生态包（`pi-workflow` / `pi-crew` / `pi-subagent` 等）；业界 harness 实践 |
-| 结论摘要 | **可行**。完整栈 = **Daemon（HTTP，嵌入 Pi SDK + Packages）** + **Client SDK（唯一对外能力面）** + **多端 UI**；编排装生态包；**Cron/定时任务由 Daemon 常驻承载**（经 Client 管理）。 |
+| 结论摘要 | **可行**。完整栈 = **Daemon（HTTP，嵌入 Pi SDK + Zuu native workflow + 可选 Packages）** + **Client SDK（唯一对外能力面）** + **多端 UI**；编排默认由 Zuu 原生承载，生态包作为可选 Adapter；**Cron/定时任务由 Daemon 常驻承载**（经 Client 管理）。 |
 
 ---
 
@@ -16,7 +16,7 @@
 - `src/index.ts`：Hono 占位服务
 - `examples/pi-sdk-basic.ts`：最小 SDK 调用（`ModelRuntime` + `createAgentSession` + 文本流订阅）
 
-目标：基于 Pi SDK + **Pi Packages**，做成 **Daemon + Client + 多端 UI** 的可演进 Agent 平台。本文回答：
+目标：基于 Pi SDK + **Zuu 原生编排能力** + 可选 Pi Packages，做成 **Daemon + Client + 多端 UI** 的可演进 Agent 平台。本文回答：
 
 1. 完整 Agent 应具备哪些能力（含 subagent / DAG / workflow / 调度器）？
 2. 哪些在 SDK 核心、生态包、Daemon、Client？
@@ -66,33 +66,33 @@ flowchart TB
 | **Agent 循环** | prompt / steer / followUp、流式事件、abort | P0 | SDK：`AgentSession` |
 | **工具系统** | 读写/bash、自定义工具、白名单 | P0 | SDK + Extensions |
 | **会话管理** | JSONL 持久化、resume/fork、树形分支 | P0 | SDK：`SessionManager` / Runtime |
-| **多 Agent 编排** | Subagent、并行/链式、Orchestrator、DAG、Workflow | **P0–P1** | **生态包**（见 §3.2） |
-| **Cron / 定时任务** | cron / interval / one-shot；Daemon 常驻触发；Client 管理 | **P0–P1** | 生态：`pi-crew`；产品：Daemon runner + Client |
+| **多 Agent 编排** | Subagent、并行/链式、Orchestrator、DAG、Workflow | **P0–P1** | **Zuu native backend**；生态包作为可选 Adapter |
+| **Cron / 定时任务** | cron / interval / one-shot；Daemon 常驻触发；Client 管理 | **P0–P1** | Zuu native scheduler；`pi-crew` 可作参考或可选 Adapter |
 | **上下文工程** | System prompt、AGENTS.md、Skills、Compaction | P0–P1 | SDK ResourceLoader |
 | **扩展与插件** | Packages 安装、Extensions、事件总线 | P0 | `pi install` + ResourceLoader |
-| **安全与权限** | 危险命令确认、路径保护、子进程隔离策略 | P1 | Extension / 编排包内置策略 |
+| **安全与权限** | 危险命令确认、路径保护、子任务隔离策略 | P1 | Zuu approval + worker session 策略 |
 | **接入 / 集成面** | **Client SDK**（包装 Daemon）→ WebUI / TUI / Desktop / 第三方 | **P0** | 自建 Client；UI 禁止裸调 HTTP |
 | **人机协同** | ask/confirm、Plan→Build、steer | P1 | Extension `ctx.ui` + Web 协议 |
-| **记忆与产物** | run artifacts、workflow board、跨会话交接 | P1 | 编排包（`.pi/workflows`、`.crew/` 等） |
-| **观测与运维** | run 状态、健康分、metrics | P1–P2 | 编排包 + 应用层聚合 |
+| **记忆与产物** | run artifacts、workflow board、跨会话交接 | P1 | Zuu workflow store |
+| **观测与运维** | run 状态、健康分、metrics | P1–P2 | Zuu daemon 聚合 |
 
 ### 2.3 编排层能力清单（完整 Agent 应有）
 
 | 能力 | 含义 | 典型生态实现 |
 |---|---|---|
-| **Subagent** | 独立 Pi 子进程/会话执行子任务，结果回传主会话 | `@agwab/pi-subagent`、`pi-crew` 子 worker |
+| **Subagent** | 独立 Pi 会话或 worker 执行子任务，结果回传 workflow artifact | Zuu native worker session；可选 `@agwab/pi-subagent` |
 | **调度模式** | single / parallel / chain / orchestrator / pool | `pi-subagent` 系；`pi-crew` team |
-| **Workflow** | 可命名、可复用的多阶段流程 + 产物传递 + 可 resume | `@agwab/pi-workflow`（`/workflow`） |
-| **DAG** | 依赖就绪调度、并行波次、环检测；嵌套 graph | `pi-workflow` 的 `dag` stage；`pi-crew` topology；`pi-dynamic-workflows` DAG scheduler |
-| **Fan-out / Fan-in** | foreach 拆分、reduce 汇总、bounded loop | `pi-workflow`：`foreach` / `reduce` / `loop` |
-| **Dynamic 编排** | 代码/控制器动态 `ctx.agent()` 建任务 | `pi-workflow` `dynamic`；`pi-crew` `.dwf.ts` |
-| **Cron / Scheduler** | cron 表达式、interval、one-shot；到期触发 workflow/agent 任务；可查/停/删 | 生态：`pi-crew` `schedule`/`scheduled`；**产品面：Daemon 托管 + Client CRUD** |
-| **隔离** | worktree、`--no-extensions`、只读工具集 | 多数编排包内置选项 |
-| **执行路由** | 直接做 / 单 subagent / 已有 workflow / 新建 workflow | `pi-workflow` 的 `execution-router` skill |
+| **Workflow** | 可命名、可复用的多阶段流程 + 产物传递 + 可观察状态 | Zuu native workflow；可选 `@agwab/pi-workflow` |
+| **DAG** | 依赖就绪调度、并行波次、环检测；嵌套 graph | Zuu native DAG MVP；可选 package DAG |
+| **Fan-out / Fan-in** | foreach 拆分、reduce 汇总、bounded loop | 后续 native 扩展；可选 package |
+| **Dynamic 编排** | 代码/控制器动态建任务 | V1 非目标；后续 native 扩展或可选 package |
+| **Cron / Scheduler** | cron 表达式、interval、one-shot；到期触发 workflow/agent 任务；可查/停/删 | Zuu native scheduler；**产品面：Daemon 托管 + Client CRUD** |
+| **隔离** | 独立 session、可选 worktree、只读工具集 | Zuu worker session 策略 |
+| **执行路由** | 直接做 / 单 subagent / 已有 workflow / 新建 workflow | 后续 native router 或可选 package skill |
 
 ### 2.4 业界 + Pi 生态共识
 
-1. **核心 minimal，编排用包**：不要在 zuu 里重写 DAG 引擎；选型安装生态包，应用层做桥接。
+1. **核心 minimal，编排归产品**：Pi SDK 不内建 subagent/workflow；Zuu V1 自己提供 native workflow/subagent/DAG/board 的核心能力，生态包作为可选桥接。
 2. **Harness > Model**：长任务靠会话、compaction、审批与编排状态机。
 3. **Run / Artifact 是编排真相源**：workflow run 记录与 session JSONL 并列重要。
 4. **工具可治理 + 子 Agent 权限更严**：子进程常默认收紧 extensions/tools。
@@ -114,25 +114,25 @@ flowchart TB
 | 设置 | `SettingsManager`（`packages` 列表） | 安装清单持久化 |
 | 运行模式 | Interactive / Print / RPC | CLI/批处理/跨语言 |
 
-### 3.2 Pi Packages 生态（多 Agent / DAG / Workflow / Scheduler）
+### 3.2 Pi Packages 生态与 Zuu native 取舍（多 Agent / DAG / Workflow / Scheduler）
 
-官方明确：**No built-in sub-agents** → 装包。与「完整复杂 Agent」强相关的包：
+官方明确：**No built-in sub-agents**。这说明编排不属于 Pi SDK core，但不意味着 Zuu 必须强依赖某个第三方 package。与「完整复杂 Agent」强相关的包：
 
 | 包 | 角色 | 关键能力 |
 |---|---|---|
 | [@agwab/pi-subagent](https://pi.dev/packages/@agwab/pi-subagent) | Subagent 运行时 | 启动/跟踪 Pi 子 worker（workflow 依赖） |
-| [@agwab/pi-workflow](https://pi.dev/packages/@agwab/pi-workflow) | **推荐主编排** | `/workflow`；stage：`single` / `foreach` / `reduce` / `loop` / **`dag`** / `dynamic`；board；resume；bundled deep-research/review |
+| [@agwab/pi-workflow](https://pi.dev/packages/@agwab/pi-workflow) | 可选第三方编排 | `/workflow`；stage：`single` / `foreach` / `reduce` / `loop` / **`dag`** / `dynamic`；board；resume；bundled deep-research/review；原生 Windows 不支持 |
 | [pi-crew](https://pi.dev/packages/pi-crew) | 团队编排 + **调度器** | `team` 工具；并行 phase；worktree；**cron/interval/one-shot schedule**；`.dwf.ts` dynamic workflow；goal loop；topology advisory（含 complex-dag） |
 | [pi-dynamic-workflows-oc-style](https://pi.dev/packages/pi-dynamic-workflows-oc-style) | 重型动态工作流 | fan-out（parallel/pipeline/**dag**）、model routing、issue-delivery 闭环 |
 | 其他（如 dorkestrator、社区 subagent 扩展） | 备选 | YAML swarm、interview→plan→orchestrate |
 
 **选型建议（zuu）**：
 
-1. **默认栈**：`@agwab/pi-workflow`（含 subagent + DAG + workflow board）作为编排主路径。  
-2. **Cron / 定时任务为完整产品必备**：加装 `pi-crew`（或等价 schedule 扩展），由 **Daemon 进程常驻**执行；不依赖某个 UI 开着。  
-3. **不要自研 DAG/cron 引擎**（除非生态包无法嵌入）；产品层只做协议与 Client 封装。
+1. **默认栈**：Zuu `NativeWorkflowBackend` 作为编排主路径，先支持 `single`、`sequence` 和基础 DAG。
+2. **生态包定位**：`@agwab/pi-workflow`、`pi-crew` 等作为可选 Adapter 或能力参考，不阻塞 Windows 默认路径。
+3. **Cron / 定时任务为完整产品必备**：由 **Daemon 进程常驻**执行；不依赖某个 UI 开着，也不强制依赖 `pi-crew`。
 
-安装方式（项目级，可进仓库 settings）：
+可选 package 安装方式（项目级，可进仓库 settings）：
 
 ```bash
 pi install -l npm:@agwab/pi-workflow
@@ -140,7 +140,7 @@ pi install -l npm:@agwab/pi-workflow
 pi install -l npm:pi-crew
 ```
 
-SDK 侧通过 `DefaultResourceLoader` + 项目 `.pi/settings.json` 的 `packages` 自动加载；**Daemon** 需保证 **cwd / agentDir / settings** 与 CLI 一致，否则扩展不会进会话。
+SDK 侧通过 `DefaultResourceLoader` + 项目 `.pi/settings.json` 的 `packages` 自动加载；**Daemon** 需保证 **cwd / agentDir / settings** 与 CLI 一致，否则扩展不会进会话。Zuu native workflow 不依赖这些 package 是否存在。
 
 ### 3.3 自建分层：Daemon / Client / UI（产品架构）
 
@@ -239,11 +239,11 @@ SDK 侧通过 `DefaultResourceLoader` + 项目 `.pi/settings.json` 的 `packages
 
 1. **三层分离**：Daemon 持状态与 Pi；Client 持协议与 DX；UI 持交互。
 2. **Client 是唯一集成面**：Daemon 存活即可被任意应用调用（含 cron 管理）。
-3. **编排用包**：DAG/workflow 不自研；**cron 执行循环必须在 Daemon**（UI 关闭也要触发）。
+3. **编排归 Zuu**：DAG/workflow/board 的核心运行时由 Zuu native backend 承载；**cron 执行循环必须在 Daemon**（UI 关闭也要触发）。
 4. **Cron 与 Daemon 绑定**：定时任务是选 Daemon 架构的核心理由之一；job 定义持久化，进程重启后恢复调度。
 5. **双真相源**：session JSONL + workflow artifacts + **schedule 定义/运行历史**。
-6. **与 Pi RPC**：zuu 默认自有 HTTP + Client；Daemon 内可桥接 pi-crew schedule。
-7. **平台**：Win 上 workflow/crew 优先 WSL2。
+6. **与 Pi RPC**：zuu 默认自有 HTTP + Client；Daemon 内可桥接可选 package adapter。
+7. **平台**：原生 Windows 必须支持 Zuu native workflow；第三方 workflow package 需要 WSL2 时只影响可选 adapter。
 
 **Client SDK 表面（示意）**：
 

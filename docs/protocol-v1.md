@@ -134,7 +134,7 @@ Run 状态为 `queued`、`running`、`waiting_approval`、`completed`、`failed`
 - `GET /v1/artifacts/:artifactId`
 - `POST /v1/workflow-runs/:runId/abort`
 
-当前支持 `fake` 和 `pi-package` backend。`fake` 用于稳定 daemon/client/WebUI 合约；`pi-package` ready 后通过 Pi extension 命令启动真实 workflow。真实 `pi-workflow` board/run-state 读取仍未绑定。
+当前已支持 `fake` 和 `pi-package` backend，下一阶段默认后端调整为 `native`。`native` 由 Zuu daemon 自己保存 workflow definition、run、stage、task、artifact 和 board 状态，并通过独立 Pi SDK worker session 执行逻辑 subagent。`fake` 仅用于稳定 daemon/client/WebUI 合约；`pi-package` 是可选第三方 adapter，ready 后通过 Pi extension 命令启动真实 workflow，但不作为 Windows 默认路径。
 
 ## Schedule
 

@@ -13,7 +13,7 @@
 
 ## 2. 产品定义
 
-Zuu 是运行在用户设备或自托管环境中的 Agent 平台。它将 Pi SDK 和 Pi Packages 封装在常驻 Daemon 中，并通过统一 Client SDK 向 WebUI、TUI、Desktop、IDE 插件及第三方程序提供 Agent 能力。
+Zuu 是运行在用户设备或自托管环境中的 Agent 平台。它将 Pi SDK、Zuu 原生编排能力和可选 Pi Packages 封装在常驻 Daemon 中，并通过统一 Client SDK 向 WebUI、TUI、Desktop、IDE 插件及第三方程序提供 Agent 能力。
 
 核心链路：
 
@@ -26,7 +26,7 @@ WebUI / TUI / Desktop / IDE / Third-party App
                     ▼
                zuu-daemon
                     │
-          Pi SDK + Pi Packages
+     Pi SDK + Native Workflow + Optional Pi Packages
                     │
        Model / Tools / Subagents / Workflows
 ```
@@ -37,7 +37,7 @@ WebUI / TUI / Desktop / IDE / Third-party App
 2. UI 和第三方应用只依赖 Client SDK，不直接依赖 Daemon 路由或 Pi 类型。
 3. Client SDK 是唯一公共编程接口。
 4. Daemon 是会话、工作流、审批和定时任务的运行时所有者。
-5. Subagent、DAG 和 Workflow 优先使用 Pi Packages，不在 Zuu 中重写。
+5. Subagent、DAG、Workflow 和 Board 是 Zuu V1 的原生产品能力；Pi Packages 只能作为可选 Adapter。
 6. 定时任务不依赖 UI 存活；Daemon 运行时必须能够独立触发。
 7. 对外协议从 `/v1` 开始版本化。
 8. 所有长操作均可观察、可取消，并拥有稳定 ID。
@@ -66,7 +66,7 @@ WebUI / TUI / Desktop / IDE / Third-party App
 ### 2.4 V1 非目标
 
 - 自研模型推理循环
-- 自研通用 DAG/Workflow 引擎
+- 复刻第三方 Workflow Package 的完整 DSL、TUI 和生态行为
 - 自研 Cron 表达式引擎
 - 公网多租户 SaaS
 - UI 直接消费 Pi 原始事件
@@ -132,9 +132,12 @@ WebUI / TUI / Desktop / IDE / Third-party App
 
 - `@earendil-works/pi-coding-agent`
 - `@earendil-works/pi-ai`
-- `@agwab/pi-workflow`
-- `@agwab/pi-subagent`（由 workflow 依赖或显式安装）
-- `pi-crew`（Cron、团队编排和动态 Workflow）
+
+可选组成：
+
+- `@agwab/pi-workflow`：Linux/WSL2/macOS 可用的第三方 workflow adapter。
+- `@agwab/pi-subagent`：第三方 subagent runtime；不作为 Zuu native workflow 的必需依赖。
+- `pi-crew`：可作为团队编排或调度能力参考；Zuu V1 默认不依赖它完成 schedule。
 
 第三方包必须固定版本，升级前进行源码审查和集成测试。
 
@@ -150,10 +153,10 @@ WebUI / TUI / Desktop / IDE / Third-party App
 
 ### 4.2 运行环境
 
-- 首选：Linux 或 WSL2
-- 开发运行时：Node.js
-- Pi Workflow 依赖 Node.js，必须满足其最低版本要求
-- 原生 Windows 下不保证 `pi-workflow`、Unix socket broker 等能力完整
+- 默认支持：原生 Windows、Linux、WSL2 和 macOS 上的 Node.js 运行时。
+- 开发运行时：Node.js。
+- Zuu native workflow 不依赖第三方 workflow package，因此不得要求 Windows 用户切换到 WSL2。
+- 可选 `pi-package` workflow adapter 受第三方 package 支持矩阵限制；`@agwab/pi-workflow` 原生 Windows 不支持，Windows 用户需要 WSL2 才能启用该 adapter。
 
 ### 4.3 Daemon 生命周期
 
@@ -736,7 +739,7 @@ interface WorkflowBackend {
 }
 ```
 
-首个 Adapter 使用 `@agwab/pi-workflow`。`pi-crew` 可同时作为 Scheduler/Team 后端，但不得将其内部数据结构暴露给 Client。
+默认 Adapter 是 `NativeWorkflowBackend`，由 Zuu daemon 自己管理 workflow definition、run、stage、task、artifact、abort、retry 和 board 所需状态。`pi-package` adapter 只作为可选能力存在，可在支持平台中桥接 `@agwab/pi-workflow`；任何第三方后端都不得将内部数据结构暴露给 Client。
 
 ### 11.2 并发与隔离
 
@@ -754,12 +757,24 @@ interface WorkflowBackend {
 - Workflow 失败必须保留已有 Artifact
 - Run 必须可查询失败节点与错误原因
 
+### 11.4 Native Workflow MVP
+
+V1 原生 workflow 至少支持：
+
+- `single`：一个逻辑 subagent task。
+- `sequence`：多个 task 串行执行，上游 Artifact 可注入下游 prompt。
+- 基础 `dag`：task 声明 `dependsOn`，依赖完成后调度，启动前检查未知依赖和环。
+- 逻辑 subagent：每个 task 使用独立 `AgentSessionRuntime` 或等价隔离上下文，产生可追踪 Agent Run。
+- Board 数据：Stage、Task、Artifact 全部来自 Zuu store 和 `/v1` DTO。
+
+V1 不要求支持 `foreach`、`reduce`、`loop`、dynamic controller code、分布式 worker 或完整第三方 workflow DSL。
+
 ## 12. Cron 与定时任务
 
 ### 12.1 调度所有权
 
 - Daemon 是 Schedule 的产品级所有者
-- V1 调度执行优先桥接 `pi-crew` schedule 能力
+- V1 调度执行使用 Zuu 内置 scheduler backend；生产级分布式调度可后续替换
 - Zuu 使用 `ScheduleBackend` 隔离具体实现
 - UI 和 Client 不包含调度循环
 
@@ -1035,15 +1050,15 @@ docs/
 3. UI 没有直接 HTTP 调用 Daemon。
 4. Session 在 Daemon 重启后可恢复。
 5. 工具调用、审批和错误通过标准事件送达 Client。
-6. 可启动至少一个真实 Workflow，并查看 Stage、Task 和 Artifact。
-7. Workflow 至少启动一个真实 Subagent。
+6. 可启动至少一个 Zuu native Workflow，并查看 Stage、Task 和 Artifact。
+7. Workflow 至少启动一个逻辑 Subagent，并关联到底层 Agent Run。
 8. 可通过 Client 创建 Cron Schedule。
 9. UI 关闭时，Daemon 仍能按时触发 Schedule。
 10. Schedule Run 可查询状态，并关联 Workflow Run 或 Agent Run。
 11. Daemon 重启后 Schedule 可恢复，misfire 行为符合配置。
 12. 默认仅监听 loopback，未授权请求被拒绝。
 13. Package 加载错误可通过 diagnostics 查询。
-14. Linux/WSL2 集成测试通过。
+14. 原生 Windows 基线测试通过；Linux/WSL2 上的可选 `pi-package` adapter 可单独验证。
 
 ## 20. 实施阶段
 
@@ -1055,10 +1070,10 @@ docs/
 - SQLite Store
 - Client 基础模块
 
-### Phase 1：Workflow + Cron MVP
+### Phase 1：Native Workflow + Cron MVP
 
-- `pi-workflow` Adapter
-- `pi-crew`/Schedule Adapter
+- Native Workflow Backend
+- Native Schedule Backend
 - Workflow Run 和 Artifact API
 - Schedule create/list/remove/trigger
 - interval 与 cron 自动触发
@@ -1086,7 +1101,7 @@ docs/
 1. Daemon 数据目录默认位置。
 2. SQLite 驱动及迁移工具。
 3. 本地 token 的生成、轮换与存储。
-4. Schedule Backend 是直接桥接 `pi-crew`，还是采用独立可靠调度器后调用 Workflow Adapter。
+4. Native Workflow Definition 的 V1 DSL 边界。
 5. V1 首个 UI 选择 WebUI 还是 TUI。
 6. Daemon 是否从第一版就作为系统服务安装。
 
@@ -1103,5 +1118,5 @@ Zuu 集成 Pi SDK 时必须遵守以下约束：
 5. Model diagnostics 必须区分“认证/目录可用”和“真实 provider stream 成功”。
 6. Package 加载前必须有信任边界；package 来源、错误和启用状态必须能通过 diagnostics 查询。
 7. Resume、fork、import 等替换 session 的能力必须重新建立订阅和 extension binding。
-8. Workflow、Subagent、DAG 和 Schedule 是 packages/adapter 能力，不属于 Pi SDK core。Spec 中相关 V1 目标只有在对应 package 或 adapter 验证通过后才可标记完成。
-9. 原生 Windows 不作为 workflow/subagent packages 的默认完整支持平台；Windows 用户优先走 WSL2。
+8. Workflow、Subagent、DAG 和 Schedule 不属于 Pi SDK core；Zuu V1 通过 native backend 提供默认能力，并通过 adapter 隔离可选 package 能力。
+9. 原生 Windows 必须支持 Zuu native workflow；第三方 workflow/subagent packages 的 Windows 支持不作为 V1 默认能力承诺。

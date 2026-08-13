@@ -23,7 +23,7 @@ UI / 第三方应用
       ↓ HTTP + SSE /v1
 zuu-daemon
       ↓
-Pi SDK + Pi Packages
+Pi SDK + Native Workflow + Optional Pi Packages
 ```
 
 本计划优先验证架构风险，再扩展产品能力。每个阶段必须满足退出标准，不能以未验证的占位实现进入下一阶段。
@@ -33,23 +33,23 @@ Pi SDK + Pi Packages
 1. **垂直切片优先**：尽早跑通 Client → Daemon → Pi → SSE。
 2. **协议先于 UI**：UI 只使用 Client；禁止在 UI 中散落 `fetch`。
 3. **协议与实现解耦**：公共 DTO 放在 `@zuu/protocol`，不暴露 Pi/Hono 类型。
-4. **先单 Agent，后编排**：先稳定 Session Runtime，再接 Workflow/Subagent。
-5. **先手动触发，后 Cron**：先验证 Workflow Adapter，再让 Schedule 触发它。
-6. **风险前置**：第一阶段验证 WSL2、Package 加载、Session 恢复和 SSE。
+4. **先单 Agent，后原生编排**：先稳定 Session Runtime，再实现 Native Workflow/Subagent。
+5. **先真实 task，后高级 DAG**：先让 `single` workflow 跑出真实 Agent Run，再扩展 sequence、DAG、board。
+6. **风险前置**：第一阶段验证 Package 加载、Session 恢复、SSE 和 Windows 原生运行边界。
 7. **每阶段可运行**：主分支始终能构建、测试和启动。
-8. **不自研通用 DAG/Cron 引擎**：通过 Adapter 集成生态实现。
+8. **原生能力有边界**：Zuu 自己实现 workflow/subagent/DAG/board 的核心运行时，但不复刻第三方 package 的完整 DSL、TUI 和分布式 worker。
 
 ## 3. 里程碑总览
 
 | 里程碑 | 目标 | 核心交付物 | 退出条件 |
 |---|---|---|---|
-| M0 | 技术风险验证 | Pi/Package/WSL Spike | 关键依赖在目标环境可运行 |
+| M0 | 技术风险验证 | Pi/Package/Windows Spike | 关键依赖在目标环境可运行 |
 | M1 | 基础工程 | Monorepo、Protocol、CI | 所有包可构建测试 |
 | M2 | Agent 垂直切片 | Daemon + Client + Prompt SSE | Client 可完成一轮流式对话 |
 | M3 | 持久会话 | Project、Session、SQLite | Daemon 重启后可继续会话 |
 | M4 | 完整会话控制 | steer、follow-up、abort、compact、fork | Session 生命周期可控 |
-| M5 | Workflow/Subagent | Workflow Adapter、Run/Task/Artifact | 真实 Workflow 与 Subagent 跑通 |
-| M6 | Cron/Schedule | Schedule Adapter、持久调度、历史 | UI 关闭时自动触发成功 |
+| M5 | Native Workflow/Subagent | Native Backend、Run/Task/Artifact | 真实 native Workflow 与逻辑 Subagent 跑通 |
+| M6 | Cron/Schedule | Native Scheduler、持久调度、历史 | UI 关闭时自动触发成功 |
 | M7 | 安全控制 | Token、审批、路径保护 | 默认配置不可静默执行高危操作 |
 | M8 | 首个 UI | WebUI 或 TUI | UI 仅通过 Client 完成核心流程 |
 | M9 | V1 加固 | 可观测、文档、安装与验收 | Spec V1 验收全部通过 |
@@ -84,7 +84,7 @@ flowchart LR
 
 ### 5.1 目标
 
-在正式重构前确认 Pi SDK、Pi Packages、Node.js、WSL2 和调度能力能够组合运行。
+在正式重构前确认 Pi SDK、可选 Pi Packages、Node.js、Windows 原生运行和调度能力能够组合运行。
 
 ### 5.2 工作项
 
@@ -101,32 +101,40 @@ flowchart LR
 - 输出 extensions、skills、prompts 和 diagnostics。
 - 验证 Package 加载错误可程序化获取。
 
-#### SPIKE-003：Workflow/Subagent
+#### SPIKE-003：Native Workflow/Subagent
+
+- 用独立 `AgentSessionRuntime` 执行一个 native `single` task。
+- 确认 task 能产生 Agent Run、Artifact 和可查询状态。
+- 验证 sequence 中上游 Artifact 注入下游 prompt。
+- 验证基础 DAG 的依赖检查、环检测和并发限制。
+- 记录 native backend 所需 store、runner 和 board API。
+
+#### SPIKE-003B：可选 Pi Workflow Adapter
 
 - 在 WSL2 或 Linux 安装固定版本 `@agwab/pi-workflow`。
 - 运行 bundled workflow。
-- 确认真实 Subagent 被创建。
-- 定位 Run、Stage、Task、Artifact 的持久化位置和事件来源。
-- 记录 Adapter 所需最小 API。
+- 确认可选 adapter 能启动第三方 workflow。
+- 该 spike 不阻塞 Zuu native workflow 的 V1 完成。
 
 #### SPIKE-004：Schedule
 
-- 验证 `pi-crew` schedule/interval/one-shot。
-- 确认是否能从 SDK Extension Runtime 调用，而非仅依赖交互式 TUI。
+- 验证 Zuu native scheduler 的 once/interval/cron。
+- 验证 schedule action 触发 native workflow 和 prompt。
 - 验证进程重启后的任务恢复。
-- 验证触发 Workflow 的可行性。
+- 验证 misfire、overlap、retry 和 abort。
 
 #### SPIKE-005：运行时支持矩阵
 
 - Node.js 下运行主 Daemon。
 - 验证主进程与子 Pi 进程所需 Node.js 版本。
-- 验证原生 Windows 与 WSL2 差异。
+- 验证原生 Windows 与 WSL2/Linux 差异。
 - 明确开发和生产支持矩阵。
 
 ### 5.3 交付物
 
 - `docs/spikes/pi-runtime.md`
-- `docs/spikes/pi-workflow.md`
+- `docs/native-workflow-design.md`
+- `docs/spikes/pi-workflow-runtime.md`
 - `docs/spikes/pi-schedule.md`
 - 更新 Spec 第 21 节待定决策
 - 锁定 Package 版本
@@ -134,12 +142,12 @@ flowchart LR
 ### 5.4 退出标准
 
 - Pi Session 可创建、流式输出并恢复。
-- 至少一个 Workflow 和 Subagent 成功。
+- 至少一个 native Workflow 和逻辑 Subagent 成功。
 - Schedule 能自动触发至少一次任务。
 - 明确 Schedule Backend 选型。
-- 明确 Linux/WSL2 运行方式。
+- 明确原生 Windows 与 Linux/WSL2 运行方式。
 
-若 Schedule 不能通过 `pi-crew` 稳定嵌入，则选择可靠的独立调度库作为 Schedule Backend，但仍通过 Workflow Adapter 执行任务，不自研 cron 解析器。
+Schedule 默认由 Zuu daemon 托管；后续如果需要生产级 HA，再用 `ScheduleBackend` 替换实现。Cron 解析器可以使用成熟库，但调度所有权仍属于 Zuu。
 
 ## 6. M1：基础工程与 Monorepo
 
@@ -350,15 +358,21 @@ docs/
 
 - 实现 Spec 中 `WorkflowBackend`。
 - 建立标准 Definition、Run、Stage、Task、Artifact DTO。
-- 对 Package 内部格式做隔离。
+- 对 native store 和可选 Package 内部格式做隔离。
 
-#### WF-002：Pi Workflow Adapter
+#### WF-002：Native Workflow Backend
 
-- 列出 bundled/project workflows。
-- 启动 Workflow。
-- 查询 Run/Stage/Task。
-- abort。
-- 订阅或轮询后端状态，并产生标准事件。
+- 定义 native `single`、`sequence` 和基础 `dag` definition。
+- 启动 Workflow，并创建 Run/Stage/Task 记录。
+- 每个 task 使用独立 worker session 调用 Pi SDK。
+- 保存 Agent Run 关联、Task 输出和 Artifact。
+- 支持 abort、失败传播和状态事件。
+
+#### WF-002B：Pi Workflow Adapter（可选）
+
+- 保留 `pi-package` adapter 作为 Linux/WSL2/macOS 可选能力。
+- 不把第三方 `.pi/workflows` 内部格式作为 Zuu 协议真相源。
+- 不阻塞 native workflow 的 Windows 默认路径。
 
 #### WF-003：Artifact
 
@@ -386,8 +400,8 @@ docs/
 
 ### 10.2 退出标准
 
-- Client 可启动真实 bundled Workflow。
-- 至少一个 Run 产生多个 Subagent Task。
+- Client 可启动真实 native Workflow。
+- 至少一个 Run 产生多个逻辑 Subagent Task。
 - DAG 进度可查询。
 - Artifact 可读取。
 - 失败节点和错误原因可见。
@@ -396,12 +410,7 @@ docs/
 
 ### 11.1 前置决策
 
-根据 M0 结果选定：
-
-- 方案 A：`pi-crew` Schedule Adapter。
-- 方案 B：独立可靠 Scheduler + Workflow Adapter。
-
-不论后端如何，对外 API 与 Client 保持不变。
+当前默认使用 Zuu native scheduler。后续若替换为生产级 HA scheduler，对外 API 与 Client 保持不变。
 
 ### 11.2 工作项
 
@@ -635,8 +644,9 @@ UI end-to-end
 | 风险 | 概率 | 影响 | 处理 |
 |---|---|---|---|
 | Pi Package 仅在 TUI 路径完整工作 | 中 | 高 | M0 提前验证 SDK/Extension 调用路径 |
-| `pi-workflow` 不支持原生 Windows | 高 | 中 | 官方支持环境定为 Linux/WSL2 |
-| `pi-crew` Schedule 难以稳定嵌入 | 中 | 高 | Schedule Adapter + 备选可靠调度库 |
+| 自建 native workflow 范围失控 | 中 | 高 | V1 只做 single/sequence/basic DAG，完整 DSL 延后 |
+| `pi-workflow` 不支持原生 Windows | 高 | 中 | 作为可选 adapter；默认使用 native backend |
+| 生产级 HA Schedule 未落地 | 中 | 高 | 保留 ScheduleBackend，V1 使用本地 scheduler + lease |
 | Pi 事件随版本变化 | 中 | 高 | Adapter + 固定依赖版本 + 契约测试 |
 | SSE 重连丢事件 | 中 | 中 | Event ID、重放窗口、状态补拉 |
 | Subagent 资源失控 | 中 | 高 | Project 并发、预算、超时、abort |
@@ -652,7 +662,7 @@ UI end-to-end
 
 1. `SPIKE-001`：验证持久 Agent Runtime。
 2. `SPIKE-002`：验证 ResourceLoader 与 Package diagnostics。
-3. `SPIKE-003`：验证 `pi-workflow` 与真实 Subagent。
+3. `SPIKE-003`：验证 native workflow 与逻辑 Subagent。
 4. `SPIKE-004`：验证 Schedule。
 5. `ENG-001`：转换 workspace，并固定 Node.js 运行方式。
 6. `ENG-002`：创建 protocol 包。
@@ -752,7 +762,7 @@ UI end-to-end
 - `GET/POST/DELETE /v1/packages` 已支持查看和维护结构化 Pi package 列表；`GET /v1/packages` 会返回 `configured`、`installed`、`filtered`、trust 状态、load 状态和安装路径，`POST /v1/packages`、`POST /v1/packages/trust`、`POST /v1/packages/install` 和 `POST /v1/packages/update` 会要求 `npm:` source 固定到精确版本；`POST /v1/packages/trust` 与 `DELETE /v1/packages/trust` 可维护 package source 信任记录，`POST /v1/packages/install` 和 `POST /v1/packages/update` 会在 source 已信任后创建后台 operation，调用 Pi package manager 安装或更新 source，并记录 SDK progress callback、完成状态和失败原因；`DELETE /v1/packages` 会创建后台删除 operation，删除成功后撤销对应 source 的信任记录；`GET /v1/package-operations` 与 `GET /v1/package-operations/:operationId` 可查询最近 package 任务。
 - `GET /v1/models` 已支持列出当前已认证可用模型，WebUI 可直接下拉选择；`POST /v1/models/smoke` 与 `@zuu/client.smokeModel()` 已支持用临时 in-memory session 发起极小真实调用，返回 `ok/status/runId/error/durationMs`，用于区分“模型目录可见”和“provider stream 确实可用”。
 - `GET /v1/approvals`、`GET /v1/approvals/:approvalId` 和 `POST /v1/approvals/:approvalId/resolve` 已支持审批列表、详情与处理，审批记录持久化到 `.zuu/pi-agent/approvals.json`。
-- `GET /v1/workflows`、`POST /v1/workflows/:workflowId/runs`、`GET /v1/workflow-runs`、`GET /v1/workflow-runs/:runId`、`GET /v1/workflow-runs/:runId/stages`、`GET /v1/workflow-runs/:runId/tasks`、`GET /v1/artifacts/:artifactId` 和 `POST /v1/workflow-runs/:runId/abort` 已支持最小 workflow 合约；Project 级 workflow run、stage、task 和 artifact 查询也已同步暴露；Workflow Run、Stage 和 Task 已使用 `queued/running/completed/failed/aborted` 状态和 `finishedAt` 完成时间；默认后端是 `FakeWorkflowBackend`，用于稳定 Definition/Run/Stage/Task/Artifact DTO 和 UI board，不启动真实 subagent。
+- `GET /v1/workflows`、`POST /v1/workflows/:workflowId/runs`、`GET /v1/workflow-runs`、`GET /v1/workflow-runs/:runId`、`GET /v1/workflow-runs/:runId/stages`、`GET /v1/workflow-runs/:runId/tasks`、`GET /v1/artifacts/:artifactId` 和 `POST /v1/workflow-runs/:runId/abort` 已支持最小 workflow 合约；Project 级 workflow run、stage、task 和 artifact 查询也已同步暴露；Workflow Run、Stage 和 Task 已使用 `queued/running/completed/failed/aborted` 状态和 `finishedAt` 完成时间；当前默认后端仍是 `FakeWorkflowBackend`，下一阶段改为 `NativeWorkflowBackend`，用真实 Pi SDK worker session 执行逻辑 subagent。
 - `ZUU_WORKFLOW_BACKEND` 已支持选择 `fake` 或 `pi-package`；`pi-package` 会探测 `@agwab/pi-workflow` package source、安装路径和平台支持，ready 后通过 `/workflow run` 或 `/workflow dynamic` 发起真实 Pi extension 工作，并把 Zuu 侧 launch 结果包装成 `WorkflowRun`。真实 `pi-workflow` board/run-state 读取尚未绑定，因此阶段、任务和 artifact 目前仍是 launch 层记录。
 - `GET/POST/PATCH/DELETE /v1/schedules`、`GET /v1/schedules/:scheduleId`、`GET /v1/schedules/:scheduleId/runs`、`GET /v1/schedule-runs/:runId`、`POST /v1/schedule-runs/:runId/abort`、`POST /v1/schedules/:scheduleId/pause`、`POST /v1/schedules/:scheduleId/resume` 和 `POST /v1/schedules/:scheduleId/trigger` 已支持 Scheduler MVP；Project 级 schedule API 也已同步暴露。当前支持 `once`、`interval`、基础 5 字段 `cron`、必填 IANA timezone、prompt action、workflow action、`overlapPolicy: "skip" | "queue" | "parallel"`、`misfirePolicy: "skip" | "run_once"` 和可选 `retryPolicy`，并将 schedule run 关联到 Agent Run 或 Workflow Run。Schedule Run 摘要已使用 `scheduledFor`、`startedAt`、`finishedAt`、`attempts` 和 `queued/running/completed/failed/skipped/aborted` 状态；cron 的 `nextRunAt` 仍以 UTC ISO 返回，但会按指定 timezone 计算本地墙上时间；同一 schedule 重叠触发时，`skip` 会记录 `reason` 为 `schedule_overlap` 的 skipped run，`queue` 会最多积压一个 queued run，`parallel` 会并发启动新 run；daemon 重启后错过触发可按策略记录 `reason` 为 `schedule_misfire` 的 skipped run，或补跑一次；retry 可按 `maxAttempts`、`backoffMs` 与 `retryableCodes` 对同一个 run 进行有限重试；queued/running schedule run 可 best-effort abort，并保持 `aborted` 终态；记录持久化到 `.zuu/pi-agent/schedules.json`，本地自动触发 lease 持久化到 `.zuu/pi-agent/scheduler-lease.json`。
 - 内置 Zuu approval policy 已通过 Pi inline extension 接入 `tool_call`，默认拦截 `bash`、`edit`、`write`，并会对 `read`、`grep`、`find`、`ls` 命中的 `.env`、SSH、auth token、credential、secret、key 等敏感路径触发文件系统审批；审批会通过 prompt SSE 发出 `approval_requested` 和 `approval_resolved`，交互式 run 的同一个 tool call 会有界等待 WebUI 处理，schedule 等非交互 run 会立即过期并 fail-closed；`allow_once` 可消费一次，`allow_session` 可对同 session 的同类工具/敏感路径 scope 放行。
@@ -771,7 +781,7 @@ UI end-to-end
 - 路径保护已有根目录级 allowlist，并已对默认只读工具增加敏感路径审批；tool-call approval policy 已收敛为按工具/动作声明的基础策略矩阵，覆盖 `bash/edit/write` 默认阻断以及 `read/grep/find/ls` 路径型参数的敏感路径阻断；搜索 pattern 中出现 token/secret 等词不会被当作路径误拦。后续可继续扩展更多工具动作级策略。
 - 默认工具集偏只读，`bash`、`edit`、`write` 需要 UI 显式启用。
 - 当前环境下真实模型 stream 可能因为网络返回 `Connection error`；daemon 已将 SDK assistant error 映射为 SSE error，并可通过模型 smoke test 把真实调用结果保存为 run/events。
-- Workflow/subagent package 在当前环境尚未安装，diagnostics 会明确报告缺口；`pi-package` adapter 已有 launch 桥接，但当前 Windows 原生环境会按 `@agwab/pi-workflow` 包页面说明标记为不可用。Scheduler 已有最小内置后端、基础 5 字段 cron、显式 IANA timezone、skip/queue/parallel overlap、skip/run_once misfire、有限 retry policy、best-effort schedule run abort 和本地 scheduler lease，能降低多 daemon 误启动导致的重复触发风险；真实生产级 HA 调度后端仍未落地。
+- Workflow/subagent 的默认路线改为 Zuu native backend；`pi-package` adapter 已有 launch 桥接，但当前 Windows 原生环境会按 `@agwab/pi-workflow` 包页面说明标记为不可用，因此只作为 Linux/WSL2/macOS 可选能力。Scheduler 已有最小内置后端、基础 5 字段 cron、显式 IANA timezone、skip/queue/parallel overlap、skip/run_once misfire、有限 retry policy、best-effort schedule run abort 和本地 scheduler lease，能降低多 daemon 误启动导致的重复触发风险；真实生产级 HA 调度后端仍未落地。
 
-后续计划应从此切片继续收敛，而不是另起炉灶：Client workspace 包、run registry 持久化、package source/trust/load 管理、package status/install/update/remove operations、approval tool-call 拦截、Vue WebUI approval 操作面、daemon event stream 面板、fake workflow 合约、pi-package launch adapter、pi-workflow runtime spike 和 Scheduler MVP 已经落地，接下来应优先在 WSL2/Linux 中安装并信任 `@agwab/pi-workflow` 跑通 `docs/spikes/pi-workflow-runtime.md`，再研究 `.pi/workflows` board/run-state 的只读映射，最后把 Scheduler 迁移到可跨进程协调的生产级调度后端。
+后续计划应从此切片继续收敛，而不是另起炉灶：Client workspace 包、run registry 持久化、package source/trust/load 管理、package status/install/update/remove operations、approval tool-call 拦截、Vue WebUI approval 操作面、daemon event stream 面板、fake workflow 合约、pi-package launch adapter 和 Scheduler MVP 已经落地。接下来优先实现 `docs/native-workflow-design.md` 中的 `NativeWorkflowBackend`，先跑通 `single` task 的真实 worker session，再做 sequence、基础 DAG 和 WebUI board；`docs/spikes/pi-workflow-runtime.md` 保留为 Linux/WSL2 可选 adapter 验证。
 
